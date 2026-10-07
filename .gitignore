@@ -1,0 +1,25 @@
+# Secrets — never commit. Copy server/.env.example to server/.env instead.
+.env
+.env.*
+!.env.example
+
+# Node
+node_modules/
+
+# Embedded database files (each teammate's local copy; recreate with `npm run db:reset`)
+server/.data/
+
+# macOS / Xcode
+.DS_Store
+xcuserdata/
+*.xcuserstate
+DerivedData/
+
+# Personal Claude Code settings
+.claude/settings.local.json
+
+# Research board with interviewees' names and notes — keep out of the public repo
+Screenshot*.png
+
+# Build output for claude.ai publishing (dist/TimeOut.html is kept on purpose)
+TimeOut - Web demo/dist/TimeOut-artifact.html

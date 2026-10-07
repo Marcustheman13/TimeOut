@@ -1,0 +1,24 @@
+{
+  "name": "timeout-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "TimeOut REST API (Express + PostgreSQL). Serves the web demo and, later, the iOS app.",
+  "main": "src/index.js",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "db:reset": "node scripts/db-reset.js",
+    "db:query": "node scripts/db-query.js"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "^0.5.8",
+    "bcryptjs": "^3.0.3",
+    "dotenv": "^18.0.6",
+    "express": "^5.2.1",
+    "pg": "^8.23.1"
+  }
+}
