@@ -43,7 +43,7 @@ Tables that already exist (used by the login vertical slice):
 | Layer | What we use | Where it lives |
 | --- | --- | --- |
 | Frontend (now) | Plain HTML, CSS and JavaScript, no framework | [`TimeOut - Web demo/`](TimeOut%20-%20Web%20demo) |
-| Frontend (later) | Native iOS app in SwiftUI (Screen Time / FamilyControls APIs) | [`Sports Betting Alternative/`](Sports%20Betting%20Alternative) |
+| Frontend (later) | Native iOS app in SwiftUI (Screen Time / FamilyControls APIs) | [`TimeOut - iOS App/`](TimeOut%20-%20iOS%20App) |
 | Backend | Node.js + Express 5 REST API | [`server/src/`](server/src) |
 | Database | PostgreSQL | [`server/db/`](server/db) |
 | Auth | bcrypt password hashes + random session tokens sent as `Authorization: Bearer <token>` | [`server/src/auth.js`](server/src/auth.js) |
@@ -145,7 +145,7 @@ TimeOut/
 ├── TimeOut - Web demo/          ← the clickable web app (HTML/CSS/JS)
 │   ├── js/api.js                ← every call from the web app to the server goes through here
 │   └── README.md                ← what each screen does and the tester console
-└── Sports Betting Alternative/  ← SwiftUI iOS prototype (open the .xcodeproj in Xcode)
+└── TimeOut - iOS App/           ← SwiftUI iOS prototype (open the .xcodeproj in Xcode)
 ```
 
 ## API
