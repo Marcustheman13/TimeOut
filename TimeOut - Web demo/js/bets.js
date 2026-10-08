@@ -46,8 +46,9 @@
     } else {
       head = `<div class="lb-score">${ui.teamBadge(g.away, 22)}${esc(g.away.abbr)} @ ${esc(g.home.abbr)}${ui.teamBadge(g.home, 22)}<span style="margin-left:auto" class="small muted">${TO.fmtDay(g.start)} ${TO.fmtTime(g.start)} · in ${TO.fmtIn(g.start - TO.now())}</span></div>`;
     }
-    const stats = S.stats(g).slice(0, 3);
-    const statsHtml = stats.length && g.state === 'live' ? `<div class="lb-stats">${stats.map((r) => `<span>${esc(r.label)} <b>${r.text ? r.text[0] : r.a + (r.suffix || '')}–${r.text ? r.text[1] : r.h + (r.suffix || '')}</b></span>`).join('')}</div>` : '';
+    if (g.eventID) TO.live.loadDetails(g.id);
+    const stats = g.eventID ? TO.live.stats(g).slice(0, 3) : [];
+    const statsHtml = stats.length && g.state === 'live' ? `<div class="lb-stats">${stats.map((r) => `<span>${esc(r.label)} <b>${esc(r.awayValue)}–${esc(r.homeValue)}</b></span>`).join('')}</div>` : '';
     return `<div class="livebox" data-act="open-game" data-id="${g.id}" style="cursor:pointer">${head}${statsHtml}</div>`;
   }
 
@@ -145,7 +146,7 @@
   }
 
   function render() {
-    const bets = TO.data.bets;
+    const bets = TO.data.bets.filter((b) => b.kind === 'sports' && b.legs.every((leg) => leg.kind === 'sports'));
     const open = bets.filter((b) => b.status === 'open').sort((a, b) => b.placedAt - a.placedAt);
     let settled = bets.filter((b) => b.status !== 'open').sort((a, b) => b.settledAt - a.settledAt);
     const counts = { all: settled.length, won: 0, lost: 0, void: 0 };

@@ -331,6 +331,7 @@ button:disabled { cursor: not-allowed; }
   box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.14);
   font-family: var(--font-display);
 }
+.team-badge img { display: block; width: 100%; height: 100%; object-fit: contain; border-radius: inherit; }
 .avatar { flex: none; width: 36px; height: 36px; border-radius: 50%; object-fit: cover; background: var(--raised); }
 .avatar.lg { width: 64px; height: 64px; }
 .avatar.xl { width: 96px; height: 96px; }
@@ -456,6 +457,8 @@ label.list-row { cursor: pointer; }
 .mini-bet .t { font-weight: 800; font-size: 14px; }
 
 .filterbar { position: sticky; top: 0; z-index: 4; background: var(--bg); padding: 10px 0; }
+.cfb-select-label { display: block; margin: 9px 16px 4px; color: var(--muted); font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; }
+.cfb-select { display: block; width: calc(100% - 32px); height: 38px; margin: 0 16px; padding: 0 10px; color: var(--text); background: var(--surface); border: 1px solid var(--stroke); border-radius: 10px; font: inherit; font-weight: 700; }
 .league-head { display: flex; align-items: center; gap: 8px; padding: 6px 16px 0; }
 .league-head h3 { margin: 0; font-size: 18px; font-weight: 800; }
 .league-head .cnt { margin-left: auto; font-size: 12px; font-weight: 600; color: var(--muted); }
@@ -471,6 +474,20 @@ label.list-row { cursor: pointer; }
 .gc-team .rec { font-size: 11px; color: var(--muted); }
 .gc-team .sc { margin-left: auto; padding-right: 2px; flex: none; font-family: var(--font-display); font-weight: 900; font-size: 23px; font-variant-numeric: tabular-nums; }
 .gc-team .sc.trail { color: var(--text-2); }
+.gc-live-layout { display: grid; grid-template-columns: minmax(112px, .9fr) minmax(0, 1.2fr); gap: 9px; align-items: center; }
+.gc-live-teams { min-width: 0; }
+.gc-live-team { min-width: 0; height: 48px; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 5px; }
+.gc-live-team-open { min-width: 0; display: flex; align-items: center; gap: 7px; text-align: left; }
+.gc-live-logo { width: 27px; height: 27px; flex: none; display: grid; place-items: center; border-radius: 50%; background: var(--raised); color: var(--text); font-size: 9px; font-weight: 900; overflow: hidden; }
+.gc-live-logo img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.gc-live-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 700; }
+.gc-live-score { min-width: 23px; text-align: right; font-family: var(--font-display); font-weight: 900; font-size: 23px; font-variant-numeric: tabular-nums; }
+.gc-live-score.trail { color: var(--text-2); }
+.gc-live-bets { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; }
+.gc-live-bets .odds-btn.big { height: 48px; min-width: 0; border-radius: 8px; }
+.gc-live-bets .odds-btn.big .lbl { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; }
+.gc-live-bets .odds-btn .ln { font-size: 11px; }
+.gc-live-bets .odds-btn .pr { font-size: 12px; }
 .gc-more { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; font-size: 12px; font-weight: 700; color: var(--text-2); }
 .gc-more .yourbet { color: var(--accent); display: inline-flex; gap: 4px; align-items: center; }
 .bump { animation: bump 0.6s ease; }
@@ -729,6 +746,18 @@ label.list-row { cursor: pointer; }
 }
 .slipbar .n { width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; font-size: 13px; font-weight: 900; }
 .slipbar .o { margin-left: auto; font-family: var(--font-display); font-weight: 900; font-size: 19px; color: var(--accent); }
+.slipbar.parlay-finalize { background: var(--accent); border-color: transparent; color: var(--accent-ink); }
+.slipbar.parlay-finalize .n { background: rgba(3, 20, 10, 0.15); color: var(--accent-ink); }
+.slipbar.parlay-finalize .o { color: var(--accent-ink); }
+.build-parlay { width: calc(100% - 32px); min-height: 58px; margin: 0 16px; padding: 10px 14px; display: flex; align-items: center; gap: 12px; border: 1px solid rgba(34, 214, 110, 0.28); border-radius: 16px; background: linear-gradient(110deg, rgba(34, 214, 110, 0.13), rgba(34, 214, 110, 0.05)); color: var(--text); text-align: left; }
+.build-parlay > svg:first-child { color: var(--accent); flex: none; }
+.build-parlay > svg:last-child { color: var(--muted); margin-left: auto; flex: none; }
+.build-parlay span:not(.lr-icon) { display: grid; gap: 2px; }
+.build-parlay b { font-size: 14px; }
+.build-parlay small { color: var(--muted); font-size: 12px; }
+.build-parlay.active { background: var(--surface); border-color: var(--stroke); }
+.build-parlay.active .lr-icon { width: 34px; height: 34px; flex: none; }
+.build-parlay.active .link-btn { flex: none; }
 
 /* Bet slip */
 .slip-leg { display: flex; gap: 10px; align-items: flex-start; padding: 12px; border-radius: 14px; background: var(--surface); border: 1px solid var(--stroke); }
@@ -1400,24 +1429,6 @@ window.TO = window.TO || {};
     return g;
   }
 
-  /** Scoring plays so far, newest first. */
-  function plays(g) {
-    if (g.state !== 'live' && g.state !== 'final') return [];
-    const tl = timeline(g);
-    const steps = g.state === 'final' ? STEPS : g.stepsPlayed;
-    let h = 0, a = 0;
-    const list = [];
-    for (const ev of tl.events) {
-      if (ev.step >= steps) break;
-      if (ev.side === 'home') h += ev.pts; else a += ev.pts;
-      list.push({ team: ev.side === 'home' ? g.home : g.away, kind: ev.kind, clock: clockText(g.sport, ev.step / STEPS), score: `${g.away.abbr} ${a} – ${g.home.abbr} ${h}` });
-    }
-    if (g.state === 'final' && tl.extra) {
-      list.push({ team: tl.extra.side === 'home' ? g.home : g.away, kind: tl.extra.kind, clock: tl.extra.label === '10' ? 'Top 10th' : 'OT', score: `${g.away.abbr} ${g.awayScore} – ${g.home.abbr} ${g.homeScore}` });
-    }
-    return list.reverse();
-  }
-
   /** Live team stats for the game page and open-bet cards. */
   function stats(g) {
     if (g.state !== 'live' && g.state !== 'final') return [];
@@ -1761,7 +1772,7 @@ window.TO = window.TO || {};
 
   TO.sim = {
     SLOT, DURATION, STEP, SPORTS, LEAGUES, REAL_LEAGUES, LEAGUE_ORDER, PREDICTIONS,
-    game, board, odds, plays, stats, research, record, form, strength,
+    game, board, odds, stats, research, record, form, strength,
     prediction, predictions, currentSelection, selectionLabel, marketLabel, grade, gradeScore, liveStanding, oppositeSelection, teamOf,
     overrides, setOverride,
   };
@@ -1780,7 +1791,7 @@ window.TO = window.TO || {};
 
   const RULES = {
     daily: 60,
-    maxLegs: 3,
+    maxLegs: 10,
     friendLimit: 100,
     overrideMinutes: 15,
     overridePenalty: 30,
@@ -2824,6 +2835,402 @@ window.TO = window.TO || {};
 
 </script>
 <script>
+/* TimeOut web demo — ESPN live scores and sportsbook lines. */
+(function (TO) {
+  'use strict';
+
+  const S = TO.sim;
+  const ESPN = 'https://site.api.espn.com/apis/site/v2/sports';
+  const ESPN_CORE = 'https://sports.core.api.espn.com/v2/sports';
+  const CFB_GROUPS = [
+    ['all', 'All College Football'], ['80', 'Top 25'], ['8', 'SEC'], ['4', 'Big 12'], ['1', 'ACC'], ['5', 'Big Ten'],
+    ['9', 'Pac-12'], ['151', 'American'], ['17', 'Mountain West'], ['37', 'Sun Belt'],
+    ['15', 'MAC'], ['12', 'Conference USA'], ['18', 'Independents'],
+  ];
+  const LEAGUES = {
+    nfl: ['football/nfl', 'football', 'nfl'], ncaaf: ['football/college-football', 'football', 'college-football'],
+    nba: ['basketball/nba', 'basketball', 'nba'], mlb: ['baseball/mlb', 'baseball', 'mlb'],
+    nhl: ['hockey/nhl', 'hockey', 'nhl'], epl: ['soccer/eng.1', 'soccer', 'eng.1'],
+  };
+  const cache = new Map();
+  const oddsCache = new Map();
+  let updatedAt = 0;
+  let loading = false;
+  let refreshQueued = false;
+  let loadError = false;
+  let cfbGroup = 'all';
+
+  function todayBounds(now) {
+    const d = new Date(now);
+    const start = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+    return [start, new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1).getTime()];
+  }
+
+  function gameFrom(event, league, sport) {
+    const comp = event.competitions?.[0];
+    const home = comp?.competitors?.find((c) => c.homeAway === 'home');
+    const away = comp?.competitors?.find((c) => c.homeAway === 'away');
+    if (!comp || !home?.team || !away?.team) return null;
+    const start = Date.parse(event.date || comp.date || '');
+    if (!Number.isFinite(start)) return null;
+    const status = comp.status?.type || event.status?.type || {};
+    const state = /POSTPONED/.test(status.name || '') ? 'postponed'
+      : /CANCELED|CANCELLED|ABANDONED|FORFEIT/.test(status.name || '') ? 'canceled'
+        : status.state === 'in' ? 'live' : status.state === 'post' ? 'final' : 'scheduled';
+    const team = (c) => ({
+      id: c.team.id, abbr: c.team.abbreviation || c.team.shortDisplayName || c.team.displayName,
+      name: c.team.shortDisplayName || c.team.displayName || c.team.name,
+      fullName: c.team.displayName || c.team.name, city: '', color: `#${c.team.color || '5A6475'}`,
+      logo: c.team.logo || c.team.logos?.[0]?.href || null,
+      rank: c.curatedRank?.current && c.curatedRank.current <= 25 ? c.curatedRank.current : null,
+      record: c.records?.find((record) => record.type === 'total')?.summary || c.records?.[0]?.summary || null,
+    });
+    return {
+      id: `espn-${league}-${event.id}`, eventID: event.id, league, sport, start,
+      competitionID: comp.id || event.id,
+      end: start + 4 * TO.HOUR, state, home: team(home), away: team(away),
+      homeScore: Number(home.score || 0), awayScore: Number(away.score || 0),
+      progress: state === 'live' ? 0.5 : state === 'final' ? 1 : 0,
+      period: comp.status?.period || 0, clock: status.shortDetail || comp.status?.displayClock || '',
+      statusText: status.shortDetail || status.detail || status.description || 'Scheduled',
+      conferenceName: comp.groups?.shortName || comp.groups?.name || '',
+      simulated: false, _competition: comp,
+    };
+  }
+
+  function american(value) {
+    const n = Number(value);
+    return Number.isFinite(n) && n !== 0 ? Math.round(n) : null;
+  }
+
+  function hasPrice(value) { return american(value) != null; }
+
+  function marketPrice(teamOdds, market) {
+    const value = (entry) => entry?.american ?? entry?.alternateDisplayValue
+      ?? (typeof entry === 'number' || typeof entry === 'string' ? entry : null);
+    return value(teamOdds?.[market]) ?? value(teamOdds?.current?.[market]);
+  }
+
+  function moneylinePrice(book, side) {
+    if (side === 'draw') {
+      return marketPrice(book?.drawOdds, 'moneyLine')
+        ?? book?.drawOdds?.moneyLine
+        ?? book?.moneyline?.draw?.current?.odds
+        ?? book?.moneyline?.draw?.close?.odds
+        ?? book?.moneyline?.draw?.open?.odds;
+    }
+    const teamOdds = side === 'home' ? book?.homeTeamOdds : book?.awayTeamOdds;
+    return marketPrice(teamOdds, 'moneyLine')
+      ?? teamOdds?.moneyline
+      ?? book?.moneyline?.[side]?.current?.odds
+      ?? book?.moneyline?.[side]?.close?.odds
+      ?? book?.moneyline?.[side]?.open?.odds;
+  }
+
+  function spreadPrice(book, side) {
+    const teamOdds = side === 'home' ? book?.homeTeamOdds : book?.awayTeamOdds;
+    const market = book?.pointSpread?.[side];
+    return marketPrice(teamOdds, 'spread')
+      ?? teamOdds?.spreadOdds
+      ?? market?.current?.odds
+      ?? market?.close?.odds
+      ?? market?.open?.odds
+      ?? (side === 'home' ? book?.homeSpreadOdds : book?.awaySpreadOdds);
+  }
+
+  function totalPrice(book, side) {
+    const flat = side === 'over' ? (book?.overOdds ?? book?.overUnderOdds) : (book?.underOdds ?? book?.underUnderOdds);
+    const market = book?.total?.[side] || book?.overUnder?.[side];
+    return flat ?? market?.current?.odds ?? market?.close?.odds ?? market?.open?.odds;
+  }
+
+  function totalLine(book) {
+    const raw = Number(book?.overUnder ?? book?.total);
+    return Number.isFinite(raw) && raw > 0 ? raw : null;
+  }
+
+  function isBookmaker(book) {
+    if (!book) return false;
+    const name = String(book?.provider?.name || '').toLowerCase();
+    if (/numberfire|predictor|win probability/.test(name)) return false;
+    return true;
+  }
+
+  function spreadFor(book, game, homeOdds, awayOdds) {
+    const homeMarketLine = homeOdds.current?.pointSpread?.alternateDisplayValue
+      ?? homeOdds.current?.pointSpread?.american
+      ?? homeOdds.pointSpread?.alternateDisplayValue
+      ?? homeOdds.pointSpread?.american
+      ?? book.pointSpread?.home?.current?.line
+      ?? book.pointSpread?.home?.close?.line
+      ?? book.pointSpread?.home?.open?.line;
+    const awayMarketLine = awayOdds.current?.pointSpread?.alternateDisplayValue
+      ?? awayOdds.current?.pointSpread?.american
+      ?? awayOdds.pointSpread?.alternateDisplayValue
+      ?? awayOdds.pointSpread?.american
+      ?? book.pointSpread?.away?.current?.line
+      ?? book.pointSpread?.away?.close?.line
+      ?? book.pointSpread?.away?.open?.line;
+    const direct = Number(homeMarketLine ?? homeOdds.spread ?? book.homeSpread);
+    if (Number.isFinite(direct) && direct !== 0) return direct;
+    const awayLine = Number(awayMarketLine);
+    if (Number.isFinite(awayLine) && awayLine !== 0) return -awayLine;
+    // ESPN's MLB `details` is the moneyline favorite and price, not a run line.
+    if (game.sport === 'baseball') return null;
+    const detail = String(book.details || '');
+    const match = detail.match(/([+-]\s*\d+(?:\.\d+)?)/);
+    const value = match ? Number(match[1].replace(/\s/g, '')) : Number(book.spread);
+    if (!Number.isFinite(value) || value === 0 || Math.abs(value) > 50) return null;
+    if (homeOdds.favorite === true) return -Math.abs(value);
+    if (awayOdds.favorite === true) return Math.abs(value);
+    const namedHome = [game.home.abbr, game.home.name, game.home.fullName].filter(Boolean).some((name) => detail.toLowerCase().includes(name.toLowerCase()));
+    const namedAway = [game.away.abbr, game.away.name, game.away.fullName].filter(Boolean).some((name) => detail.toLowerCase().includes(name.toLowerCase()));
+    if (namedHome) return value;
+    if (namedAway) return -value;
+    const signedHomeSpread = Number(book.spread);
+    return Number.isFinite(signedHomeSpread) && signedHomeSpread !== 0 ? signedHomeSpread : null;
+  }
+
+  function makeOdds(game, now = TO.now()) {
+    const comp = game._competition || {};
+    const candidates = game._oddsBooks?.length
+      ? [...game._oddsBooks, ...(game.state === 'live' ? [] : (comp.odds || []))]
+      : [game._oddsBook || comp.odds?.[0]].filter(Boolean);
+    const books = candidates.filter(isBookmaker);
+    const liveBooks = books.filter((book) => /live odds/i.test(book.provider?.name || ''));
+    const marketBooks = game.state === 'live' && liveBooks.length ? liveBooks : books;
+    const add = (market, side, n, price, title) => {
+      const parsedPrice = american(price);
+      return parsedPrice == null ? null : {
+        id: `${game.id}|${market}|${side}`, kind: 'game', gameId: game.id, market, side,
+        line: n, price: parsedPrice, source: title || '',
+      };
+    };
+    const moneyline = ['away', 'home', 'draw'].map((side) => {
+      const source = marketBooks.find((book) => hasPrice(moneylinePrice(book, side)));
+      const team = side === 'home' ? source?.homeTeamOdds?.team : source?.awayTeamOdds?.team;
+      return source ? add('ml', side, null, moneylinePrice(source, side), side === 'draw' ? 'Draw' : team?.displayName) : null;
+    }).filter(Boolean);
+    const spreads = marketBooks.map((book) => ({ book, line: spreadFor(book, game, book.homeTeamOdds || {}, book.awayTeamOdds || {}) }))
+      .filter((entry) => entry.line != null && (hasPrice(spreadPrice(entry.book, 'home')) || hasPrice(spreadPrice(entry.book, 'away'))));
+    const spreadSource = spreads.find((entry) => hasPrice(spreadPrice(entry.book, 'home')) && hasPrice(spreadPrice(entry.book, 'away'))) || spreads[0];
+    const spreadLine = spreadSource?.line;
+    const priceAtLine = (side) => {
+      const entry = spreads.find((candidate) => candidate.line === spreadLine && hasPrice(spreadPrice(candidate.book, side)));
+      return entry ? spreadPrice(entry.book, side) : null;
+    };
+    const spread = spreadLine != null ? [
+      add('spread', 'away', -spreadLine, priceAtLine('away'), 'Away'),
+      add('spread', 'home', spreadLine, priceAtLine('home'), 'Home'),
+    ].filter(Boolean) : [];
+    const totals = marketBooks.map((book) => ({ book, line: totalLine(book) }))
+      .filter((entry) => entry.line != null && (hasPrice(totalPrice(entry.book, 'over')) || hasPrice(totalPrice(entry.book, 'under'))));
+    const totalSource = totals.find((entry) => hasPrice(totalPrice(entry.book, 'over')) && hasPrice(totalPrice(entry.book, 'under'))) || totals[0];
+    const selectedTotalLine = totalSource?.line;
+    const totalAtLine = (side) => {
+      const entry = totals.find((candidate) => candidate.line === selectedTotalLine && hasPrice(totalPrice(candidate.book, side)));
+      return entry ? totalPrice(entry.book, side) : null;
+    };
+    const total = selectedTotalLine != null ? [
+      add('total', 'over', selectedTotalLine, totalAtLine('over'), 'Over'),
+      add('total', 'under', selectedTotalLine, totalAtLine('under'), 'Under'),
+    ].filter(Boolean) : [];
+    const suspended = !['scheduled', 'live'].includes(game.state) || (books.length > 0 && books.every((book) => book.isClosed === true));
+    return { moneyline, spread, total, suspended, all: [...moneyline, ...spread, ...total], move: {}, updatedAt };
+  }
+
+  function selectedGroup() { return cfbGroup; }
+  async function fetchLeague(league, group = '80') {
+    const [path] = LEAGUES[league];
+    const params = new URLSearchParams();
+    if (league === 'ncaaf') {
+      if (group !== 'all') params.set('groups', group);
+      params.set('limit', '100');
+    }
+    const url = `${ESPN}/${path}/scoreboard${params.size ? `?${params}` : ''}`;
+    const response = await fetch(url, { cache: 'no-store' });
+    if (!response.ok) throw new Error(`ESPN returned ${response.status}`);
+    const payload = await response.json();
+    return (payload.events || []).map((event) => gameFrom(event, league, LEAGUES[league][1])).filter(Boolean);
+  }
+
+  async function resolveOddsItem(item) {
+    if (!item?.$ref) return item;
+    const response = await fetch(item.$ref.replace(/^http:/, 'https:'), { cache: 'no-store' });
+    if (!response.ok) throw new Error(`ESPN odds returned ${response.status}`);
+    return response.json();
+  }
+
+  async function fetchEventOdds(game, now) {
+    const cached = oddsCache.get(game.id);
+    if (cached && now - cached.at < 25000) return cached.books || (cached.book ? [cached.book] : []);
+    const [,, coreLeague] = LEAGUES[game.league];
+    const endpoint = `${ESPN_CORE}/${game.sport}/leagues/${coreLeague}/events/${game.eventID}/competitions/${game.competitionID}/odds?limit=10`;
+    try {
+      const response = await fetch(endpoint, { cache: 'no-store' });
+      if (!response.ok) throw new Error(`ESPN odds returned ${response.status}`);
+      const payload = await response.json();
+      const items = payload.items || (payload.provider || payload.homeTeamOdds ? [payload] : []);
+      const refs = items.filter((item) => isBookmaker(item)).slice(0, 8);
+      const books = await Promise.allSettled(refs.map(resolveOddsItem));
+      const availableBooks = books.filter((result) => result.status === 'fulfilled').map((result) => result.value)
+        .filter((book) => isBookmaker(book) && (book.overUnder != null || book.spread != null || book.homeTeamOdds?.spread != null
+          || hasPrice(moneylinePrice(book, 'home')) || hasPrice(moneylinePrice(book, 'away')) || hasPrice(moneylinePrice(book, 'draw')))
+          && (hasPrice(book.overOdds ?? book.overUnderOdds) || hasPrice(book.underOdds ?? book.underUnderOdds)
+            || hasPrice(book.homeTeamOdds?.spreadOdds) || hasPrice(book.awayTeamOdds?.spreadOdds)
+            || hasPrice(moneylinePrice(book, 'home')) || hasPrice(moneylinePrice(book, 'away')) || hasPrice(moneylinePrice(book, 'draw'))));
+      const preferred = game.state === 'live'
+        ? availableBooks.sort((a, b) => Number(/live odds/i.test(b.provider?.name || '')) - Number(/live odds/i.test(a.provider?.name || '')))
+        : availableBooks.sort((a, b) => Number(/live odds/i.test(a.provider?.name || '')) - Number(/live odds/i.test(b.provider?.name || '')));
+      oddsCache.set(game.id, { at: now, books: preferred });
+      return preferred;
+    } catch (error) {
+      console.warn('ESPN odds unavailable:', error);
+      oddsCache.set(game.id, { at: now, books: [] });
+      return [];
+    }
+  }
+
+  async function loadOdds(games, now) {
+    let cursor = 0;
+    const worker = async () => {
+      while (cursor < games.length) {
+        const game = games[cursor++];
+        const scoreboardBook = game._competition.odds?.[0];
+        const hasScoreboardLines = game.state !== 'live' && isBookmaker(scoreboardBook)
+          && hasPrice(scoreboardBook.homeTeamOdds?.spreadOdds)
+          && hasPrice(scoreboardBook.awayTeamOdds?.spreadOdds)
+          && hasPrice(scoreboardBook.overOdds) && hasPrice(scoreboardBook.underOdds)
+          && hasPrice(moneylinePrice(scoreboardBook, 'home'))
+          && hasPrice(moneylinePrice(scoreboardBook, 'away'));
+        if (!hasScoreboardLines) game._oddsBooks = await fetchEventOdds(game, now);
+        game.odds = makeOdds(game, now);
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(6, games.length) }, worker));
+    TO.emit('live:updated');
+  }
+
+  async function loadDetails(id) {
+    const game = byId(id);
+    if (!game || game._detailLoaded || game._detailLoading) return game?._details || null;
+    game._detailLoading = true;
+    try {
+      const [path] = LEAGUES[game.league];
+      const response = await fetch(`${ESPN}/${path}/summary?event=${encodeURIComponent(game.eventID)}`, { cache: 'no-store' });
+      if (!response.ok) throw new Error(`ESPN summary returned ${response.status}`);
+      game._details = await response.json();
+      game._detailLoaded = true;
+      return game._details;
+    } catch (error) {
+      console.warn('ESPN game details unavailable:', error);
+      return null;
+    } finally {
+      game._detailLoading = false;
+      TO.emit('live:details-updated', game.id);
+    }
+  }
+
+  function realStats(game) {
+    const boxscore = game?._details?.boxscore;
+    const teams = boxscore?.teams || [];
+    const home = teams.find((item) => String(item.team?.id) === String(game.home.id));
+    const away = teams.find((item) => String(item.team?.id) === String(game.away.id));
+    if (!home || !away) return [];
+    const indexStats = (team) => new Map((team.statistics || []).map((stat) => [stat.name || stat.label, stat]));
+    const awayStats = indexStats(away), homeStats = indexStats(home);
+    return [...awayStats.keys()].flatMap((key) => {
+      const a = awayStats.get(key), h = homeStats.get(key);
+      if (!h) return [];
+      const label = a.label || a.displayName || a.name || key;
+      const av = a.displayValue ?? a.value;
+      const hv = h.displayValue ?? h.value;
+      if (av == null || hv == null) return [];
+      return [{ label, awayValue: String(av), homeValue: String(hv) }];
+    });
+  }
+
+  async function refresh(now = TO.now()) {
+    if (loading) { refreshQueued = true; return; }
+    if (now - updatedAt < 25000) return;
+    loading = true;
+    loadError = false;
+    const leagues = TO.data?.settings?.sports?.filter((key) => LEAGUES[key]) || Object.keys(LEAGUES);
+    const results = await Promise.allSettled(leagues.map((league) => fetchLeague(league, cfbGroup)));
+    const [dayStart, dayEnd] = todayBounds(now);
+    let failed = false;
+    results.forEach((result, index) => {
+      if (result.status !== 'fulfilled') { failed = true; return; }
+      const league = leagues[index];
+      const todays = result.value.filter((game) => game.start >= dayStart && game.start < dayEnd);
+      const games = league === 'ncaaf' && cfbGroup === '80'
+        ? todays.filter((game) => game.home.rank || game.away.rank)
+        : todays;
+      games.forEach((game) => { game.odds = makeOdds(game, now); });
+      cache.set(league, games);
+    });
+    loadError = failed && !results.some((r) => r.status === 'fulfilled');
+    updatedAt = now;
+    loading = false;
+    TO.emit('live:updated');
+    const todaysGames = [...cache.values()].flat();
+    loadOdds(todaysGames, now);
+    if (refreshQueued) {
+      refreshQueued = false;
+      updatedAt = 0;
+      refresh();
+    }
+  }
+
+  function byId(id) {
+    for (const games of cache.values()) {
+      const game = games.find((item) => item.id === id || item.eventID === id);
+      if (game) return game;
+    }
+    return null;
+  }
+
+  // Keep the existing selection, slip and settlement code, but supply ESPN game data and prices.
+  const simGame = S.game, simBoard = S.board, simOdds = S.odds, simCurrent = S.currentSelection, simGrade = S.grade;
+  S.game = (id, now) => byId(id) || simGame(id, now);
+  S.board = (now = TO.now(), options = {}) => {
+    if (now - updatedAt > 25000) refresh(now);
+    const leagues = options.leagues || S.LEAGUE_ORDER;
+    return leagues.flatMap((league) => {
+      const games = [...(cache.get(league) || [])];
+      return games;
+    }).filter((game) => {
+      const [start, end] = todayBounds(now);
+      return game.start >= start && game.start < end;
+    }).sort((a, b) => (a.state === 'live' ? 0 : 1) - (b.state === 'live' ? 0 : 1) || a.start - b.start);
+  };
+  S.odds = (id, now) => byId(id)?.odds || simOdds(id, now);
+  S.currentSelection = (id, now) => {
+    const [ref] = id.split('|');
+    const game = byId(ref);
+    if (!game) return simCurrent(id, now);
+    const selection = game.odds.all.find((item) => item.id === id);
+    return { sel: selection || null, open: !!selection && !game.odds.suspended && game.state !== 'final' };
+  };
+  S.grade = (selection, now) => {
+    const game = byId(selection.gameId);
+    if (!game) return simGrade(selection, now);
+    if (game.state === 'postponed' || game.state === 'canceled') return 'void';
+    if (game.state !== 'final') return 'pending';
+    return S.gradeScore(selection, game.homeScore, game.awayScore);
+  };
+
+  TO.live = {
+    refresh, loadDetails, stats: realStats, selectedGroup, setGroup(group) {
+      cfbGroup = CFB_GROUPS.some(([id]) => id === group) ? group : 'all';
+      cache.delete('ncaaf'); updatedAt = 0; refresh();
+    },
+    groups: CFB_GROUPS, get loading() { return loading; }, get failed() { return loadError; },
+  };
+})(window.TO);
+
+</script>
+<script>
 /* TimeOut web demo — client for the TimeOut API in ../server.
  *
  * When the page is served by the server (npm start -> http://localhost:3000), accounts and login go through
@@ -2914,7 +3321,7 @@ window.TO = window.TO || {};
 
   // ---------- Components ----------
   ui.teamBadge = (team, size) =>
-    `<span class="team-badge" style="background:${team.color}${size ? `;width:${size}px;height:${size}px;font-size:${Math.round(size * 0.3)}px` : ''}">${esc(team.abbr)}</span>`;
+    `<span class="team-badge" style="background:${team.color || 'var(--raised)'}${size ? `;width:${size}px;height:${size}px;font-size:${Math.round(size * 0.3)}px` : ''}">${team.logo ? `<img src="${esc(team.logo)}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='grid'">` : ''}<span style="${team.logo ? 'display:none' : ''}">${esc(team.abbr)}</span></span>`;
 
   ui.tierBadge = (tierId, sm) => {
     const t = TO.state.tierById(tierId);
@@ -2940,6 +3347,7 @@ window.TO = window.TO || {};
       return `<span>${TO.fmtDay(g.start)} · ${TO.fmtTime(g.start)}</span>${mins <= 60 ? `<span class="faint">· starts in ${mins < 1 ? '<1' : mins} min</span>` : ''}`;
     }
     if (g.state === 'final') return `<span>${esc(g.statusText)}</span>`;
+    if (g.state === 'canceled') return `<span class="yellow row-s">${icon('alert', 13)} Canceled · all bets voided, stakes returned</span>`;
     return `<span class="yellow row-s">${icon('alert', 13)} Postponed · all bets voided, stakes returned</span>`;
   };
 
@@ -3133,6 +3541,7 @@ window.TO = window.TO || {};
 
   const slip = (TO.slip = {
     legs: [],
+    parlayMode: false,
     mode: 'minutes',
     stake: null,
     friends: [],
@@ -3143,13 +3552,13 @@ window.TO = window.TO || {};
     notifiedChange: '',
     has(id) { return this.legs.some((l) => l.selId === id); },
     clear() {
-      Object.assign(this, { legs: [], mode: 'minutes', stake: null, friends: [], terms: '', boost: false, insure: false, error: null, notifiedChange: '' });
+      Object.assign(this, { legs: [], parlayMode: false, mode: 'minutes', stake: null, friends: [], terms: '', boost: false, insure: false, error: null, notifiedChange: '' });
     },
   });
 
   const refOf = (sel) => sel.gameId || sel.predId;
 
-  /** Tap on an odds button: add (or remove) the pick. The first pick opens the slip right away. */
+  /** Tap an odds button: single-pick mode replaces the current pick; parlay mode adds legs. */
   slip.toggle = (selId) => {
     if (slip.has(selId)) {
       slip.legs = slip.legs.filter((l) => l.selId !== selId);
@@ -3161,6 +3570,14 @@ window.TO = window.TO || {};
     const sel = cur.sel;
     const sameGame = slip.legs.findIndex((l) => l.ref === refOf(sel));
     const leg = { selId: sel.id, price: sel.price, line: sel.line, ref: refOf(sel) };
+    if (!slip.parlayMode) {
+      const wasEmpty = slip.legs.length === 0;
+      slip.legs = [leg];
+      slip.error = null;
+      if (ui.sheetOpen('slip') || wasEmpty) open();
+      afterChange();
+      return;
+    }
     if (sameGame >= 0) {
       slip.legs[sameGame] = leg;
       ui.toast({ kind: 'info', title: 'Pick swapped', msg: 'A parlay can only have one pick per game.', ms: 2600 });
@@ -3172,9 +3589,19 @@ window.TO = window.TO || {};
       slip.legs.push(leg);
     }
     slip.error = null;
-    const wasEmpty = slip.legs.length === 1 && sameGame < 0;
-    if (wasEmpty || ui.sheetOpen('slip')) open();
+    if (ui.sheetOpen('slip')) open();
     afterChange();
+  };
+
+  TO.actions['toggle-parlay'] = () => {
+    const entering = !slip.parlayMode;
+    slip.parlayMode = entering;
+    slip.legs = [];
+    slip.error = null;
+    if (ui.sheetOpen('slip')) {
+      ui.closeSheet('slip');
+    }
+    TO.app.render();
   };
 
   function afterChange() {
@@ -3269,7 +3696,7 @@ window.TO = window.TO || {};
 
   function footHtml() {
     const st = slip.status();
-    const more = slip.legs.length < TO.RULES.maxLegs && !st.closed ? `<button class="btn quiet sm" data-act="slip-more">${icon('plus', 16)} Add another pick for a parlay</button>` : '';
+    const more = slip.parlayMode && slip.legs.length < TO.RULES.maxLegs && !st.closed ? `<button class="btn quiet sm" data-act="slip-more">${icon('plus', 16)} Add another pick</button>` : '';
     if (st.closed) return `<button class="btn primary full" disabled>Remove unavailable picks to continue</button>`;
     if (st.changed) return `<button class="btn warn full" data-act="slip-accept">Accept new odds</button>`;
     if (slip.mode === 'friend') {
@@ -3451,9 +3878,11 @@ window.TO = window.TO || {};
 
   const followed = () => TO.data.settings.sports;
   const offDay = () => TO.store.get('timeout.offDay', false);
+  const activeFilter = () => ['pred', 'todo', 'sim'].includes(TO.data.feedFilter) ? 'all' : (TO.data.feedFilter || 'all');
+  const sportsOnly = (bet) => bet.kind === 'sports' && bet.legs.every((leg) => leg.gameId && S.game(leg.gameId)?.league !== 'sim');
 
   function boardGames() {
-    return S.board(TO.now(), { offDay: offDay(), leagues: S.LEAGUE_ORDER.filter((l) => followed().includes(l)) });
+    return S.board(TO.now(), { offDay: offDay(), leagues: S.LEAGUE_ORDER.filter((l) => l !== 'sim' && followed().includes(l)) }).filter((g) => !g.simulated && g.league !== 'sim');
   }
 
   function myOpenBetOn(ref) {
@@ -3531,7 +3960,7 @@ window.TO = window.TO || {};
   }
 
   function openBetsStrip() {
-    const open = TO.data.bets.filter((b) => b.status === 'open').sort((a, b) => b.placedAt - a.placedAt);
+    const open = TO.data.bets.filter((b) => b.status === 'open' && sportsOnly(b)).sort((a, b) => b.placedAt - a.placedAt);
     return `<div class="stack-s">
       <div class="section-title"><div class="row-s"><h2>Open bets</h2><span class="count-pill ${open.length ? '' : 'off'}">${open.length}</span></div>${open.length ? `<button class="link-btn" data-act="tab" data-tab="bets">See all</button>` : ''}</div>
       ${open.length
@@ -3542,19 +3971,18 @@ window.TO = window.TO || {};
 
   // ---------- Filters ----------
   function filterBar(games) {
-    const f = TO.data.feedFilter || 'all';
+    const f = activeFilter();
     const live = games.filter((g) => g.state === 'live').length;
     const chip = (key, label, n, ic) => `<button class="chip ${f === key ? 'on' : ''}" data-act="filter" data-f="${key}">${ic ? icon(ic, 14) : ''}${esc(label)}${n ? `<span class="n">${n}</span>` : ''}</button>`;
     const chips = [chip('live', 'Live', live, 'radio'), chip('all', 'All', 0, 'grid')];
     for (const l of S.LEAGUE_ORDER) {
-      if (!followed().includes(l)) continue;
+      if (l === 'sim' || !followed().includes(l)) continue;
       const n = games.filter((g) => g.league === l && g.state !== 'final').length;
-      chips.push(chip(l, S.LEAGUES[l].short === 'SIM' ? 'Sim League' : S.LEAGUES[l].short, n));
+      chips.push(chip(l, l === 'ncaaf' ? 'College Football' : S.LEAGUES[l].short === 'SIM' ? 'Sim League' : S.LEAGUES[l].short, n));
     }
-    if (TO.data.settings.showPredictions) chips.push(chip('pred', 'Predictions', 0, 'globe'));
-    if (TO.data.settings.showTodos) chips.push(chip('todo', 'To-Do Parlays', 0, 'todo'));
     chips.push(`<button class="chip dashed" data-act="settings" data-section="sports">${icon('sliders', 14)}Edit</button>`);
-    return `<div class="filterbar"><div class="hscroll" data-hkey="filters">${chips.join('')}</div></div>`;
+    const cfb = f === 'ncaaf' || f === 'all' ? `<label class="cfb-select-label" for="cfb-group">College Football</label><select id="cfb-group" class="cfb-select" aria-label="College football conference">${TO.live.groups.map(([id, name]) => `<option value="${id}" ${TO.live.selectedGroup() === id ? 'selected' : ''}>${esc(name)}</option>`).join('')}</select>` : '';
+    return `<div class="filterbar"><div class="hscroll" data-hkey="filters">${chips.join('')}</div>${cfb}</div>`;
   }
 
   // ---------- Game card ----------
@@ -3573,27 +4001,56 @@ window.TO = window.TO || {};
     const Sp = S.SPORTS[g.sport];
     let body;
     if (bettable) {
+      if (g.eventID) {
+        const sides = [
+          ['away', g.away, g.awayScore, g.homeScore],
+          ['home', g.home, g.homeScore, g.awayScore],
+        ];
+        const teamLine = (side, team, score, opponent) => `<div class="gc-live-team">
+          <button class="gc-live-team-open" data-act="open-game" data-id="${g.id}" aria-label="Open ${esc(team.name)} game stats">
+            <span class="gc-live-logo">${team.logo ? `<img src="${esc(team.logo)}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='grid'">` : ''}<span style="${team.logo ? 'display:none' : ''}">${esc(team.abbr)}</span></span>
+            <span class="gc-live-name">${esc(team.name)}</span>
+          </button>
+          <span class="gc-live-score ${g.state === 'live' && score < opponent ? 'trail' : ''} ${g.state === 'live' ? scoreCls(g, side) : ''}">${g.state === 'scheduled' ? '–' : score}</span>
+        </div>`;
+        const picks = [
+          [o.spread.find((sel) => sel.side === 'away'), `Away · ${g.away.abbr}`],
+          [o.spread.find((sel) => sel.side === 'home'), `Home · ${g.home.abbr}`],
+          [o.total.find((sel) => sel.side === 'over'), 'Over'],
+          [o.total.find((sel) => sel.side === 'under'), 'Under'],
+          [o.moneyline.find((sel) => sel.side === 'away'), `Away ML · ${g.away.abbr}`, true],
+          [o.moneyline.find((sel) => sel.side === 'home'), `Home ML · ${g.home.abbr}`, true],
+        ];
+        if (g.sport === 'soccer') picks.push([o.moneyline.find((sel) => sel.side === 'draw'), 'Draw', true]);
+        body = `<div class="gc-live-layout">
+          <div class="gc-live-teams">${sides.map(([side, team, score, opponent]) => teamLine(side, team, score, opponent)).join('')}</div>
+          <div class="gc-live-bets">${picks.map(([sel, label, isMoneyline]) => sel
+            ? ui.oddsBtn(sel, { suspended: o.suspended, move: o.move[sel.id], big: true, label })
+            : `<button class="odds-btn locked big" disabled aria-label="${esc(label)} unavailable"><span class="lbl">${esc(label)}</span><span class="pr">${isMoneyline ? 'N/A' : '—'}</span></button>`).join('')}</div>
+        </div>`;
+      } else {
       const cols = [];
-      if (o.spread.length) cols.push([Sp.spreadLabel, o.spread]);
-      cols.push(['Total', o.total]);
-      cols.push(['Money', o.moneyline.filter((s) => s.side !== 'draw')]);
+      if (o.spread.length === 2) cols.push([Sp.spreadLabel, o.spread]);
+      if (o.total.length === 2) cols.push(['Total', o.total]);
+      if (o.moneyline.length === 2) cols.push(['Money', o.moneyline]);
       const teamRow = (team, side, row) => {
         const score = side === 'home' ? g.homeScore : g.awayScore;
         const opp = side === 'home' ? g.awayScore : g.homeScore;
         return `<button class="gc-team" data-act="open-game" data-id="${g.id}">
             ${ui.teamBadge(team)}
-            <span style="min-width:0"><span class="nm" style="display:block">${esc(g.state === 'live' ? team.abbr : team.name)}</span>${g.state === 'scheduled' ? `<span class="rec">${S.record(g.league, team)}</span>` : ''}</span>
+            <span style="min-width:0"><span class="nm" style="display:block">${esc(g.state === 'live' ? team.abbr : team.name)}</span></span>
             ${g.state === 'live' ? `<span class="sc ${score < opp ? 'trail' : ''} ${scoreCls(g, side)}">${score}</span>` : ''}
           </button>
           ${cols.map(([, sels]) => ui.oddsBtn(sels[row], { suspended: o.suspended, move: o.move[sels[row].id], label: team.name })).join('')}`;
       };
       const draw = o.moneyline.find((s) => s.side === 'draw');
-      body = `<div class="gc-grid ${cols.length === 2 ? 'two' : ''}">
+        body = `<div class="gc-grid ${cols.length === 2 ? 'two' : ''}" style="grid-template-columns:minmax(0,1fr) repeat(${cols.length},60px)">
           <span></span>${cols.map(([h]) => `<span class="colh">${esc(h)}</span>`).join('')}
           ${teamRow(g.away, 'away', 0)}
           ${teamRow(g.home, 'home', 1)}
           ${draw ? `<span class="gc-team muted bold" style="height:40px">Draw</span>${cols.length === 2 ? '<span></span>' : '<span></span><span></span>'}${ui.oddsBtn(draw, { suspended: o.suspended, move: o.move[draw.id], label: 'Draw' })}` : ''}
-        </div>`;
+        </div>${cols.length ? '' : '<div class="tiny faint" style="margin:6px 2px 0">Betting lines are not available for this game yet.</div>'}`;
+      }
     } else {
       const row = (team, score, won) => `<button class="gc-team" style="width:100%" data-act="open-game" data-id="${g.id}">${ui.teamBadge(team)}<span class="nm" style="${won ? '' : 'color:var(--text-2)'}">${esc(team.name)}</span>${g.state === 'final' ? `<span class="sc ${won ? '' : 'trail'}">${score}</span>` : ''}</button>`;
       body = row(g.away, g.awayScore, g.awayScore > g.homeScore) + row(g.home, g.homeScore, g.homeScore > g.awayScore);
@@ -3601,59 +4058,39 @@ window.TO = window.TO || {};
     }
     const status = `${ui.gameStatus(g)}${o.suspended && g.state === 'live' ? `<span class="tag">${icon('lock', 10)} Betting closed</span>` : ''}`;
     return `<div class="card game-card" data-game="${g.id}">
-      <div class="gc-status">${status}<span class="lg">${g.simulated ? 'SIMULATED' : esc(S.LEAGUES[g.league].short)}</span></div>
+      <div class="gc-status">${status}<span class="lg">${g.otherConferenceLive ? `LIVE · ${esc(g.conferenceName || 'UNRANKED')}` : g.simulated ? 'SIMULATED' : esc(S.LEAGUES[g.league].short)}</span></div>
       ${body}
       <div class="gc-more">${mine.length ? `<span class="yourbet">${icon('ticket', 14)} You have ${mine.length === 1 ? 'a bet' : `${mine.length} bets`} on this game</span>` : '<span></span>'}<button class="row-s link-btn" style="font-size:12.5px" data-act="open-game" data-id="${g.id}">Stats & all odds ${icon('chevR', 14)}</button></div>
     </div>`;
   }
 
-  function predCard(p) {
-    const mine = myOpenBetOn(p.id);
-    return `<div class="card pred-card">
-      <div class="spread tiny"><span class="tag blue">${esc(p.cat)}</span><span class="faint bold">${p.state === 'open' ? `Resolves in ${TO.fmtIn(p.resolves - TO.now())}` : p.state === 'closed' ? 'Betting closed · resolving soon' : `Resolved ${p.outcome.toUpperCase()}`}</span></div>
-      <div class="q">${esc(p.q)}</div>
-      <div class="yn">${ui.oddsBtn(p.yes, { suspended: p.suspended, move: p.move[p.yes.id], big: true, label: 'Yes' })}${ui.oddsBtn(p.no, { suspended: p.suspended, move: p.move[p.no.id], big: true, label: 'No' })}</div>
-      <div class="prob"><i style="width:${Math.round(p.pYes * 100)}%"></i></div>
-      <div class="spread tiny faint bold" style="margin-top:5px"><span>${Math.round(p.pYes * 100)}% chance of Yes</span>${mine.length ? `<span class="green">${icon('ticket', 12)} You have a bet</span>` : '<span>Demo market</span>'}</div>
-    </div>`;
-  }
-
-  function todoSection() {
-    const open = TO.data.bets.filter((b) => b.kind === 'todo' && b.status === 'open');
-    return `<button class="card promo" data-act="todo-builder"><span class="lr-icon">${icon('todo', 22)}</span><span class="grow"><b style="font-size:15.5px">Bet on yourself</b><div class="small muted">Build a to-do parlay: stake minutes on finishing up to 3 tasks before midnight.</div></span>${icon('chevR', 18)}</button>
-      ${open.length ? `<div class="section-title" style="margin-top:4px"><h2>Your to-do parlays</h2></div>${open.map((b) => TO.views.bets.betCard(b)).join('')}` : ''}`;
-  }
-
   function emptyBoard(f) {
-    const simOn = followed().includes('sim');
-    const title = f === 'live' ? 'No live games right now' : offDay() ? 'No real games today' : 'No games in this category right now';
+    const title = f === 'live' ? 'No live games right now' : 'Sorry, no games are happening for this sport today.';
     return `<div class="empty">
       ${icon('target', 40)}
       <h3>${title}</h3>
-      <p>The Sim League plays around the clock, with a new game tipping off every few minutes. Bet on simulated games until the next real ones start.</p>
-      <button class="btn primary" data-act="go-sim">${simOn ? 'Show Sim League games' : 'Bet on Sim League games'}</button>
+      ${f === 'live' ? '<p>Check back when a game is underway.</p>' : ''}
     </div>`;
   }
 
+  function buildParlayControl() {
+    const slip = TO.slip;
+    if (!slip.parlayMode) return `<button class="build-parlay" data-act="toggle-parlay">${icon('ticket', 18)}<span><b>Build parlay</b><small>Select picks from multiple games</small></span>${icon('chevR', 18)}</button>`;
+    return `<div class="build-parlay active"><span class="lr-icon">${icon('ticket', 18)}</span><span class="grow"><b>Choose your parlay picks</b><small>${slip.legs.length} of ${TO.RULES.maxLegs} picks · choose one bet per game</small></span><button class="link-btn" data-act="toggle-parlay">Cancel</button></div>`;
+  }
+
   function feed(games) {
-    const f = TO.data.feedFilter || 'all';
-    if (f === 'pred') {
-      return `<div class="pad small muted" style="margin-top:-4px">Yes-or-no markets on things outside sports. Same rules: stake minutes, win or lose tomorrow's phone time.</div>${S.predictions().map(predCard).join('')}`;
-    }
-    if (f === 'todo') return todoSection();
+    const f = activeFilter();
     let list = games;
     if (f === 'live') list = games.filter((g) => g.state === 'live');
     else if (f !== 'all') list = games.filter((g) => g.league === f);
-    const sportsLeft = list.filter((g) => g.state !== 'final');
-    if (!sportsLeft.length && f !== 'sim') return emptyBoard(f) + list.map(gameCard).join('');
+    if (!list.length && f !== 'pred' && f !== 'todo') return emptyBoard(f);
     if (f === 'all') {
-      const groups = S.LEAGUE_ORDER.filter((l) => list.some((g) => g.league === l)).map((l) => {
+      const groups = S.LEAGUE_ORDER.filter((l) => l !== 'sim' && list.some((g) => g.league === l)).map((l) => {
         const lg = list.filter((g) => g.league === l);
         return `<div class="league-head"><h3>${esc(S.LEAGUES[l].title)}</h3>${S.LEAGUES[l].simulated ? '<span class="tag">Simulated</span>' : ''}<span class="cnt">${lg.filter((g) => g.state === 'live').length} live · ${lg.length} games</span></div>${lg.map(gameCard).join('')}`;
       });
-      const preds = TO.data.settings.showPredictions ? `<div class="league-head"><h3>Predictions</h3><button class="cnt link-btn" data-act="filter" data-f="pred">See all</button></div>${S.predictions().slice(0, 1).map(predCard).join('')}` : '';
-      const todo = TO.data.settings.showTodos ? todoSection() : '';
-      return groups.join('') + preds + todo;
+      return groups.join('');
     }
     return list.map(gameCard).join('');
   }
@@ -3671,12 +4108,43 @@ window.TO = window.TO || {};
       ${openBetsStrip()}
       <div class="stack" style="gap:12px">
         ${filterBar(games)}
+        ${buildParlayControl()}
         ${feed(games)}
       </div>
     </div>`;
   }
 
-  TO.views.home = { render, gameCard, predCard };
+  function syncNode(current, fresh) {
+    if (!current || !fresh || current.nodeType !== fresh.nodeType
+      || (current.nodeType === 1 && current.tagName !== fresh.tagName)) {
+      current?.parentNode?.replaceChild(fresh.cloneNode(true), current);
+      return;
+    }
+    if (current.nodeType === 3) {
+      if (current.nodeValue !== fresh.nodeValue) current.nodeValue = fresh.nodeValue;
+      return;
+    }
+    const currentAttrs = [...current.attributes];
+    for (const attr of currentAttrs) if (!fresh.hasAttribute(attr.name)) current.removeAttribute(attr.name);
+    for (const attr of [...fresh.attributes]) if (current.getAttribute(attr.name) !== attr.value) current.setAttribute(attr.name, attr.value);
+    const next = [...fresh.childNodes];
+    for (let i = 0; i < next.length; i++) {
+      const old = current.childNodes[i];
+      if (!old) current.appendChild(next[i].cloneNode(true));
+      else syncNode(old, next[i]);
+    }
+    while (current.childNodes.length > next.length) current.lastChild.remove();
+  }
+
+  function refreshLive() {
+    const view = document.getElementById('view');
+    if (!view || TO.app.tab !== 'home' || !view.firstElementChild) return;
+    const next = document.createElement('div');
+    next.innerHTML = render();
+    if (next.firstElementChild) syncNode(view.firstElementChild, next.firstElementChild);
+  }
+
+  TO.views.home = { render, gameCard, refreshLive };
 
   // ---------- Actions ----------
   const A = TO.actions;
@@ -3710,12 +4178,12 @@ window.TO = window.TO || {};
     if (showScore) {
       mid = `<div class="sb-score"><span class="${aTrail ? 'trail' : ''}">${g.awayScore}</span><span class="dash">–</span><span class="${hTrail ? 'trail' : ''}">${g.homeScore}</span></div>
         <div class="sb-clock">${live ? `<span class="live">LIVE</span>${esc(g.clock)}` : esc(g.statusText)}</div>`;
-    } else if (g.state === 'postponed') {
-      mid = `<div class="tag yellow" style="height:26px;font-size:12px">Postponed</div>`;
+    } else if (g.state === 'postponed' || g.state === 'canceled') {
+      mid = `<div class="tag yellow" style="height:26px;font-size:12px">${g.state === 'canceled' ? 'Canceled' : 'Postponed'}</div>`;
     } else {
       mid = `<div class="display" style="font-size:26px">${TO.fmtTime(g.start)}</div><div class="sb-clock">${TO.fmtDay(g.start)} · in ${TO.fmtIn(g.start - TO.now())}</div>`;
     }
-    const team = (t) => `<div class="sb-team">${ui.teamBadge(t, 52)}<div class="nm">${esc(t.city === t.name ? t.name : `${t.city} ${t.name}`)}</div><div class="rec">${S.record(g.league, t)}</div></div>`;
+    const team = (t) => `<div class="sb-team">${ui.teamBadge(t, 52)}<div class="nm">${esc(!t.city || t.city === t.name ? t.name : `${t.city} ${t.name}`)}</div>${t.rank ? `<div class="rec">#${t.rank}</div>` : ''}</div>`;
     return `<div class="card scoreboard">
       <div class="spread tiny bold faint" style="margin-bottom:12px"><span>${esc(S.LEAGUES[g.league].title)}${g.simulated ? ' · Simulated' : ''}</span><span>Away @ Home</span></div>
       <div class="sb-grid">${team(g.away)}<div class="sb-mid">${mid}</div>${team(g.home)}</div>
@@ -3724,6 +4192,7 @@ window.TO = window.TO || {};
 
   function banner(g, o) {
     if (g.state === 'postponed') return `<div class="note warn">${icon('alert', 16)}<span><b>This game was postponed.</b> All bets on it are void, and every stake has been returned in full. It no longer counts toward anyone's record.</span></div>`;
+    if (g.state === 'canceled') return `<div class="note warn">${icon('alert', 16)}<span>This game was canceled. Bets on it will be voided.</span></div>`;
     if (g.state === 'final') return `<div class="note">${icon('lock', 16)}<span><b>Final: ${esc(g.away.abbr)} ${g.awayScore}, ${esc(g.home.abbr)} ${g.homeScore}${g.ot ? ` (${g.ot.label === '10' ? '10 innings' : 'OT'})` : ''}.</b> Betting is closed on this game.</span></div>`;
     if (o.suspended) return `<div class="note">${icon('lock', 16)}<span>Betting is closed for the final moments of this game.</span></div>`;
     return '';
@@ -3740,55 +4209,38 @@ window.TO = window.TO || {};
     const Sp = S.SPORTS[g.sport];
     const name = (side) => (side === 'home' ? g.home.name : side === 'away' ? g.away.name : 'Draw');
     const block = (title, sels, labelFn) => `<div class="market"><h4>${esc(title)}</h4><div class="opts">${sels.map((s) => ui.oddsBtn(s, { suspended: o.suspended, move: o.move[s.id], big: true, label: labelFn(s) })).join('')}</div></div>`;
-    const age = Math.max(0, Math.round((TO.now() - o.updatedAt) / 1000));
-    const every = g.state === 'live' ? 15 : 120;
+    const moneyline = o.moneyline.length
+      ? `${block('Moneyline · who wins', o.moneyline, (s) => name(s.side))}${g.sport === 'soccer' && !o.moneyline.some((s) => s.side === 'draw') ? '<div class="market"><h4>Draw</h4><div class="opts"><span class="tag">N/A</span></div></div>' : ''}`
+      : '<div class="market"><h4>Moneyline · who wins</h4><div class="opts"><span class="tag">Moneyline N/A</span></div></div>';
+    const available = [
+      moneyline,
+      o.spread.length ? block(`${Sp.spreadLabel} · win by more than the line`, o.spread, (s) => name(s.side)) : '',
+      o.total.length ? block(`Total ${Sp.unit} · both teams combined`, o.total, (s) => (s.side === 'over' ? 'Over' : 'Under')) : '',
+    ].filter(Boolean);
+    if (!available.length) return `<div class="card small muted">ESPN betting lines are not available for this game yet.</div>`;
     return `<div class="card stack">
-      <div class="spread"><h2 style="margin:0;font-size:17px">Pick a side</h2><span class="tiny faint bold">${g.state === 'live' ? `Odds refresh every 15 sec · ${Math.max(every - age, 0)}s` : 'Pre-game odds'}</span></div>
-      ${block('Moneyline · who wins', o.moneyline, (s) => name(s.side))}
-      ${o.spread.length ? block(`${Sp.spreadLabel} · win by more than the line`, o.spread, (s) => name(s.side)) : ''}
-      ${block(`Total ${Sp.unit} · both teams combined`, o.total, (s) => (s.side === 'over' ? 'Over' : 'Under'))}
-      <div class="tiny faint">Fair odds with no house cut. Tap a price to add it to your bet slip.</div>
+      <div class="spread"><h2 style="margin:0;font-size:17px">Pick a side</h2><span class="tiny faint bold">ESPN odds refresh every 25 seconds</span></div>
+      ${available.join('')}
+      <div class="tiny faint">ESPN lines and prices. Tap a price to add it to your bet slip.</div>
     </div>`;
   }
 
   function statsCard(g) {
-    const rows = S.stats(g);
-    if (!rows.length) return '';
+    if (!g.eventID) return '';
+    const rows = TO.live.stats(g);
+    if (!rows.length) return `<div class="card small muted">ESPN live stats are not available for this game yet.</div>`;
     return `<div class="card stack">
       <div class="spread"><h2 style="margin:0;font-size:17px">${g.state === 'live' ? 'Live stats' : 'Final stats'}</h2><span class="row-s tiny bold faint">${ui.teamBadge(g.away, 18)} vs ${ui.teamBadge(g.home, 18)}</span></div>
       ${rows.map((r) => {
-        const tot = (r.a + r.h) || 1;
-        const aBetter = r.lowerBetter ? r.a < r.h : r.a > r.h;
-        const hBetter = r.lowerBetter ? r.h < r.a : r.h > r.a;
-        const suf = r.suffix || '';
-        const at = r.text ? r.text[0] : `${r.a}${suf}`, ht = r.text ? r.text[1] : `${r.h}${suf}`;
-        return `<div class="cmp-row"><span class="v" style="${aBetter ? '' : 'color:var(--text-2)'}">${at}</span>
-          <div class="mid"><span class="lab">${esc(r.label)}</span><div class="cmp-bars"><span><i style="width:${(r.a / tot) * 100}%;background:${g.away.color}"></i></span><span><i style="width:${(r.h / tot) * 100}%;background:${g.home.color}"></i></span></div></div>
-          <span class="v r" style="${hBetter ? '' : 'color:var(--text-2)'}">${ht}</span></div>`;
+        return `<div class="cmp-row"><span class="v">${esc(r.awayValue)}</span><div class="mid"><span class="lab">${esc(r.label)}</span></div><span class="v r">${esc(r.homeValue)}</span></div>`;
       }).join('')}
     </div>`;
   }
 
-  function playsCard(g) {
-    const list = S.plays(g);
-    if (!list.length) return g.state === 'live' ? `<div class="card small muted">No scoring yet. Scoring plays show up here as they happen.</div>` : '';
-    return `<div class="card"><h2 style="margin:0 0 6px;font-size:17px">Scoring plays</h2>${list.slice(0, 8).map((p) => `<div class="play">${ui.teamBadge(p.team, 24)}<div><div class="k">${esc(p.kind)}</div><div class="c">${esc(p.clock)}</div></div><div class="s">${esc(p.score)}</div></div>`).join('')}</div>`;
-  }
-
   function researchCard(g) {
-    const r = S.research(g);
-    const dots = (f) => `<span class="form-dots">${f.map((x) => `<i class="${x}">${x}</i>`).join('')}</span>`;
-    return `<div class="card stack">
-      <h2 style="margin:0;font-size:17px">Matchup research</h2>
-      <div class="research">
-        <span class="row-s bold">${ui.teamBadge(g.away, 22)}${esc(g.away.abbr)}</span><span class="c"></span><span class="r row-s bold">${esc(g.home.abbr)}${ui.teamBadge(g.home, 22)}</span>
-        <span class="v">${r.away.record}</span><span class="c">Record</span><span class="v r">${r.home.record}</span>
-        <span>${dots(r.away.form)}</span><span class="c">Last 5</span><span class="r">${dots(r.home.form)}</span>
-        <span class="v">${r.away.pf}</span><span class="c">${esc(r.unit)} scored / game</span><span class="v r">${r.home.pf}</span>
-        <span class="v">${r.away.pa}</span><span class="c">${esc(r.unit)} allowed / game</span><span class="v r">${r.home.pa}</span>
-      </div>
-      <div class="small muted">Last meeting: <b style="color:var(--text)">${esc(r.lastMeeting)}</b></div>
-    </div>`;
+    const teams = g.eventID ? [g.away, g.home].filter((team) => team.rank || team.record) : [];
+    if (!teams.length) return '';
+    return `<div class="card stack"><h2 style="margin:0;font-size:17px">ESPN team information</h2>${teams.map((team) => `<div class="spread"><span class="row-s bold">${ui.teamBadge(team, 22)}${esc(team.name)}</span><span class="small muted">${[team.rank ? `#${team.rank}` : '', team.record || ''].filter(Boolean).map(esc).join(' · ')}</span></div>`).join('')}</div>`;
   }
 
   function render() {
@@ -3796,14 +4248,17 @@ window.TO = window.TO || {};
     const o = S.odds(currentId);
     return {
       title: `${esc(g.away.abbr)} @ ${esc(g.home.abbr)}`,
-      body: `${scoreboard(g)}${banner(g, o)}${myBets(g)}${markets(g, o)}${statsCard(g)}${playsCard(g)}${researchCard(g)}`,
+      body: `${scoreboard(g)}${banner(g, o)}${myBets(g)}${markets(g, o)}${statsCard(g)}${researchCard(g)}`,
     };
   }
 
   function open(id) {
     currentId = id;
     ui.openPage('game', { render });
+    if (S.game(id)?.eventID) TO.live.loadDetails(id);
   }
+
+  TO.on('live:details-updated', (id) => { if (id === currentId && ui.pageOpen('game')) TO.views.game.refresh(); });
 
   TO.views.game = { open, refresh: () => ui.refreshPage('game') };
   TO.actions['open-game'] = (el) => open(el.dataset.id);
@@ -3859,8 +4314,9 @@ window.TO = window.TO || {};
     } else {
       head = `<div class="lb-score">${ui.teamBadge(g.away, 22)}${esc(g.away.abbr)} @ ${esc(g.home.abbr)}${ui.teamBadge(g.home, 22)}<span style="margin-left:auto" class="small muted">${TO.fmtDay(g.start)} ${TO.fmtTime(g.start)} · in ${TO.fmtIn(g.start - TO.now())}</span></div>`;
     }
-    const stats = S.stats(g).slice(0, 3);
-    const statsHtml = stats.length && g.state === 'live' ? `<div class="lb-stats">${stats.map((r) => `<span>${esc(r.label)} <b>${r.text ? r.text[0] : r.a + (r.suffix || '')}–${r.text ? r.text[1] : r.h + (r.suffix || '')}</b></span>`).join('')}</div>` : '';
+    if (g.eventID) TO.live.loadDetails(g.id);
+    const stats = g.eventID ? TO.live.stats(g).slice(0, 3) : [];
+    const statsHtml = stats.length && g.state === 'live' ? `<div class="lb-stats">${stats.map((r) => `<span>${esc(r.label)} <b>${esc(r.awayValue)}–${esc(r.homeValue)}</b></span>`).join('')}</div>` : '';
     return `<div class="livebox" data-act="open-game" data-id="${g.id}" style="cursor:pointer">${head}${statsHtml}</div>`;
   }
 
@@ -3958,7 +4414,7 @@ window.TO = window.TO || {};
   }
 
   function render() {
-    const bets = TO.data.bets;
+    const bets = TO.data.bets.filter((b) => b.kind === 'sports' && b.legs.every((leg) => leg.kind === 'sports'));
     const open = bets.filter((b) => b.status === 'open').sort((a, b) => b.placedAt - a.placedAt);
     let settled = bets.filter((b) => b.status !== 'open').sort((a, b) => b.settledAt - a.settledAt);
     const counts = { all: settled.length, won: 0, lost: 0, void: 0 };
@@ -4688,12 +5144,7 @@ window.TO = window.TO || {};
     const s = TO.data.settings;
     const row = (id, title, sub, checked, change) => listRow('grid', title, sub, ui.switchEl(`sp-${id}`, checked, `data-change="${change}" data-id="${id}"`), `for="sp-${id}"`).replace(`<span class="lr-icon">${icon('grid', 17)}</span>`, `<span class="sport-opt"><span class="sq">${esc(id === 'pred' ? 'PRED' : id === 'todo' ? 'TODO' : S.LEAGUES[id] ? S.LEAGUES[id].short : '')}</span></span>`);
     return `<div class="small muted">Choose what shows up on your Home feed. You can change this any time.</div>
-      <div class="list">${S.LEAGUE_ORDER.map((l) => row(l, esc(S.LEAGUES[l].title), l === 'sim' ? 'Simulated games that run all day, for days without sports' : `${S.LEAGUES[l].sport[0].toUpperCase()}${S.LEAGUES[l].sport.slice(1)}`, s.sports.includes(l), 'set-sport')).join('')}</div>
-      <div class="eyebrow">More ways to bet</div>
-      <div class="list">
-        ${row('pred', 'Prediction markets', 'Yes-or-no questions about movies, weather and more', s.showPredictions, 'set-pred')}
-        ${row('todo', 'To-do parlays', 'Bet minutes on finishing your own tasks', s.showTodos, 'set-todo')}
-      </div>`;
+      <div class="list">${S.LEAGUE_ORDER.filter((l) => l !== 'sim').map((l) => row(l, esc(S.LEAGUES[l].title), `${S.LEAGUES[l].sport[0].toUpperCase()}${S.LEAGUES[l].sport.slice(1)}`, s.sports.includes(l), 'set-sport')).join('')}</div>`;
   }
 
   function notifications() {
@@ -4913,13 +5364,11 @@ window.TO = window.TO || {};
   C['set-sport'] = (el) => {
     const id = el.dataset.id;
     const cur = TO.data.settings.sports;
-    St.setSetting('sports', el.checked ? S.LEAGUE_ORDER.filter((l) => cur.includes(l) || l === id) : cur.filter((l) => l !== id));
+    St.setSetting('sports', el.checked ? S.LEAGUE_ORDER.filter((l) => l !== 'sim' && (cur.includes(l) || l === id)) : cur.filter((l) => l !== id && l !== 'sim'));
     if (!el.checked && TO.data.feedFilter === id) TO.data.feedFilter = 'all';
     TO.tester.mark('sports');
     TO.app.render();
   };
-  C['set-pred'] = (el) => { St.setSetting('showPredictions', el.checked); if (!el.checked && TO.data.feedFilter === 'pred') TO.data.feedFilter = 'all'; TO.app.render(); };
-  C['set-todo'] = (el) => { St.setSetting('showTodos', el.checked); if (!el.checked && TO.data.feedFilter === 'todo') TO.data.feedFilter = 'all'; TO.app.render(); };
   C['set-notify'] = (el) => St.setSetting(`notify.${el.dataset.k}`, el.checked);
   C['set-privacy'] = (el) => St.setSetting(`privacy.${el.dataset.k}`, el.checked);
   C['acct-photo'] = async (el) => {
@@ -5454,6 +5903,7 @@ window.TO = window.TO || {};
     body.innerHTML = shellHtml();
     app.tab = 'home';
     app.render();
+    TO.live.refresh();
     TO.tester.render();
   };
 
@@ -5468,18 +5918,30 @@ window.TO = window.TO || {};
       <button class="icon-btn" data-act="menu" aria-label="Menu and settings">${icon('menu', 22)}${wl.appsLocked ? '<span class="dotbadge"></span>' : ''}</button>
       <div class="brand">${icon('hourglass', 20, 'brand-mark')}<span class="brand-word">Time<b>Out</b></span></div>
       <button class="bal-pill ${locked ? 'locked' : ''}" data-act="settings" data-section="screentime" aria-label="${locked ? 'Betting locked until midnight' : `${wl.balance} minutes available to bet`}">${icon(locked ? 'lock' : 'hourglass', 15)}${locked ? 'Locked' : `${wl.balance} min`}</button>`;
-    const open = TO.data.bets.filter((b) => b.status === 'open').length;
+    const open = TO.data.bets.filter((b) => b.status === 'open' && b.kind === 'sports' && b.legs.every((leg) => leg.kind === 'sports')).length;
     document.getElementById('tabbar').innerHTML = TABS.map(([k, label, ic]) => {
       const badge = k === 'bets' && open ? `<span class="badge green">${open}</span>` : k === 'social' && socialBadge ? `<span class="badge">${socialBadge}</span>` : '';
       return `<button class="tab ${app.tab === k ? 'on' : ''}" data-act="tab" data-tab="${k}" aria-current="${app.tab === k ? 'page' : 'false'}">${icon(ic, 23)}<span>${label}</span>${badge}</button>`;
     }).join('');
+    app.refreshSlipbar();
+  };
+
+  app.refreshSlipbar = () => {
+    if (!inShell()) return;
     const host = document.getElementById('slipbar-host');
     const slip = TO.slip;
-    if (slip.legs.length && !ui.sheetOpen('slip')) {
+    let markup = '';
+    if (slip.parlayMode && slip.legs.length > 1 && !ui.sheetOpen('slip')) {
       const st = slip.status();
       const dec = slip.legs.reduce((p, l) => p * TO.odds.decimal(l.price), 1);
-      host.innerHTML = `<button class="slipbar" data-act="open-slip"><span class="n">${slip.legs.length}</span><span>${slip.legs.length > 1 ? 'Parlay' : 'Bet Slip'}</span>${st.changed || st.closed ? `<span class="o row-s" style="font-family:var(--font-body);font-size:13px;color:var(--warn)">${icon('alert', 15)} ${st.closed ? 'Pick unavailable' : 'Odds changed'}</span>` : `<span class="o">${TO.odds.fmt(TO.odds.fromDecimal(dec))}</span>`}</button>`;
-    } else host.innerHTML = '';
+      const detail = st.closed ? 'Pick unavailable' : st.changed ? 'Odds changed' : TO.odds.fmt(TO.odds.fromDecimal(dec));
+      markup = `<button class="slipbar parlay-finalize" data-act="open-slip" aria-label="Finalize ${slip.legs.length} pick parlay"><span class="n">${slip.legs.length}</span><span>Finalize Parlay</span><span class="o">${detail}</span></button>`;
+    } else if (slip.legs.length && !slip.parlayMode && !ui.sheetOpen('slip')) {
+      const st = slip.status();
+      const dec = slip.legs.reduce((p, l) => p * TO.odds.decimal(l.price), 1);
+      markup = `<button class="slipbar" data-act="open-slip"><span class="n">${slip.legs.length}</span><span>Bet Slip</span>${st.changed || st.closed ? `<span class="o row-s" style="font-family:var(--font-body);font-size:13px;color:var(--warn)">${icon('alert', 15)} ${st.closed ? 'Pick unavailable' : 'Odds changed'}</span>` : `<span class="o">${TO.odds.fmt(TO.odds.fromDecimal(dec))}</span>`}</button>`;
+    }
+    if (host.innerHTML !== markup) host.innerHTML = markup;
   };
 
   app.renderView = () => {
@@ -5510,7 +5972,21 @@ window.TO = window.TO || {};
 
   // ---------- Live loop ----------
   let lastFull = 0;
+  let lastSlipUiSig = '';
   function betTitle(b) { return TO.views.bets.betTitle(b); }
+
+  function refreshSlip() {
+    const slip = TO.slip;
+    if (!slip.legs.length) { lastSlipUiSig = ''; return; }
+    const sig = slip.legs.map((leg) => {
+      const cur = TO.sim.currentSelection(leg.selId);
+      return cur?.sel ? `${cur.sel.price}|${cur.sel.line}|${cur.open}` : 'x';
+    }).join(',');
+    if (sig !== lastSlipUiSig) {
+      lastSlipUiSig = sig;
+      slip.update();
+    }
+  }
 
   function notifySettled(list) {
     const n = TO.data.settings.notify;
@@ -5543,14 +6019,18 @@ window.TO = window.TO || {};
     lastFull = Date.now();
     if (!inShell()) { TO.tester.render(); return; }
 
+    TO.live.refresh();
+
     // Midnight reset, settlement (PRD: within 5 minutes of a game ending; here within seconds) and friend activity.
-    if (St.rollover(now)) {
+    const rolledOver = St.rollover(now);
+    if (rolledOver) {
       St.save();
       ui.toast({ kind: 'info', title: 'New day, new 60 minutes', msg: `Today's phone limit is ${St.wallet().todayLimit} min after yesterday's bets.` });
     }
     const settled = St.settle(now);
     notifySettled(settled);
-    for (const ev of St.socialTick(now)) {
+    const socialEvents = St.socialTick(now);
+    for (const ev of socialEvents) {
       if (ev.type === 'friend' && TO.data.settings.notify.friends) ui.toast({ kind: 'win', title: `@${ev.username} accepted your friend request` });
       if (ev.type === 'challenge' && TO.data.settings.notify.challenges) ui.toast({ kind: 'win', title: `@${ev.bet.friend.with.join(', ')} accepted your friend bet`, msg: `"${ev.bet.friend.terms}"` });
     }
@@ -5564,17 +6044,18 @@ window.TO = window.TO || {};
         slip.notifiedChange = sig;
         if (TO.data.settings.notify.odds && !ui.sheetOpen('slip')) ui.toast({ kind: 'warn', title: 'Odds changed on your bet slip', msg: 'Open the slip to review and accept the new odds.' });
       }
-      slip.update();
+      refreshSlip();
     }
 
-    if (!app.pressing && !isTyping()) {
+    const stateChanged = rolledOver || settled.length || socialEvents.length;
+    if (stateChanged && !app.pressing && !isTyping()) {
       app.renderChrome();
       app.renderView();
       if (ui.pageOpen('game')) TO.views.game.refresh();
       const sp = document.querySelector('[data-page="settings"] .page-top .t');
       if (sp && ['Screen time', 'Tier & streak'].includes(sp.textContent)) ui.refreshPage('settings');
     } else {
-      app.renderChrome();
+      app.refreshSlipbar();
     }
     TO.tester.render();
   };
@@ -5587,7 +6068,15 @@ window.TO = window.TO || {};
   // ---------- Core actions ----------
   const A = TO.actions;
   A.tab = (el) => { ui.closeAllSheets(); app.go(el.dataset.tab); };
-  A['close-sheet'] = (el) => ui.closeSheet(el.dataset.name);
+  A['close-sheet'] = (el) => {
+    if (el.dataset.name === 'slip') {
+      TO.slip.clear();
+      ui.closeSheet('slip');
+      app.render();
+      return;
+    }
+    ui.closeSheet(el.dataset.name);
+  };
   A['close-page'] = (el) => { ui.closePage(el.dataset.name); app.render(); };
 
   // ---------- Event wiring ----------
@@ -5599,6 +6088,16 @@ window.TO = window.TO || {};
     if (el.tagName === 'A' && el.dataset.act !== 'share-saved') e.preventDefault();
     // A click on a label wrapper shouldn't also fire the nested control's action twice.
     fn(el, e);
+  });
+  document.addEventListener('change', (e) => {
+    if (e.target.id === 'cfb-group') TO.live.setGroup(e.target.value);
+  });
+  TO.on('live:updated', () => {
+    if (!inShell()) return;
+    if (app.tab === 'home') TO.views.home.refreshLive();
+    if (ui.pageOpen('game')) TO.views.game.refresh();
+    refreshSlip();
+    app.refreshSlipbar();
   });
   document.addEventListener('input', (e) => { const fn = TO.inputs[e.target.id]; if (fn) fn(e.target); });
   document.addEventListener('change', (e) => { const k = e.target.dataset && e.target.dataset.change; if (k && TO.changes[k]) TO.changes[k](e.target); });

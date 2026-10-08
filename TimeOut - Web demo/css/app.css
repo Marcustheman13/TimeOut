@@ -320,6 +320,7 @@ button:disabled { cursor: not-allowed; }
   box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.14);
   font-family: var(--font-display);
 }
+.team-badge img { display: block; width: 100%; height: 100%; object-fit: contain; border-radius: inherit; }
 .avatar { flex: none; width: 36px; height: 36px; border-radius: 50%; object-fit: cover; background: var(--raised); }
 .avatar.lg { width: 64px; height: 64px; }
 .avatar.xl { width: 96px; height: 96px; }
@@ -445,6 +446,8 @@ label.list-row { cursor: pointer; }
 .mini-bet .t { font-weight: 800; font-size: 14px; }
 
 .filterbar { position: sticky; top: 0; z-index: 4; background: var(--bg); padding: 10px 0; }
+.cfb-select-label { display: block; margin: 9px 16px 4px; color: var(--muted); font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; }
+.cfb-select { display: block; width: calc(100% - 32px); height: 38px; margin: 0 16px; padding: 0 10px; color: var(--text); background: var(--surface); border: 1px solid var(--stroke); border-radius: 10px; font: inherit; font-weight: 700; }
 .league-head { display: flex; align-items: center; gap: 8px; padding: 6px 16px 0; }
 .league-head h3 { margin: 0; font-size: 18px; font-weight: 800; }
 .league-head .cnt { margin-left: auto; font-size: 12px; font-weight: 600; color: var(--muted); }
@@ -460,6 +463,20 @@ label.list-row { cursor: pointer; }
 .gc-team .rec { font-size: 11px; color: var(--muted); }
 .gc-team .sc { margin-left: auto; padding-right: 2px; flex: none; font-family: var(--font-display); font-weight: 900; font-size: 23px; font-variant-numeric: tabular-nums; }
 .gc-team .sc.trail { color: var(--text-2); }
+.gc-live-layout { display: grid; grid-template-columns: minmax(112px, .9fr) minmax(0, 1.2fr); gap: 9px; align-items: center; }
+.gc-live-teams { min-width: 0; }
+.gc-live-team { min-width: 0; height: 48px; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 5px; }
+.gc-live-team-open { min-width: 0; display: flex; align-items: center; gap: 7px; text-align: left; }
+.gc-live-logo { width: 27px; height: 27px; flex: none; display: grid; place-items: center; border-radius: 50%; background: var(--raised); color: var(--text); font-size: 9px; font-weight: 900; overflow: hidden; }
+.gc-live-logo img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.gc-live-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 700; }
+.gc-live-score { min-width: 23px; text-align: right; font-family: var(--font-display); font-weight: 900; font-size: 23px; font-variant-numeric: tabular-nums; }
+.gc-live-score.trail { color: var(--text-2); }
+.gc-live-bets { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; }
+.gc-live-bets .odds-btn.big { height: 48px; min-width: 0; border-radius: 8px; }
+.gc-live-bets .odds-btn.big .lbl { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; }
+.gc-live-bets .odds-btn .ln { font-size: 11px; }
+.gc-live-bets .odds-btn .pr { font-size: 12px; }
 .gc-more { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; font-size: 12px; font-weight: 700; color: var(--text-2); }
 .gc-more .yourbet { color: var(--accent); display: inline-flex; gap: 4px; align-items: center; }
 .bump { animation: bump 0.6s ease; }
@@ -718,6 +735,18 @@ label.list-row { cursor: pointer; }
 }
 .slipbar .n { width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; font-size: 13px; font-weight: 900; }
 .slipbar .o { margin-left: auto; font-family: var(--font-display); font-weight: 900; font-size: 19px; color: var(--accent); }
+.slipbar.parlay-finalize { background: var(--accent); border-color: transparent; color: var(--accent-ink); }
+.slipbar.parlay-finalize .n { background: rgba(3, 20, 10, 0.15); color: var(--accent-ink); }
+.slipbar.parlay-finalize .o { color: var(--accent-ink); }
+.build-parlay { width: calc(100% - 32px); min-height: 58px; margin: 0 16px; padding: 10px 14px; display: flex; align-items: center; gap: 12px; border: 1px solid rgba(34, 214, 110, 0.28); border-radius: 16px; background: linear-gradient(110deg, rgba(34, 214, 110, 0.13), rgba(34, 214, 110, 0.05)); color: var(--text); text-align: left; }
+.build-parlay > svg:first-child { color: var(--accent); flex: none; }
+.build-parlay > svg:last-child { color: var(--muted); margin-left: auto; flex: none; }
+.build-parlay span:not(.lr-icon) { display: grid; gap: 2px; }
+.build-parlay b { font-size: 14px; }
+.build-parlay small { color: var(--muted); font-size: 12px; }
+.build-parlay.active { background: var(--surface); border-color: var(--stroke); }
+.build-parlay.active .lr-icon { width: 34px; height: 34px; flex: none; }
+.build-parlay.active .link-btn { flex: none; }
 
 /* Bet slip */
 .slip-leg { display: flex; gap: 10px; align-items: flex-start; padding: 12px; border-radius: 14px; background: var(--surface); border: 1px solid var(--stroke); }

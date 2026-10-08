@@ -9,9 +9,11 @@
 
   const followed = () => TO.data.settings.sports;
   const offDay = () => TO.store.get('timeout.offDay', false);
+  const activeFilter = () => ['pred', 'todo', 'sim'].includes(TO.data.feedFilter) ? 'all' : (TO.data.feedFilter || 'all');
+  const sportsOnly = (bet) => bet.kind === 'sports' && bet.legs.every((leg) => leg.gameId && S.game(leg.gameId)?.league !== 'sim');
 
   function boardGames() {
-    return S.board(TO.now(), { offDay: offDay(), leagues: S.LEAGUE_ORDER.filter((l) => followed().includes(l)) });
+    return S.board(TO.now(), { offDay: offDay(), leagues: S.LEAGUE_ORDER.filter((l) => l !== 'sim' && followed().includes(l)) }).filter((g) => !g.simulated && g.league !== 'sim');
   }
 
   function myOpenBetOn(ref) {
@@ -89,7 +91,7 @@
   }
 
   function openBetsStrip() {
-    const open = TO.data.bets.filter((b) => b.status === 'open').sort((a, b) => b.placedAt - a.placedAt);
+    const open = TO.data.bets.filter((b) => b.status === 'open' && sportsOnly(b)).sort((a, b) => b.placedAt - a.placedAt);
     return `<div class="stack-s">
       <div class="section-title"><div class="row-s"><h2>Open bets</h2><span class="count-pill ${open.length ? '' : 'off'}">${open.length}</span></div>${open.length ? `<button class="link-btn" data-act="tab" data-tab="bets">See all</button>` : ''}</div>
       ${open.length
@@ -100,19 +102,18 @@
 
   // ---------- Filters ----------
   function filterBar(games) {
-    const f = TO.data.feedFilter || 'all';
+    const f = activeFilter();
     const live = games.filter((g) => g.state === 'live').length;
     const chip = (key, label, n, ic) => `<button class="chip ${f === key ? 'on' : ''}" data-act="filter" data-f="${key}">${ic ? icon(ic, 14) : ''}${esc(label)}${n ? `<span class="n">${n}</span>` : ''}</button>`;
     const chips = [chip('live', 'Live', live, 'radio'), chip('all', 'All', 0, 'grid')];
     for (const l of S.LEAGUE_ORDER) {
-      if (!followed().includes(l)) continue;
+      if (l === 'sim' || !followed().includes(l)) continue;
       const n = games.filter((g) => g.league === l && g.state !== 'final').length;
-      chips.push(chip(l, S.LEAGUES[l].short === 'SIM' ? 'Sim League' : S.LEAGUES[l].short, n));
+      chips.push(chip(l, l === 'ncaaf' ? 'College Football' : S.LEAGUES[l].short === 'SIM' ? 'Sim League' : S.LEAGUES[l].short, n));
     }
-    if (TO.data.settings.showPredictions) chips.push(chip('pred', 'Predictions', 0, 'globe'));
-    if (TO.data.settings.showTodos) chips.push(chip('todo', 'To-Do Parlays', 0, 'todo'));
     chips.push(`<button class="chip dashed" data-act="settings" data-section="sports">${icon('sliders', 14)}Edit</button>`);
-    return `<div class="filterbar"><div class="hscroll" data-hkey="filters">${chips.join('')}</div></div>`;
+    const cfb = f === 'ncaaf' || f === 'all' ? `<label class="cfb-select-label" for="cfb-group">College Football</label><select id="cfb-group" class="cfb-select" aria-label="College football conference">${TO.live.groups.map(([id, name]) => `<option value="${id}" ${TO.live.selectedGroup() === id ? 'selected' : ''}>${esc(name)}</option>`).join('')}</select>` : '';
+    return `<div class="filterbar"><div class="hscroll" data-hkey="filters">${chips.join('')}</div>${cfb}</div>`;
   }
 
   // ---------- Game card ----------
@@ -131,27 +132,56 @@
     const Sp = S.SPORTS[g.sport];
     let body;
     if (bettable) {
+      if (g.eventID) {
+        const sides = [
+          ['away', g.away, g.awayScore, g.homeScore],
+          ['home', g.home, g.homeScore, g.awayScore],
+        ];
+        const teamLine = (side, team, score, opponent) => `<div class="gc-live-team">
+          <button class="gc-live-team-open" data-act="open-game" data-id="${g.id}" aria-label="Open ${esc(team.name)} game stats">
+            <span class="gc-live-logo">${team.logo ? `<img src="${esc(team.logo)}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='grid'">` : ''}<span style="${team.logo ? 'display:none' : ''}">${esc(team.abbr)}</span></span>
+            <span class="gc-live-name">${esc(team.name)}</span>
+          </button>
+          <span class="gc-live-score ${g.state === 'live' && score < opponent ? 'trail' : ''} ${g.state === 'live' ? scoreCls(g, side) : ''}">${g.state === 'scheduled' ? '–' : score}</span>
+        </div>`;
+        const picks = [
+          [o.spread.find((sel) => sel.side === 'away'), `Away · ${g.away.abbr}`],
+          [o.spread.find((sel) => sel.side === 'home'), `Home · ${g.home.abbr}`],
+          [o.total.find((sel) => sel.side === 'over'), 'Over'],
+          [o.total.find((sel) => sel.side === 'under'), 'Under'],
+          [o.moneyline.find((sel) => sel.side === 'away'), `Away ML · ${g.away.abbr}`, true],
+          [o.moneyline.find((sel) => sel.side === 'home'), `Home ML · ${g.home.abbr}`, true],
+        ];
+        if (g.sport === 'soccer') picks.push([o.moneyline.find((sel) => sel.side === 'draw'), 'Draw', true]);
+        body = `<div class="gc-live-layout">
+          <div class="gc-live-teams">${sides.map(([side, team, score, opponent]) => teamLine(side, team, score, opponent)).join('')}</div>
+          <div class="gc-live-bets">${picks.map(([sel, label, isMoneyline]) => sel
+            ? ui.oddsBtn(sel, { suspended: o.suspended, move: o.move[sel.id], big: true, label })
+            : `<button class="odds-btn locked big" disabled aria-label="${esc(label)} unavailable"><span class="lbl">${esc(label)}</span><span class="pr">${isMoneyline ? 'N/A' : '—'}</span></button>`).join('')}</div>
+        </div>`;
+      } else {
       const cols = [];
-      if (o.spread.length) cols.push([Sp.spreadLabel, o.spread]);
-      cols.push(['Total', o.total]);
-      cols.push(['Money', o.moneyline.filter((s) => s.side !== 'draw')]);
+      if (o.spread.length === 2) cols.push([Sp.spreadLabel, o.spread]);
+      if (o.total.length === 2) cols.push(['Total', o.total]);
+      if (o.moneyline.length === 2) cols.push(['Money', o.moneyline]);
       const teamRow = (team, side, row) => {
         const score = side === 'home' ? g.homeScore : g.awayScore;
         const opp = side === 'home' ? g.awayScore : g.homeScore;
         return `<button class="gc-team" data-act="open-game" data-id="${g.id}">
             ${ui.teamBadge(team)}
-            <span style="min-width:0"><span class="nm" style="display:block">${esc(g.state === 'live' ? team.abbr : team.name)}</span>${g.state === 'scheduled' ? `<span class="rec">${S.record(g.league, team)}</span>` : ''}</span>
+            <span style="min-width:0"><span class="nm" style="display:block">${esc(g.state === 'live' ? team.abbr : team.name)}</span></span>
             ${g.state === 'live' ? `<span class="sc ${score < opp ? 'trail' : ''} ${scoreCls(g, side)}">${score}</span>` : ''}
           </button>
           ${cols.map(([, sels]) => ui.oddsBtn(sels[row], { suspended: o.suspended, move: o.move[sels[row].id], label: team.name })).join('')}`;
       };
       const draw = o.moneyline.find((s) => s.side === 'draw');
-      body = `<div class="gc-grid ${cols.length === 2 ? 'two' : ''}">
+        body = `<div class="gc-grid ${cols.length === 2 ? 'two' : ''}" style="grid-template-columns:minmax(0,1fr) repeat(${cols.length},60px)">
           <span></span>${cols.map(([h]) => `<span class="colh">${esc(h)}</span>`).join('')}
           ${teamRow(g.away, 'away', 0)}
           ${teamRow(g.home, 'home', 1)}
           ${draw ? `<span class="gc-team muted bold" style="height:40px">Draw</span>${cols.length === 2 ? '<span></span>' : '<span></span><span></span>'}${ui.oddsBtn(draw, { suspended: o.suspended, move: o.move[draw.id], label: 'Draw' })}` : ''}
-        </div>`;
+        </div>${cols.length ? '' : '<div class="tiny faint" style="margin:6px 2px 0">Betting lines are not available for this game yet.</div>'}`;
+      }
     } else {
       const row = (team, score, won) => `<button class="gc-team" style="width:100%" data-act="open-game" data-id="${g.id}">${ui.teamBadge(team)}<span class="nm" style="${won ? '' : 'color:var(--text-2)'}">${esc(team.name)}</span>${g.state === 'final' ? `<span class="sc ${won ? '' : 'trail'}">${score}</span>` : ''}</button>`;
       body = row(g.away, g.awayScore, g.awayScore > g.homeScore) + row(g.home, g.homeScore, g.homeScore > g.awayScore);
@@ -159,59 +189,39 @@
     }
     const status = `${ui.gameStatus(g)}${o.suspended && g.state === 'live' ? `<span class="tag">${icon('lock', 10)} Betting closed</span>` : ''}`;
     return `<div class="card game-card" data-game="${g.id}">
-      <div class="gc-status">${status}<span class="lg">${g.simulated ? 'SIMULATED' : esc(S.LEAGUES[g.league].short)}</span></div>
+      <div class="gc-status">${status}<span class="lg">${g.otherConferenceLive ? `LIVE · ${esc(g.conferenceName || 'UNRANKED')}` : g.simulated ? 'SIMULATED' : esc(S.LEAGUES[g.league].short)}</span></div>
       ${body}
       <div class="gc-more">${mine.length ? `<span class="yourbet">${icon('ticket', 14)} You have ${mine.length === 1 ? 'a bet' : `${mine.length} bets`} on this game</span>` : '<span></span>'}<button class="row-s link-btn" style="font-size:12.5px" data-act="open-game" data-id="${g.id}">Stats & all odds ${icon('chevR', 14)}</button></div>
     </div>`;
   }
 
-  function predCard(p) {
-    const mine = myOpenBetOn(p.id);
-    return `<div class="card pred-card">
-      <div class="spread tiny"><span class="tag blue">${esc(p.cat)}</span><span class="faint bold">${p.state === 'open' ? `Resolves in ${TO.fmtIn(p.resolves - TO.now())}` : p.state === 'closed' ? 'Betting closed · resolving soon' : `Resolved ${p.outcome.toUpperCase()}`}</span></div>
-      <div class="q">${esc(p.q)}</div>
-      <div class="yn">${ui.oddsBtn(p.yes, { suspended: p.suspended, move: p.move[p.yes.id], big: true, label: 'Yes' })}${ui.oddsBtn(p.no, { suspended: p.suspended, move: p.move[p.no.id], big: true, label: 'No' })}</div>
-      <div class="prob"><i style="width:${Math.round(p.pYes * 100)}%"></i></div>
-      <div class="spread tiny faint bold" style="margin-top:5px"><span>${Math.round(p.pYes * 100)}% chance of Yes</span>${mine.length ? `<span class="green">${icon('ticket', 12)} You have a bet</span>` : '<span>Demo market</span>'}</div>
-    </div>`;
-  }
-
-  function todoSection() {
-    const open = TO.data.bets.filter((b) => b.kind === 'todo' && b.status === 'open');
-    return `<button class="card promo" data-act="todo-builder"><span class="lr-icon">${icon('todo', 22)}</span><span class="grow"><b style="font-size:15.5px">Bet on yourself</b><div class="small muted">Build a to-do parlay: stake minutes on finishing up to 3 tasks before midnight.</div></span>${icon('chevR', 18)}</button>
-      ${open.length ? `<div class="section-title" style="margin-top:4px"><h2>Your to-do parlays</h2></div>${open.map((b) => TO.views.bets.betCard(b)).join('')}` : ''}`;
-  }
-
   function emptyBoard(f) {
-    const simOn = followed().includes('sim');
-    const title = f === 'live' ? 'No live games right now' : offDay() ? 'No real games today' : 'No games in this category right now';
+    const title = f === 'live' ? 'No live games right now' : 'Sorry, no games are happening for this sport today.';
     return `<div class="empty">
       ${icon('target', 40)}
       <h3>${title}</h3>
-      <p>The Sim League plays around the clock, with a new game tipping off every few minutes. Bet on simulated games until the next real ones start.</p>
-      <button class="btn primary" data-act="go-sim">${simOn ? 'Show Sim League games' : 'Bet on Sim League games'}</button>
+      ${f === 'live' ? '<p>Check back when a game is underway.</p>' : ''}
     </div>`;
   }
 
+  function buildParlayControl() {
+    const slip = TO.slip;
+    if (!slip.parlayMode) return `<button class="build-parlay" data-act="toggle-parlay">${icon('ticket', 18)}<span><b>Build parlay</b><small>Select picks from multiple games</small></span>${icon('chevR', 18)}</button>`;
+    return `<div class="build-parlay active"><span class="lr-icon">${icon('ticket', 18)}</span><span class="grow"><b>Choose your parlay picks</b><small>${slip.legs.length} of ${TO.RULES.maxLegs} picks · choose one bet per game</small></span><button class="link-btn" data-act="toggle-parlay">Cancel</button></div>`;
+  }
+
   function feed(games) {
-    const f = TO.data.feedFilter || 'all';
-    if (f === 'pred') {
-      return `<div class="pad small muted" style="margin-top:-4px">Yes-or-no markets on things outside sports. Same rules: stake minutes, win or lose tomorrow's phone time.</div>${S.predictions().map(predCard).join('')}`;
-    }
-    if (f === 'todo') return todoSection();
+    const f = activeFilter();
     let list = games;
     if (f === 'live') list = games.filter((g) => g.state === 'live');
     else if (f !== 'all') list = games.filter((g) => g.league === f);
-    const sportsLeft = list.filter((g) => g.state !== 'final');
-    if (!sportsLeft.length && f !== 'sim') return emptyBoard(f) + list.map(gameCard).join('');
+    if (!list.length && f !== 'pred' && f !== 'todo') return emptyBoard(f);
     if (f === 'all') {
-      const groups = S.LEAGUE_ORDER.filter((l) => list.some((g) => g.league === l)).map((l) => {
+      const groups = S.LEAGUE_ORDER.filter((l) => l !== 'sim' && list.some((g) => g.league === l)).map((l) => {
         const lg = list.filter((g) => g.league === l);
         return `<div class="league-head"><h3>${esc(S.LEAGUES[l].title)}</h3>${S.LEAGUES[l].simulated ? '<span class="tag">Simulated</span>' : ''}<span class="cnt">${lg.filter((g) => g.state === 'live').length} live · ${lg.length} games</span></div>${lg.map(gameCard).join('')}`;
       });
-      const preds = TO.data.settings.showPredictions ? `<div class="league-head"><h3>Predictions</h3><button class="cnt link-btn" data-act="filter" data-f="pred">See all</button></div>${S.predictions().slice(0, 1).map(predCard).join('')}` : '';
-      const todo = TO.data.settings.showTodos ? todoSection() : '';
-      return groups.join('') + preds + todo;
+      return groups.join('');
     }
     return list.map(gameCard).join('');
   }
@@ -229,12 +239,43 @@
       ${openBetsStrip()}
       <div class="stack" style="gap:12px">
         ${filterBar(games)}
+        ${buildParlayControl()}
         ${feed(games)}
       </div>
     </div>`;
   }
 
-  TO.views.home = { render, gameCard, predCard };
+  function syncNode(current, fresh) {
+    if (!current || !fresh || current.nodeType !== fresh.nodeType
+      || (current.nodeType === 1 && current.tagName !== fresh.tagName)) {
+      current?.parentNode?.replaceChild(fresh.cloneNode(true), current);
+      return;
+    }
+    if (current.nodeType === 3) {
+      if (current.nodeValue !== fresh.nodeValue) current.nodeValue = fresh.nodeValue;
+      return;
+    }
+    const currentAttrs = [...current.attributes];
+    for (const attr of currentAttrs) if (!fresh.hasAttribute(attr.name)) current.removeAttribute(attr.name);
+    for (const attr of [...fresh.attributes]) if (current.getAttribute(attr.name) !== attr.value) current.setAttribute(attr.name, attr.value);
+    const next = [...fresh.childNodes];
+    for (let i = 0; i < next.length; i++) {
+      const old = current.childNodes[i];
+      if (!old) current.appendChild(next[i].cloneNode(true));
+      else syncNode(old, next[i]);
+    }
+    while (current.childNodes.length > next.length) current.lastChild.remove();
+  }
+
+  function refreshLive() {
+    const view = document.getElementById('view');
+    if (!view || TO.app.tab !== 'home' || !view.firstElementChild) return;
+    const next = document.createElement('div');
+    next.innerHTML = render();
+    if (next.firstElementChild) syncNode(view.firstElementChild, next.firstElementChild);
+  }
+
+  TO.views.home = { render, gameCard, refreshLive };
 
   // ---------- Actions ----------
   const A = TO.actions;

@@ -14,7 +14,7 @@
 
   // ---------- Components ----------
   ui.teamBadge = (team, size) =>
-    `<span class="team-badge" style="background:${team.color}${size ? `;width:${size}px;height:${size}px;font-size:${Math.round(size * 0.3)}px` : ''}">${esc(team.abbr)}</span>`;
+    `<span class="team-badge" style="background:${team.color || 'var(--raised)'}${size ? `;width:${size}px;height:${size}px;font-size:${Math.round(size * 0.3)}px` : ''}">${team.logo ? `<img src="${esc(team.logo)}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='grid'">` : ''}<span style="${team.logo ? 'display:none' : ''}">${esc(team.abbr)}</span></span>`;
 
   ui.tierBadge = (tierId, sm) => {
     const t = TO.state.tierById(tierId);
@@ -40,6 +40,7 @@
       return `<span>${TO.fmtDay(g.start)} · ${TO.fmtTime(g.start)}</span>${mins <= 60 ? `<span class="faint">· starts in ${mins < 1 ? '<1' : mins} min</span>` : ''}`;
     }
     if (g.state === 'final') return `<span>${esc(g.statusText)}</span>`;
+    if (g.state === 'canceled') return `<span class="yellow row-s">${icon('alert', 13)} Canceled · all bets voided, stakes returned</span>`;
     return `<span class="yellow row-s">${icon('alert', 13)} Postponed · all bets voided, stakes returned</span>`;
   };
 

@@ -255,24 +255,6 @@
     return g;
   }
 
-  /** Scoring plays so far, newest first. */
-  function plays(g) {
-    if (g.state !== 'live' && g.state !== 'final') return [];
-    const tl = timeline(g);
-    const steps = g.state === 'final' ? STEPS : g.stepsPlayed;
-    let h = 0, a = 0;
-    const list = [];
-    for (const ev of tl.events) {
-      if (ev.step >= steps) break;
-      if (ev.side === 'home') h += ev.pts; else a += ev.pts;
-      list.push({ team: ev.side === 'home' ? g.home : g.away, kind: ev.kind, clock: clockText(g.sport, ev.step / STEPS), score: `${g.away.abbr} ${a} – ${g.home.abbr} ${h}` });
-    }
-    if (g.state === 'final' && tl.extra) {
-      list.push({ team: tl.extra.side === 'home' ? g.home : g.away, kind: tl.extra.kind, clock: tl.extra.label === '10' ? 'Top 10th' : 'OT', score: `${g.away.abbr} ${g.awayScore} – ${g.home.abbr} ${g.homeScore}` });
-    }
-    return list.reverse();
-  }
-
   /** Live team stats for the game page and open-bet cards. */
   function stats(g) {
     if (g.state !== 'live' && g.state !== 'final') return [];
@@ -616,7 +598,7 @@
 
   TO.sim = {
     SLOT, DURATION, STEP, SPORTS, LEAGUES, REAL_LEAGUES, LEAGUE_ORDER, PREDICTIONS,
-    game, board, odds, plays, stats, research, record, form, strength,
+    game, board, odds, stats, research, record, form, strength,
     prediction, predictions, currentSelection, selectionLabel, marketLabel, grade, gradeScore, liveStanding, oppositeSelection, teamOf,
     overrides, setOverride,
   };

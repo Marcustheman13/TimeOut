@@ -128,12 +128,7 @@
     const s = TO.data.settings;
     const row = (id, title, sub, checked, change) => listRow('grid', title, sub, ui.switchEl(`sp-${id}`, checked, `data-change="${change}" data-id="${id}"`), `for="sp-${id}"`).replace(`<span class="lr-icon">${icon('grid', 17)}</span>`, `<span class="sport-opt"><span class="sq">${esc(id === 'pred' ? 'PRED' : id === 'todo' ? 'TODO' : S.LEAGUES[id] ? S.LEAGUES[id].short : '')}</span></span>`);
     return `<div class="small muted">Choose what shows up on your Home feed. You can change this any time.</div>
-      <div class="list">${S.LEAGUE_ORDER.map((l) => row(l, esc(S.LEAGUES[l].title), l === 'sim' ? 'Simulated games that run all day, for days without sports' : `${S.LEAGUES[l].sport[0].toUpperCase()}${S.LEAGUES[l].sport.slice(1)}`, s.sports.includes(l), 'set-sport')).join('')}</div>
-      <div class="eyebrow">More ways to bet</div>
-      <div class="list">
-        ${row('pred', 'Prediction markets', 'Yes-or-no questions about movies, weather and more', s.showPredictions, 'set-pred')}
-        ${row('todo', 'To-do parlays', 'Bet minutes on finishing your own tasks', s.showTodos, 'set-todo')}
-      </div>`;
+      <div class="list">${S.LEAGUE_ORDER.filter((l) => l !== 'sim').map((l) => row(l, esc(S.LEAGUES[l].title), `${S.LEAGUES[l].sport[0].toUpperCase()}${S.LEAGUES[l].sport.slice(1)}`, s.sports.includes(l), 'set-sport')).join('')}</div>`;
   }
 
   function notifications() {
@@ -353,13 +348,11 @@
   C['set-sport'] = (el) => {
     const id = el.dataset.id;
     const cur = TO.data.settings.sports;
-    St.setSetting('sports', el.checked ? S.LEAGUE_ORDER.filter((l) => cur.includes(l) || l === id) : cur.filter((l) => l !== id));
+    St.setSetting('sports', el.checked ? S.LEAGUE_ORDER.filter((l) => l !== 'sim' && (cur.includes(l) || l === id)) : cur.filter((l) => l !== id && l !== 'sim'));
     if (!el.checked && TO.data.feedFilter === id) TO.data.feedFilter = 'all';
     TO.tester.mark('sports');
     TO.app.render();
   };
-  C['set-pred'] = (el) => { St.setSetting('showPredictions', el.checked); if (!el.checked && TO.data.feedFilter === 'pred') TO.data.feedFilter = 'all'; TO.app.render(); };
-  C['set-todo'] = (el) => { St.setSetting('showTodos', el.checked); if (!el.checked && TO.data.feedFilter === 'todo') TO.data.feedFilter = 'all'; TO.app.render(); };
   C['set-notify'] = (el) => St.setSetting(`notify.${el.dataset.k}`, el.checked);
   C['set-privacy'] = (el) => St.setSetting(`privacy.${el.dataset.k}`, el.checked);
   C['acct-photo'] = async (el) => {

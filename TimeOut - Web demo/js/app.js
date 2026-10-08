@@ -39,6 +39,7 @@
     body.innerHTML = shellHtml();
     app.tab = 'home';
     app.render();
+    TO.live.refresh();
     TO.tester.render();
   };
 
@@ -53,18 +54,30 @@
       <button class="icon-btn" data-act="menu" aria-label="Menu and settings">${icon('menu', 22)}${wl.appsLocked ? '<span class="dotbadge"></span>' : ''}</button>
       <div class="brand">${icon('hourglass', 20, 'brand-mark')}<span class="brand-word">Time<b>Out</b></span></div>
       <button class="bal-pill ${locked ? 'locked' : ''}" data-act="settings" data-section="screentime" aria-label="${locked ? 'Betting locked until midnight' : `${wl.balance} minutes available to bet`}">${icon(locked ? 'lock' : 'hourglass', 15)}${locked ? 'Locked' : `${wl.balance} min`}</button>`;
-    const open = TO.data.bets.filter((b) => b.status === 'open').length;
+    const open = TO.data.bets.filter((b) => b.status === 'open' && b.kind === 'sports' && b.legs.every((leg) => leg.kind === 'sports')).length;
     document.getElementById('tabbar').innerHTML = TABS.map(([k, label, ic]) => {
       const badge = k === 'bets' && open ? `<span class="badge green">${open}</span>` : k === 'social' && socialBadge ? `<span class="badge">${socialBadge}</span>` : '';
       return `<button class="tab ${app.tab === k ? 'on' : ''}" data-act="tab" data-tab="${k}" aria-current="${app.tab === k ? 'page' : 'false'}">${icon(ic, 23)}<span>${label}</span>${badge}</button>`;
     }).join('');
+    app.refreshSlipbar();
+  };
+
+  app.refreshSlipbar = () => {
+    if (!inShell()) return;
     const host = document.getElementById('slipbar-host');
     const slip = TO.slip;
-    if (slip.legs.length && !ui.sheetOpen('slip')) {
+    let markup = '';
+    if (slip.parlayMode && slip.legs.length > 1 && !ui.sheetOpen('slip')) {
       const st = slip.status();
       const dec = slip.legs.reduce((p, l) => p * TO.odds.decimal(l.price), 1);
-      host.innerHTML = `<button class="slipbar" data-act="open-slip"><span class="n">${slip.legs.length}</span><span>${slip.legs.length > 1 ? 'Parlay' : 'Bet Slip'}</span>${st.changed || st.closed ? `<span class="o row-s" style="font-family:var(--font-body);font-size:13px;color:var(--warn)">${icon('alert', 15)} ${st.closed ? 'Pick unavailable' : 'Odds changed'}</span>` : `<span class="o">${TO.odds.fmt(TO.odds.fromDecimal(dec))}</span>`}</button>`;
-    } else host.innerHTML = '';
+      const detail = st.closed ? 'Pick unavailable' : st.changed ? 'Odds changed' : TO.odds.fmt(TO.odds.fromDecimal(dec));
+      markup = `<button class="slipbar parlay-finalize" data-act="open-slip" aria-label="Finalize ${slip.legs.length} pick parlay"><span class="n">${slip.legs.length}</span><span>Finalize Parlay</span><span class="o">${detail}</span></button>`;
+    } else if (slip.legs.length && !slip.parlayMode && !ui.sheetOpen('slip')) {
+      const st = slip.status();
+      const dec = slip.legs.reduce((p, l) => p * TO.odds.decimal(l.price), 1);
+      markup = `<button class="slipbar" data-act="open-slip"><span class="n">${slip.legs.length}</span><span>Bet Slip</span>${st.changed || st.closed ? `<span class="o row-s" style="font-family:var(--font-body);font-size:13px;color:var(--warn)">${icon('alert', 15)} ${st.closed ? 'Pick unavailable' : 'Odds changed'}</span>` : `<span class="o">${TO.odds.fmt(TO.odds.fromDecimal(dec))}</span>`}</button>`;
+    }
+    if (host.innerHTML !== markup) host.innerHTML = markup;
   };
 
   app.renderView = () => {
@@ -95,7 +108,21 @@
 
   // ---------- Live loop ----------
   let lastFull = 0;
+  let lastSlipUiSig = '';
   function betTitle(b) { return TO.views.bets.betTitle(b); }
+
+  function refreshSlip() {
+    const slip = TO.slip;
+    if (!slip.legs.length) { lastSlipUiSig = ''; return; }
+    const sig = slip.legs.map((leg) => {
+      const cur = TO.sim.currentSelection(leg.selId);
+      return cur?.sel ? `${cur.sel.price}|${cur.sel.line}|${cur.open}` : 'x';
+    }).join(',');
+    if (sig !== lastSlipUiSig) {
+      lastSlipUiSig = sig;
+      slip.update();
+    }
+  }
 
   function notifySettled(list) {
     const n = TO.data.settings.notify;
@@ -128,14 +155,18 @@
     lastFull = Date.now();
     if (!inShell()) { TO.tester.render(); return; }
 
+    TO.live.refresh();
+
     // Midnight reset, settlement (PRD: within 5 minutes of a game ending; here within seconds) and friend activity.
-    if (St.rollover(now)) {
+    const rolledOver = St.rollover(now);
+    if (rolledOver) {
       St.save();
       ui.toast({ kind: 'info', title: 'New day, new 60 minutes', msg: `Today's phone limit is ${St.wallet().todayLimit} min after yesterday's bets.` });
     }
     const settled = St.settle(now);
     notifySettled(settled);
-    for (const ev of St.socialTick(now)) {
+    const socialEvents = St.socialTick(now);
+    for (const ev of socialEvents) {
       if (ev.type === 'friend' && TO.data.settings.notify.friends) ui.toast({ kind: 'win', title: `@${ev.username} accepted your friend request` });
       if (ev.type === 'challenge' && TO.data.settings.notify.challenges) ui.toast({ kind: 'win', title: `@${ev.bet.friend.with.join(', ')} accepted your friend bet`, msg: `"${ev.bet.friend.terms}"` });
     }
@@ -149,17 +180,18 @@
         slip.notifiedChange = sig;
         if (TO.data.settings.notify.odds && !ui.sheetOpen('slip')) ui.toast({ kind: 'warn', title: 'Odds changed on your bet slip', msg: 'Open the slip to review and accept the new odds.' });
       }
-      slip.update();
+      refreshSlip();
     }
 
-    if (!app.pressing && !isTyping()) {
+    const stateChanged = rolledOver || settled.length || socialEvents.length;
+    if (stateChanged && !app.pressing && !isTyping()) {
       app.renderChrome();
       app.renderView();
       if (ui.pageOpen('game')) TO.views.game.refresh();
       const sp = document.querySelector('[data-page="settings"] .page-top .t');
       if (sp && ['Screen time', 'Tier & streak'].includes(sp.textContent)) ui.refreshPage('settings');
     } else {
-      app.renderChrome();
+      app.refreshSlipbar();
     }
     TO.tester.render();
   };
@@ -172,7 +204,15 @@
   // ---------- Core actions ----------
   const A = TO.actions;
   A.tab = (el) => { ui.closeAllSheets(); app.go(el.dataset.tab); };
-  A['close-sheet'] = (el) => ui.closeSheet(el.dataset.name);
+  A['close-sheet'] = (el) => {
+    if (el.dataset.name === 'slip') {
+      TO.slip.clear();
+      ui.closeSheet('slip');
+      app.render();
+      return;
+    }
+    ui.closeSheet(el.dataset.name);
+  };
   A['close-page'] = (el) => { ui.closePage(el.dataset.name); app.render(); };
 
   // ---------- Event wiring ----------
@@ -184,6 +224,16 @@
     if (el.tagName === 'A' && el.dataset.act !== 'share-saved') e.preventDefault();
     // A click on a label wrapper shouldn't also fire the nested control's action twice.
     fn(el, e);
+  });
+  document.addEventListener('change', (e) => {
+    if (e.target.id === 'cfb-group') TO.live.setGroup(e.target.value);
+  });
+  TO.on('live:updated', () => {
+    if (!inShell()) return;
+    if (app.tab === 'home') TO.views.home.refreshLive();
+    if (ui.pageOpen('game')) TO.views.game.refresh();
+    refreshSlip();
+    app.refreshSlipbar();
   });
   document.addEventListener('input', (e) => { const fn = TO.inputs[e.target.id]; if (fn) fn(e.target); });
   document.addEventListener('change', (e) => { const k = e.target.dataset && e.target.dataset.change; if (k && TO.changes[k]) TO.changes[k](e.target); });

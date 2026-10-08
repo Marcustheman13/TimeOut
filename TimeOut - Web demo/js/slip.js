@@ -7,6 +7,7 @@
 
   const slip = (TO.slip = {
     legs: [],
+    parlayMode: false,
     mode: 'minutes',
     stake: null,
     friends: [],
@@ -17,13 +18,13 @@
     notifiedChange: '',
     has(id) { return this.legs.some((l) => l.selId === id); },
     clear() {
-      Object.assign(this, { legs: [], mode: 'minutes', stake: null, friends: [], terms: '', boost: false, insure: false, error: null, notifiedChange: '' });
+      Object.assign(this, { legs: [], parlayMode: false, mode: 'minutes', stake: null, friends: [], terms: '', boost: false, insure: false, error: null, notifiedChange: '' });
     },
   });
 
   const refOf = (sel) => sel.gameId || sel.predId;
 
-  /** Tap on an odds button: add (or remove) the pick. The first pick opens the slip right away. */
+  /** Tap an odds button: single-pick mode replaces the current pick; parlay mode adds legs. */
   slip.toggle = (selId) => {
     if (slip.has(selId)) {
       slip.legs = slip.legs.filter((l) => l.selId !== selId);
@@ -35,6 +36,14 @@
     const sel = cur.sel;
     const sameGame = slip.legs.findIndex((l) => l.ref === refOf(sel));
     const leg = { selId: sel.id, price: sel.price, line: sel.line, ref: refOf(sel) };
+    if (!slip.parlayMode) {
+      const wasEmpty = slip.legs.length === 0;
+      slip.legs = [leg];
+      slip.error = null;
+      if (ui.sheetOpen('slip') || wasEmpty) open();
+      afterChange();
+      return;
+    }
     if (sameGame >= 0) {
       slip.legs[sameGame] = leg;
       ui.toast({ kind: 'info', title: 'Pick swapped', msg: 'A parlay can only have one pick per game.', ms: 2600 });
@@ -46,9 +55,19 @@
       slip.legs.push(leg);
     }
     slip.error = null;
-    const wasEmpty = slip.legs.length === 1 && sameGame < 0;
-    if (wasEmpty || ui.sheetOpen('slip')) open();
+    if (ui.sheetOpen('slip')) open();
     afterChange();
+  };
+
+  TO.actions['toggle-parlay'] = () => {
+    const entering = !slip.parlayMode;
+    slip.parlayMode = entering;
+    slip.legs = [];
+    slip.error = null;
+    if (ui.sheetOpen('slip')) {
+      ui.closeSheet('slip');
+    }
+    TO.app.render();
   };
 
   function afterChange() {
@@ -143,7 +162,7 @@
 
   function footHtml() {
     const st = slip.status();
-    const more = slip.legs.length < TO.RULES.maxLegs && !st.closed ? `<button class="btn quiet sm" data-act="slip-more">${icon('plus', 16)} Add another pick for a parlay</button>` : '';
+    const more = slip.parlayMode && slip.legs.length < TO.RULES.maxLegs && !st.closed ? `<button class="btn quiet sm" data-act="slip-more">${icon('plus', 16)} Add another pick</button>` : '';
     if (st.closed) return `<button class="btn primary full" disabled>Remove unavailable picks to continue</button>`;
     if (st.changed) return `<button class="btn warn full" data-act="slip-accept">Accept new odds</button>`;
     if (slip.mode === 'friend') {

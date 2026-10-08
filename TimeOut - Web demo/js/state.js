@@ -9,7 +9,7 @@
 
   const RULES = {
     daily: 60,
-    maxLegs: 3,
+    maxLegs: 10,
     friendLimit: 100,
     overrideMinutes: 15,
     overridePenalty: 30,
