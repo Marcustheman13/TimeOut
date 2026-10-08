@@ -160,11 +160,9 @@
   function serverAccountCard(s) {
     const line = (k, v, id) => `<div class="spread"><span class="muted">${k}</span><b${id ? ` id="${id}"` : ''}>${esc(String(v))}</b></div>`;
     return `<div class="card stack-s" id="db-account">
-      <div class="row-s">${icon('check', 16)}<b>Saved in the TimeOut database</b></div>
+      <div class="row-s">${icon('check', 16)}<b>Connected to Supabase</b></div>
       ${line('User ID', s.id)}
       ${line('Member since', TO.fmtDate(Date.parse(s.createdAt)))}
-      ${line('Last login', fmtStamp(s.lastLoginAt), 'db-last-login')}
-      ${line('Total logins', s.loginCount, 'db-login-count')}
     </div>`;
   }
 
@@ -173,7 +171,17 @@
     if (TO.api.online && a.server) {
       return `<div class="photo-pick"><span class="ph"><img src="${esc(a.photo)}" alt="Profile photo"></span><div><b>@${esc(a.username)}</b><div class="small muted">${esc(a.email)}</div></div></div>
         ${serverAccountCard(a.server)}
-        <div class="card stack-s"><b>Not connected to the database yet</b><div class="small muted">Changing your photo, username, email or password, and deleting your account, still need API routes. Add them in server/src/auth.js.</div></div>
+        <div class="card stack">
+          <h2 style="margin:0;font-size:17px">Profile</h2>
+          ${ui.field({ id: 'acct-username', label: 'Username', value: a.username, err: acctErr.username, attrs: 'autocapitalize="off" spellcheck="false"' })}
+          ${ui.field({ id: 'acct-email', label: 'Email', type: 'email', value: a.email, err: acctErr.email })}
+          <button class="btn primary" data-act="acct-save">Save changes</button>
+        </div>
+        <div class="card stack">
+          <h2 style="margin:0;font-size:17px">Change password</h2>
+          ${ui.field({ id: 'acct-new', label: 'New password', type: 'password', err: acctErr.newPassword, hint: 'At least 8 characters' })}
+          <button class="btn ghost" data-act="acct-pw">Update password</button>
+        </div>
         <div class="stack-s"><button class="btn ghost" data-act="logout">${icon('logout', 18)} Log out</button></div>`;
     }
     return `<div class="photo-pick"><label class="ph" for="acct-photo" style="cursor:pointer"><img src="${esc(a.photo)}" alt="Profile photo"><span class="cam">${icon('camera', 15)}</span></label><div><b>Profile photo</b><div class="small muted">Tap the photo to change it.</div></div><input type="file" id="acct-photo" accept="image/*" class="sr" data-change="acct-photo"></div>
@@ -305,10 +313,12 @@
     St.logout();
     TO.app.boot();
   };
-  A['acct-save'] = () => {
+  A['acct-save'] = async () => {
     acctErr = {};
     try {
-      St.updateAccount({ username: document.getElementById('acct-username').value, email: document.getElementById('acct-email').value });
+      const patch = { username: document.getElementById('acct-username').value, email: document.getElementById('acct-email').value };
+      if (TO.account.server) await TO.api.updateProfile(patch);
+      St.updateAccount(patch);
       ui.toast({ kind: 'win', title: 'Account saved' });
     } catch (e) {
       if (!(e instanceof TO.AppError)) throw e;
@@ -316,10 +326,14 @@
     }
     refresh();
   };
-  A['acct-pw'] = () => {
+  A['acct-pw'] = async () => {
     acctErr = {};
     try {
-      St.updateAccount({ currentPassword: document.getElementById('acct-cur').value, newPassword: document.getElementById('acct-new').value });
+      const newPassword = document.getElementById('acct-new').value;
+      const invalid = St.validatePassword(newPassword);
+      if (invalid) throw new TO.AppError('invalid', invalid, { fields: { newPassword: invalid } });
+      if (TO.account.server) await TO.api.updateProfile({ password: newPassword });
+      else St.updateAccount({ currentPassword: document.getElementById('acct-cur').value, newPassword });
       ui.toast({ kind: 'win', title: 'Password updated' });
     } catch (e) {
       if (!(e instanceof TO.AppError)) throw e;
@@ -358,6 +372,7 @@
   C['acct-photo'] = async (el) => {
     try {
       const url = await ui.readPhoto(el.files[0]);
+      if (TO.account.server) await TO.api.updateProfile({ photoUrl: url });
       St.updateAccount({ photo: url });
       ui.toast({ kind: 'win', title: 'Photo updated' });
       refresh();

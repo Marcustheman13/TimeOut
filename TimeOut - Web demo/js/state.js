@@ -136,7 +136,7 @@
 
   /** Server mode: copies the database user into this browser so the features still saved here keep working.
    *  acc.server always holds the latest values from the database (last login, login count...). */
-  function adoptServerUser(user) {
+  function adoptServerUser(user, remoteState = null) {
     const id = `srv_${user.id}`;
     const all = accounts();
     const acc = all[id] || { id, salt: null, pw: null };
@@ -145,7 +145,28 @@
       photo: user.photoUrl || acc.photo || TO.initialsAvatar(user.isDemo ? 'Demo User' : user.username, user.isDemo ? '#1AA560' : undefined),
     });
     all[id] = acc; saveAccounts(all);
-    if (!TO.store.get(dataKey(id), null)) TO.store.set(dataKey(id), user.isDemo ? seedDemoData(TO.now()) : freshData(TO.now()));
+    if (remoteState) {
+      const cached = TO.store.get(dataKey(id), null);
+      if (cached) {
+        const remoteBets = remoteState.bets || [];
+        const mergedBets = new Map(remoteBets.map((bet) => [bet.supabaseId ? `db:${bet.supabaseId}` : `id:${bet.id}`, bet]));
+        for (const bet of cached.bets || []) {
+          const key = bet.supabaseId ? `db:${bet.supabaseId}` : `id:${bet.id}`;
+          const saved = mergedBets.get(key);
+          mergedBets.set(key, saved ? Object.assign({}, saved, bet) : bet);
+        }
+        const hasUnsyncedBets = (cached.bets || []).some((bet) => bet.kind === 'sports' && !bet.supabaseId);
+        const remoteHasPreferences = remoteState.appPreferencesReady && Object.keys(remoteState.settings || {}).length > 1;
+        const preferences = remoteHasPreferences
+          ? Object.assign({}, cached.settings || {}, remoteState.settings || {})
+          : Object.assign({}, remoteState.settings || {}, cached.settings || {});
+        remoteState = Object.assign({}, cached, remoteState, { bets: [...mergedBets.values()], settings: preferences });
+        if (hasUnsyncedBets || !remoteState.wallet) remoteState.wallet = cached.wallet;
+      }
+      delete remoteState.appPreferencesReady;
+      TO.store.set(dataKey(id), remoteState);
+    }
+    else if (!TO.store.get(dataKey(id), null)) TO.store.set(dataKey(id), user.isDemo ? seedDemoData(TO.now()) : freshData(TO.now()));
     startSession(id);
     return acc;
   }
@@ -265,7 +286,10 @@
   }
 
   function save() {
-    if (TO.account && TO.data) TO.store.set(dataKey(TO.account.id), TO.data);
+    if (TO.account && TO.data) {
+      TO.store.set(dataKey(TO.account.id), TO.data);
+      if (TO.account.server && TO.api && TO.api.queueStateSave) TO.api.queueStateSave(TO.data);
+    }
   }
 
   // ---------- Wallet ----------

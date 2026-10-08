@@ -38,6 +38,7 @@
       return `<div class="livebox"><div class="small muted">${esc(p.q)}</div><div class="spread small"><span class="bold">${chance}% chance your side hits</span><span class="faint bold">${p.state === 'resolved' ? `Resolved ${p.outcome.toUpperCase()}` : `Resolves in ${TO.fmtIn(p.resolves - TO.now())}`}</span></div></div>`;
     }
     const g = S.game(leg.gameId);
+    if (!g) return `<div class="livebox"><div class="small bold">${esc(leg.matchup || 'Sports game')}</div><div class="small muted">Loading the latest score…</div></div>`;
     let head;
     if (g.state === 'live' || g.state === 'final') {
       head = `<div class="lb-score">${ui.teamBadge(g.away, 22)}<span>${esc(g.away.abbr)}</span><span class="sc">${g.awayScore}</span><span class="faint">–</span><span class="sc">${g.homeScore}</span><span>${esc(g.home.abbr)}</span>${ui.teamBadge(g.home, 22)}<span style="margin-left:auto" class="small ${g.state === 'live' ? '' : 'muted'}">${g.state === 'live' ? `<span class="live">LIVE</span> ${esc(g.clock)}` : esc(g.statusText)}</span></div>`;
@@ -127,6 +128,8 @@
   }
 
   const betCard = (bet, opts) => (bet.status === 'open' ? openCard(bet, opts) : historyCard(bet, opts));
+  const gameLeg = (leg) => leg.kind === 'game' || (leg.kind === 'sports' && !!leg.gameId);
+  const isLiveBet = (bet) => bet.legs.some((leg) => leg.result === 'pending' && gameLeg(leg) && S.game(leg.gameId)?.state === 'live');
 
   function recordCard() {
     const st = TO.state.myStats();
@@ -146,8 +149,10 @@
   }
 
   function render() {
-    const bets = TO.data.bets.filter((b) => b.kind === 'sports' && b.legs.every((leg) => leg.kind === 'sports'));
+    const bets = TO.data.bets.filter((b) => b.kind === 'sports' && b.legs.length && b.legs.every(gameLeg));
     const open = bets.filter((b) => b.status === 'open').sort((a, b) => b.placedAt - a.placedAt);
+    const liveNow = open.filter(isLiveBet);
+    const otherOpen = open.filter((b) => !isLiveBet(b));
     let settled = bets.filter((b) => b.status !== 'open').sort((a, b) => b.settledAt - a.settledAt);
     const counts = { all: settled.length, won: 0, lost: 0, void: 0 };
     settled.forEach((b) => { if (b.status === 'won') counts.won++; else if (b.status === 'lost') counts.lost++; else counts.void++; });
@@ -156,7 +161,7 @@
     let list;
     if (view.tab === 'open') {
       list = open.length
-        ? open.map((b) => openCard(b)).join('')
+        ? `${liveNow.length ? `<div class="eyebrow row-s" style="padding:2px 16px;margin-top:4px"><span class="live"></span>Live now <span class="count-pill">${liveNow.length}</span></div>${liveNow.map((b) => openCard(b)).join('')}` : ''}${otherOpen.length ? `<div class="eyebrow" style="padding:2px 16px;margin-top:4px">Upcoming</div>${otherOpen.map((b) => openCard(b)).join('')}` : ''}`
         : `<div class="empty">${icon('ticket', 40)}<h3>No open bets</h3><p>Go to Home and tap any odds to start a bet. It takes two taps: pick a price, then tap Place bet.</p><button class="btn primary" data-act="tab" data-tab="home">Find a game</button></div>`;
     } else {
       const chip = (k, t) => `<button class="chip sm ${view.filter === k ? 'on' : ''}" data-act="bets-filter" data-f="${k}">${t}<span class="n">${counts[k]}</span></button>`;

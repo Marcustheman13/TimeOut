@@ -18,7 +18,9 @@
   const cache = new Map();
   const oddsCache = new Map();
   let updatedAt = 0;
+  let updatedDayKey = '';
   let loading = false;
+  let loadingDayKey = '';
   let refreshQueued = false;
   let loadError = false;
   let cfbGroup = 'all';
@@ -27,6 +29,32 @@
     const d = new Date(now);
     const start = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
     return [start, new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1).getTime()];
+  }
+
+  function localDayKey(now) {
+    const d = new Date(now);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+
+  function espnDayKey(now) {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit',
+    }).formatToParts(new Date(now));
+    const part = (type) => parts.find((item) => item.type === type)?.value;
+    return `${part('year')}${part('month')}${part('day')}`;
+  }
+
+  function shiftDayKey(key, days) {
+    const year = Number(key.slice(0, 4)), month = Number(key.slice(4, 6)), day = Number(key.slice(6, 8));
+    const d = new Date(Date.UTC(year, month - 1, day + days));
+    return `${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, '0')}${String(d.getUTCDate()).padStart(2, '0')}`;
+  }
+
+  // ESPN indexes schedules by Eastern calendar day; local days can overlap two or three of them.
+  function scoreboardDays(now) {
+    const [start, end] = todayBounds(now);
+    const first = espnDayKey(start), last = espnDayKey(end - 1);
+    return [...new Set([shiftDayKey(first, -1), first, last])];
   }
 
   function gameFrom(event, league, sport) {
@@ -203,18 +231,21 @@
   }
 
   function selectedGroup() { return cfbGroup; }
-  async function fetchLeague(league, group = '80') {
+  async function fetchLeague(league, group = '80', now = TO.now()) {
     const [path] = LEAGUES[league];
-    const params = new URLSearchParams();
-    if (league === 'ncaaf') {
-      if (group !== 'all') params.set('groups', group);
-      params.set('limit', '100');
-    }
-    const url = `${ESPN}/${path}/scoreboard${params.size ? `?${params}` : ''}`;
-    const response = await fetch(url, { cache: 'no-store' });
-    if (!response.ok) throw new Error(`ESPN returned ${response.status}`);
-    const payload = await response.json();
-    return (payload.events || []).map((event) => gameFrom(event, league, LEAGUES[league][1])).filter(Boolean);
+    const responses = await Promise.all(scoreboardDays(now).map(async (date) => {
+      const params = new URLSearchParams({ dates: date });
+      if (league === 'ncaaf') {
+        if (group !== 'all') params.set('groups', group);
+        params.set('limit', '100');
+      }
+      const response = await fetch(`${ESPN}/${path}/scoreboard?${params}`, { cache: 'no-store' });
+      if (!response.ok) throw new Error(`ESPN returned ${response.status}`);
+      return response.json();
+    }));
+    const events = new Map();
+    responses.forEach((payload) => (payload.events || []).forEach((event) => events.set(event.id, event)));
+    return [...events.values()].map((event) => gameFrom(event, league, LEAGUES[league][1])).filter(Boolean);
   }
 
   async function resolveOddsItem(item) {
@@ -314,30 +345,51 @@
   }
 
   async function refresh(now = TO.now()) {
-    if (loading) { refreshQueued = true; return; }
-    if (now - updatedAt < 25000) return;
+    const requestedDay = localDayKey(now);
+    if (loading) {
+      if (requestedDay !== loadingDayKey) refreshQueued = true;
+      return;
+    }
+    if (requestedDay === updatedDayKey && now - updatedAt < 25000) return;
     loading = true;
+    loadingDayKey = requestedDay;
     loadError = false;
     const leagues = TO.data?.settings?.sports?.filter((key) => LEAGUES[key]) || Object.keys(LEAGUES);
-    const results = await Promise.allSettled(leagues.map((league) => fetchLeague(league, cfbGroup)));
-    const [dayStart, dayEnd] = todayBounds(now);
+    const results = await Promise.allSettled(leagues.map((league) => fetchLeague(league, cfbGroup, now)));
+    const completedAt = TO.now();
+    if (localDayKey(completedAt) !== requestedDay) {
+      loading = false;
+      loadingDayKey = '';
+      updatedAt = 0;
+      updatedDayKey = '';
+      refreshQueued = false;
+      return refresh(completedAt);
+    }
+    const [dayStart, dayEnd] = todayBounds(completedAt);
     let failed = false;
     results.forEach((result, index) => {
       if (result.status !== 'fulfilled') { failed = true; return; }
       const league = leagues[index];
-      const todays = result.value.filter((game) => game.start >= dayStart && game.start < dayEnd);
-      const games = league === 'ncaaf' && cfbGroup === '80'
-        ? todays.filter((game) => game.home.rank || game.away.rank)
-        : todays;
+      const relevantGames = result.value.filter((game) => (game.start >= dayStart && game.start < dayEnd)
+        || game.state === 'live' || (game.state === 'final' && game.start >= dayStart - TO.DAY));
+      const fetched = league === 'ncaaf' && cfbGroup === '80'
+        ? relevantGames.filter((game) => game.home.rank || game.away.rank)
+        : relevantGames;
+      const keepRecentFinals = (cache.get(league) || []).filter((game) => game.state === 'final' && game.start >= dayStart - TO.DAY);
+      const gamesById = new Map(keepRecentFinals.map((game) => [game.id, game]));
+      fetched.forEach((game) => gamesById.set(game.id, game));
+      const games = [...gamesById.values()];
       games.forEach((game) => { game.odds = makeOdds(game, now); });
       cache.set(league, games);
     });
     loadError = failed && !results.some((r) => r.status === 'fulfilled');
-    updatedAt = now;
+    updatedAt = completedAt;
+    updatedDayKey = requestedDay;
     loading = false;
+    loadingDayKey = '';
     TO.emit('live:updated');
     const todaysGames = [...cache.values()].flat();
-    loadOdds(todaysGames, now);
+    loadOdds(todaysGames, completedAt);
     if (refreshQueued) {
       refreshQueued = false;
       updatedAt = 0;
@@ -357,14 +409,14 @@
   const simGame = S.game, simBoard = S.board, simOdds = S.odds, simCurrent = S.currentSelection, simGrade = S.grade;
   S.game = (id, now) => byId(id) || simGame(id, now);
   S.board = (now = TO.now(), options = {}) => {
-    if (now - updatedAt > 25000) refresh(now);
+    if (localDayKey(now) !== updatedDayKey || now - updatedAt > 25000) refresh(now);
     const leagues = options.leagues || S.LEAGUE_ORDER;
+    const [start, end] = todayBounds(now);
     return leagues.flatMap((league) => {
       const games = [...(cache.get(league) || [])];
       return games;
     }).filter((game) => {
-      const [start, end] = todayBounds(now);
-      return game.start >= start && game.start < end;
+      return (game.start >= start && game.start < end) || game.state === 'live';
     }).sort((a, b) => (a.state === 'live' ? 0 : 1) - (b.state === 'live' ? 0 : 1) || a.start - b.start);
   };
   S.odds = (id, now) => byId(id)?.odds || simOdds(id, now);
@@ -386,7 +438,9 @@
   TO.live = {
     refresh, loadDetails, stats: realStats, selectedGroup, setGroup(group) {
       cfbGroup = CFB_GROUPS.some(([id]) => id === group) ? group : 'all';
-      cache.delete('ncaaf'); updatedAt = 0; refresh();
+      cache.delete('ncaaf'); updatedAt = 0; updatedDayKey = '';
+      if (loading) refreshQueued = true;
+      else refresh();
     },
     groups: CFB_GROUPS, get loading() { return loading; }, get failed() { return loadError; },
   };

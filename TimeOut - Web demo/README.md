@@ -6,8 +6,8 @@ For the backend, database and team setup, see the [main README](../README.md).
 
 ## Open it
 
-- **With the database (normal):** in `../server`, run `npm install` then `npm start`, and open <http://localhost:3000>. Accounts and login go through the API and are saved in PostgreSQL.
-- **Offline demo:** double-click `index.html` (or `dist/TimeOut.html`, the same app in one file you can email or AirDrop). With no server, accounts are saved only in that browser.
+- **With Supabase (normal):** serve the app over HTTP. Accounts use Supabase Auth; preferences, bets, and wallet transactions use the Supabase tables and RPCs.
+- **Offline demo:** use the app with Supabase config removed. Accounts and state are then saved only in that browser.
 - On a laptop it shows as a phone with a **tester console** beside it. On a real phone it fills the screen, and the tester console moves to **Menu (☰) > Tester tools**.
 
 ## Logging in
@@ -15,8 +15,8 @@ For the backend, database and team setup, see the [main README](../README.md).
 - **Try the demo account** on the welcome screen logs straight in. It comes with bet history, open bets, friends, a team, a pending friend request and a bet challenge.
 - Demo login: username `demo` (or `demo@timeout.app`), password `timeout123`.
 - **Create account** asks for a username, email, password and an optional photo. You can then log in with either the username or the email.
-- With the server running, accounts live in the database and every login updates `last_login_at` and `login_count` (see Menu > Account). Seeded test accounts `mike_t`, `jess.plays` and `lily_k` also use `timeout123`.
-- Bets, wallet, friends and settings are still saved in the browser you're using (localStorage), per account.
+- Supabase accounts use email and password. When email confirmation is enabled, confirm the signup email before logging in.
+- Supabase stores screen-time bets, bet legs, and wallet ledger entries. The browser also keeps a local cache so the sports feed and app remain responsive.
 - In offline mode, accounts are saved only in that browser. Two accounts made in the same browser can friend each other and send each other challenges.
 
 ## What's in it
@@ -54,3 +54,14 @@ everything worth testing from the spec, which ticks itself off as you go.
 - All games are simulated with real team names. Each game is sped up to 12 minutes so testers can watch bets settle.
 - Odds are fair (no house cut), computed from the score and time left, the same model as the iOS prototype.
 - `python3 build.py` rebuilds `dist/TimeOut.html` after you edit anything in `css/` or `js/`.
+# Supabase accounts and saved bets
+
+The web demo uses Supabase Auth for email/password accounts, saves user preferences in `public.user_settings`, and stores sports bet tickets and legs in `public.bets` and `public.bet_legs`. Wallet balance changes go through Supabase RPC functions and the `wallets` / `wallet_transactions` tables.
+
+1. The main schema and bet RPCs have been applied. Run [`../server/db/supabase-settings-migration.sql`](../server/db/supabase-settings-migration.sql) in **SQL Editor** to add the JSON settings field used for locked apps and other app preferences.
+2. Confirm **Email provider** is enabled under **Authentication → Providers**. Email confirmation is enabled, so new users must confirm their email before logging in.
+3. Serve this app over HTTP (`cd server && npm start`, then open `http://localhost:3000`). Supabase sign-in does not work from the serverless `file://` mode.
+
+The frontend's publishable key is in `js/supabase-config.js`; publishable keys are intended to be public. The main schema enables row-level security, and the RPCs verify the signed-in owner before changing bets or wallet balances. Never put a Supabase secret/service-role key in this project or in browser code. The legacy local demo remains available only when Supabase is not configured.
+
+Bet placement currently validates odds in the app and persists the resulting slip in the user's state. This is a screen-time betting demo; it does not move money or settle regulated wagers.

@@ -1918,7 +1918,7 @@ window.TO = window.TO || {};
 
   /** Server mode: copies the database user into this browser so the features still saved here keep working.
    *  acc.server always holds the latest values from the database (last login, login count...). */
-  function adoptServerUser(user) {
+  function adoptServerUser(user, remoteState = null) {
     const id = `srv_${user.id}`;
     const all = accounts();
     const acc = all[id] || { id, salt: null, pw: null };
@@ -1927,7 +1927,28 @@ window.TO = window.TO || {};
       photo: user.photoUrl || acc.photo || TO.initialsAvatar(user.isDemo ? 'Demo User' : user.username, user.isDemo ? '#1AA560' : undefined),
     });
     all[id] = acc; saveAccounts(all);
-    if (!TO.store.get(dataKey(id), null)) TO.store.set(dataKey(id), user.isDemo ? seedDemoData(TO.now()) : freshData(TO.now()));
+    if (remoteState) {
+      const cached = TO.store.get(dataKey(id), null);
+      if (cached) {
+        const remoteBets = remoteState.bets || [];
+        const mergedBets = new Map(remoteBets.map((bet) => [bet.supabaseId ? `db:${bet.supabaseId}` : `id:${bet.id}`, bet]));
+        for (const bet of cached.bets || []) {
+          const key = bet.supabaseId ? `db:${bet.supabaseId}` : `id:${bet.id}`;
+          const saved = mergedBets.get(key);
+          mergedBets.set(key, saved ? Object.assign({}, saved, bet) : bet);
+        }
+        const hasUnsyncedBets = (cached.bets || []).some((bet) => bet.kind === 'sports' && !bet.supabaseId);
+        const remoteHasPreferences = remoteState.appPreferencesReady && Object.keys(remoteState.settings || {}).length > 1;
+        const preferences = remoteHasPreferences
+          ? Object.assign({}, cached.settings || {}, remoteState.settings || {})
+          : Object.assign({}, remoteState.settings || {}, cached.settings || {});
+        remoteState = Object.assign({}, cached, remoteState, { bets: [...mergedBets.values()], settings: preferences });
+        if (hasUnsyncedBets || !remoteState.wallet) remoteState.wallet = cached.wallet;
+      }
+      delete remoteState.appPreferencesReady;
+      TO.store.set(dataKey(id), remoteState);
+    }
+    else if (!TO.store.get(dataKey(id), null)) TO.store.set(dataKey(id), user.isDemo ? seedDemoData(TO.now()) : freshData(TO.now()));
     startSession(id);
     return acc;
   }
@@ -2047,7 +2068,10 @@ window.TO = window.TO || {};
   }
 
   function save() {
-    if (TO.account && TO.data) TO.store.set(dataKey(TO.account.id), TO.data);
+    if (TO.account && TO.data) {
+      TO.store.set(dataKey(TO.account.id), TO.data);
+      if (TO.account.server && TO.api && TO.api.queueStateSave) TO.api.queueStateSave(TO.data);
+    }
   }
 
   // ---------- Wallet ----------
@@ -2855,7 +2879,9 @@ window.TO = window.TO || {};
   const cache = new Map();
   const oddsCache = new Map();
   let updatedAt = 0;
+  let updatedDayKey = '';
   let loading = false;
+  let loadingDayKey = '';
   let refreshQueued = false;
   let loadError = false;
   let cfbGroup = 'all';
@@ -2864,6 +2890,32 @@ window.TO = window.TO || {};
     const d = new Date(now);
     const start = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
     return [start, new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1).getTime()];
+  }
+
+  function localDayKey(now) {
+    const d = new Date(now);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+
+  function espnDayKey(now) {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit',
+    }).formatToParts(new Date(now));
+    const part = (type) => parts.find((item) => item.type === type)?.value;
+    return `${part('year')}${part('month')}${part('day')}`;
+  }
+
+  function shiftDayKey(key, days) {
+    const year = Number(key.slice(0, 4)), month = Number(key.slice(4, 6)), day = Number(key.slice(6, 8));
+    const d = new Date(Date.UTC(year, month - 1, day + days));
+    return `${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, '0')}${String(d.getUTCDate()).padStart(2, '0')}`;
+  }
+
+  // ESPN indexes schedules by Eastern calendar day; local days can overlap two or three of them.
+  function scoreboardDays(now) {
+    const [start, end] = todayBounds(now);
+    const first = espnDayKey(start), last = espnDayKey(end - 1);
+    return [...new Set([shiftDayKey(first, -1), first, last])];
   }
 
   function gameFrom(event, league, sport) {
@@ -3040,18 +3092,21 @@ window.TO = window.TO || {};
   }
 
   function selectedGroup() { return cfbGroup; }
-  async function fetchLeague(league, group = '80') {
+  async function fetchLeague(league, group = '80', now = TO.now()) {
     const [path] = LEAGUES[league];
-    const params = new URLSearchParams();
-    if (league === 'ncaaf') {
-      if (group !== 'all') params.set('groups', group);
-      params.set('limit', '100');
-    }
-    const url = `${ESPN}/${path}/scoreboard${params.size ? `?${params}` : ''}`;
-    const response = await fetch(url, { cache: 'no-store' });
-    if (!response.ok) throw new Error(`ESPN returned ${response.status}`);
-    const payload = await response.json();
-    return (payload.events || []).map((event) => gameFrom(event, league, LEAGUES[league][1])).filter(Boolean);
+    const responses = await Promise.all(scoreboardDays(now).map(async (date) => {
+      const params = new URLSearchParams({ dates: date });
+      if (league === 'ncaaf') {
+        if (group !== 'all') params.set('groups', group);
+        params.set('limit', '100');
+      }
+      const response = await fetch(`${ESPN}/${path}/scoreboard?${params}`, { cache: 'no-store' });
+      if (!response.ok) throw new Error(`ESPN returned ${response.status}`);
+      return response.json();
+    }));
+    const events = new Map();
+    responses.forEach((payload) => (payload.events || []).forEach((event) => events.set(event.id, event)));
+    return [...events.values()].map((event) => gameFrom(event, league, LEAGUES[league][1])).filter(Boolean);
   }
 
   async function resolveOddsItem(item) {
@@ -3151,30 +3206,51 @@ window.TO = window.TO || {};
   }
 
   async function refresh(now = TO.now()) {
-    if (loading) { refreshQueued = true; return; }
-    if (now - updatedAt < 25000) return;
+    const requestedDay = localDayKey(now);
+    if (loading) {
+      if (requestedDay !== loadingDayKey) refreshQueued = true;
+      return;
+    }
+    if (requestedDay === updatedDayKey && now - updatedAt < 25000) return;
     loading = true;
+    loadingDayKey = requestedDay;
     loadError = false;
     const leagues = TO.data?.settings?.sports?.filter((key) => LEAGUES[key]) || Object.keys(LEAGUES);
-    const results = await Promise.allSettled(leagues.map((league) => fetchLeague(league, cfbGroup)));
-    const [dayStart, dayEnd] = todayBounds(now);
+    const results = await Promise.allSettled(leagues.map((league) => fetchLeague(league, cfbGroup, now)));
+    const completedAt = TO.now();
+    if (localDayKey(completedAt) !== requestedDay) {
+      loading = false;
+      loadingDayKey = '';
+      updatedAt = 0;
+      updatedDayKey = '';
+      refreshQueued = false;
+      return refresh(completedAt);
+    }
+    const [dayStart, dayEnd] = todayBounds(completedAt);
     let failed = false;
     results.forEach((result, index) => {
       if (result.status !== 'fulfilled') { failed = true; return; }
       const league = leagues[index];
-      const todays = result.value.filter((game) => game.start >= dayStart && game.start < dayEnd);
-      const games = league === 'ncaaf' && cfbGroup === '80'
-        ? todays.filter((game) => game.home.rank || game.away.rank)
-        : todays;
+      const relevantGames = result.value.filter((game) => (game.start >= dayStart && game.start < dayEnd)
+        || game.state === 'live' || (game.state === 'final' && game.start >= dayStart - TO.DAY));
+      const fetched = league === 'ncaaf' && cfbGroup === '80'
+        ? relevantGames.filter((game) => game.home.rank || game.away.rank)
+        : relevantGames;
+      const keepRecentFinals = (cache.get(league) || []).filter((game) => game.state === 'final' && game.start >= dayStart - TO.DAY);
+      const gamesById = new Map(keepRecentFinals.map((game) => [game.id, game]));
+      fetched.forEach((game) => gamesById.set(game.id, game));
+      const games = [...gamesById.values()];
       games.forEach((game) => { game.odds = makeOdds(game, now); });
       cache.set(league, games);
     });
     loadError = failed && !results.some((r) => r.status === 'fulfilled');
-    updatedAt = now;
+    updatedAt = completedAt;
+    updatedDayKey = requestedDay;
     loading = false;
+    loadingDayKey = '';
     TO.emit('live:updated');
     const todaysGames = [...cache.values()].flat();
-    loadOdds(todaysGames, now);
+    loadOdds(todaysGames, completedAt);
     if (refreshQueued) {
       refreshQueued = false;
       updatedAt = 0;
@@ -3194,14 +3270,14 @@ window.TO = window.TO || {};
   const simGame = S.game, simBoard = S.board, simOdds = S.odds, simCurrent = S.currentSelection, simGrade = S.grade;
   S.game = (id, now) => byId(id) || simGame(id, now);
   S.board = (now = TO.now(), options = {}) => {
-    if (now - updatedAt > 25000) refresh(now);
+    if (localDayKey(now) !== updatedDayKey || now - updatedAt > 25000) refresh(now);
     const leagues = options.leagues || S.LEAGUE_ORDER;
+    const [start, end] = todayBounds(now);
     return leagues.flatMap((league) => {
       const games = [...(cache.get(league) || [])];
       return games;
     }).filter((game) => {
-      const [start, end] = todayBounds(now);
-      return game.start >= start && game.start < end;
+      return (game.start >= start && game.start < end) || game.state === 'live';
     }).sort((a, b) => (a.state === 'live' ? 0 : 1) - (b.state === 'live' ? 0 : 1) || a.start - b.start);
   };
   S.odds = (id, now) => byId(id)?.odds || simOdds(id, now);
@@ -3223,7 +3299,9 @@ window.TO = window.TO || {};
   TO.live = {
     refresh, loadDetails, stats: realStats, selectedGroup, setGroup(group) {
       cfbGroup = CFB_GROUPS.some(([id]) => id === group) ? group : 'all';
-      cache.delete('ncaaf'); updatedAt = 0; refresh();
+      cache.delete('ncaaf'); updatedAt = 0; updatedDayKey = '';
+      if (loading) refreshQueued = true;
+      else refresh();
     },
     groups: CFB_GROUPS, get loading() { return loading; }, get failed() { return loadError; },
   };
@@ -3231,75 +3309,229 @@ window.TO = window.TO || {};
 
 </script>
 <script>
-/* TimeOut web demo — client for the TimeOut API in ../server.
- *
- * When the page is served by the server (npm start -> http://localhost:3000), accounts and login go through
- * the API and live in PostgreSQL. When the page is opened as a file (double-clicking index.html or
- * dist/TimeOut.html) there is no server, so the demo falls back to accounts saved in this browser.
- *
- * Everything else (bets, wallet, friends) is still saved in this browser for now. Move features over by
- * adding a route in server/src and a function here.
- */
+/* Public Supabase project settings. Publishable keys are safe in a browser when RLS is enabled. */
+window.TIMEOUT_SUPABASE = {
+  url: 'https://obegznrsxlbpmtbmqkll.supabase.co',
+  publishableKey: 'sb_publishable_Ye3rhYIle7db-4O9DL_IHw_xz88b-sB',
+};
+
+</script>
+<script>
+/* TimeOut Supabase client. The publishable key is designed for browser use; protect tables with RLS. */
 (function (TO) {
   'use strict';
-  const TOKEN_KEY = 'timeout.token';
-  const api = (TO.api = { online: false, database: null });
+  const TOKEN_KEY = 'timeout.supabase.session';
+  const api = (TO.api = { online: false, database: 'supabase', configured: false });
+  let saveTimer = null;
+  let pendingState = null;
+  let lastSaveAt = 0;
+  let lastSettingsSnapshot = '';
+  let supportsAppPreferences = true;
+  let lastSyncAlertAt = 0;
+  const placing = new Set();
+  const settling = new Set();
 
-  async function request(method, path, body) {
-    const headers = { 'content-type': 'application/json' };
-    const token = TO.store.get(TOKEN_KEY, null);
-    if (token) headers.authorization = `Bearer ${token}`;
-    let res;
-    try {
-      res = await fetch(`/api${path}`, { method, headers, body: body ? JSON.stringify(body) : undefined });
-    } catch (e) {
-      throw new TO.AppError('offline', 'Can\'t reach the TimeOut server. Make sure `npm start` is running.');
-    }
-    if (res.status === 204) return null;
+  const config = window.TIMEOUT_SUPABASE || {};
+  api.configured = !!(config.url && config.publishableKey);
+  api.online = api.configured;
+
+  const token = () => TO.store.get(TOKEN_KEY, null)?.access_token || null;
+  const tokenUserId = () => {
+    const t = token();
+    if (!t) return null;
+    try { return JSON.parse(decodeURIComponent(escape(atob(t.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))))).sub; }
+    catch (e) { return null; }
+  };
+  const authHeaders = (withAuth = true) => ({ apikey: config.publishableKey, authorization: `Bearer ${withAuth ? token() || config.publishableKey : config.publishableKey}`, 'content-type': 'application/json' });
+  async function ensureFreshSession() {
+    const session = TO.store.get(TOKEN_KEY, null);
+    if (!session?.refresh_token) return;
+    const expiresAt = session.expires_at || (session.expires_in ? Math.floor(Date.now() / 1000) + session.expires_in : 0);
+    if (expiresAt > Math.floor(Date.now() / 1000) + 60) return;
+    const fresh = await authRequest('token?grant_type=refresh_token', { refresh_token: session.refresh_token });
+    saveSession(fresh);
+  }
+  async function parseResponse(res) {
     const json = await res.json().catch(() => ({}));
     if (!res.ok) {
-      const err = json.error || {};
-      throw new TO.AppError(err.code || 'server_error', err.message || `Server error (${res.status}).`, { fields: err.fields, status: res.status });
+      const message = json.msg || json.message || json.error_description || json.error || `Supabase request failed (${res.status}).`;
+      const fields = {};
+      if (/username/i.test(message)) fields.username = message;
+      else if (/email/i.test(message)) fields.email = message;
+      else if (/password/i.test(message)) fields.password = message;
+      throw new TO.AppError(res.status === 409 ? 'taken' : 'supabase_error', message, { status: res.status, fields });
     }
     return json;
   }
+  async function authRequest(path, body, withAuth = false) {
+    const res = await fetch(`${config.url}/auth/v1/${path}`, { method: 'POST', headers: authHeaders(withAuth), body: JSON.stringify(body) });
+    return parseResponse(res);
+  }
+  async function rest(path, options = {}) {
+    await ensureFreshSession();
+    const res = await fetch(`${config.url}/rest/v1/${path}`, { ...options, headers: { ...authHeaders(true), ...(options.headers || {}) } });
+    return parseResponse(res);
+  }
+  function saveSession(session) {
+    if (session?.access_token) TO.store.set(TOKEN_KEY, { ...session, expires_at: session.expires_at || Math.floor(Date.now() / 1000) + Number(session.expires_in || 3600) });
+  }
 
-  /** Checks for the server once at startup. */
-  api.init = async () => {
-    if (!/^https?:$/.test(location.protocol)) return false;
-    try {
-      const h = await request('GET', '/health');
-      api.online = !!h.ok;
-      api.database = h.database;
-    } catch (e) {
-      api.online = false;
-    }
-    return api.online;
-  };
-
-  api.hasToken = () => !!TO.store.get(TOKEN_KEY, null);
+  api.init = async () => api.configured;
+  api.hasToken = () => !!token();
   api.clearToken = () => TO.store.del(TOKEN_KEY);
-
-  /** -> { user, previousLoginAt }. The server updates last_login_at and login_count before answering. */
-  api.login = async (identifier, password) => {
-    const r = await request('POST', '/auth/login', { identifier, password });
-    TO.store.set(TOKEN_KEY, r.token);
-    return r;
+  api.login = async (email, password) => {
+    const session = await authRequest('token?grant_type=password', { email: String(email || '').trim(), password });
+    saveSession(session);
+    lastSettingsSnapshot = '';
+    supportsAppPreferences = true;
+    const user = await api.me();
+    return { user, previousLoginAt: null };
   };
-
-  /** -> { user } */
   api.register = async ({ username, email, password, photoUrl }) => {
-    const r = await request('POST', '/auth/register', { username, email, password, photoUrl });
-    TO.store.set(TOKEN_KEY, r.token);
-    return r;
+    if (!/^[a-zA-Z0-9_.]{3,20}$/.test(username)) throw new TO.AppError('invalid', 'Use 3–20 letters, numbers, dots or underscores.', { fields: { username: 'Use 3–20 letters, numbers, dots or underscores.' } });
+    const result = await authRequest('signup', { email: String(email || '').trim(), password, data: { username, display_name: username, avatar_url: photoUrl || null } });
+    if (!result.session?.access_token) throw new TO.AppError('email_confirmation', 'Supabase did not return a login session. To allow immediate access, turn off email confirmation in your Supabase Auth settings.');
+    saveSession(result.session);
+    lastSettingsSnapshot = '';
+    supportsAppPreferences = true;
+    const user = await api.me();
+    const state = await api.loadState();
+    return { user, state };
   };
-
-  /** The logged-in user, read fresh from the database. */
-  api.me = async () => (await request('GET', '/auth/me')).user;
-
+  api.me = async () => {
+    await ensureFreshSession();
+    const res = await fetch(`${config.url}/auth/v1/user`, { headers: authHeaders(true) });
+    const user = await parseResponse(res);
+    const profileRows = await rest(`profiles?select=username,display_name,avatar_url,created_at&id=eq.${encodeURIComponent(user.id)}&limit=1`);
+    const profile = profileRows[0] || {};
+    return { id: user.id, username: profile.username || user.user_metadata?.username || user.email?.split('@')[0] || 'player', email: user.email,
+      photoUrl: profile.avatar_url || user.user_metadata?.avatar_url || null, createdAt: profile.created_at || user.created_at, isDemo: false };
+  };
+  api.loadState = async () => {
+    const id = tokenUserId();
+    if (!id) return null;
+    const safeId = encodeURIComponent(id);
+    const [betRows, walletRows] = await Promise.all([
+      rest(`bets?select=*,bet_legs(*)&user_id=eq.${safeId}&order=placed_at.desc`),
+      rest(`wallets?select=balance_minutes,current_day,is_locked,streak&user_id=eq.${safeId}&limit=1`),
+    ]);
+    let settingsRows;
+    try {
+      settingsRows = await rest(`user_settings?select=followed_sports,timezone,notifications_enabled,app_preferences&user_id=eq.${safeId}&limit=1`);
+      supportsAppPreferences = true;
+    } catch (e) {
+      if (!/app_preferences.*does not exist|column .*app_preferences/i.test(e.message || '')) throw e;
+      supportsAppPreferences = false;
+      settingsRows = await rest(`user_settings?select=followed_sports,timezone,notifications_enabled&user_id=eq.${safeId}&limit=1`);
+    }
+    const status = { pending: 'open', won: 'won', lost: 'lost', pushed: 'push', voided: 'void', cancelled: 'void' };
+    const result = { pending: 'pending', win: 'won', loss: 'lost', push: 'push', void: 'void' };
+    const bets = betRows.map((row) => {
+      const legs = (row.bet_legs || []).map((leg) => ({
+        selId: `${leg.espn_event_id}|${leg.market}|${leg.side}`, kind: 'game', gameId: leg.espn_event_id, league: leg.league, market: leg.market, side: leg.side,
+        line: leg.line == null ? null : Number(leg.line), price: Number(leg.accepted_odds), label: `${leg.market} · ${leg.side}${leg.line == null ? '' : ` ${leg.line}`}`,
+        marketLabel: leg.market, matchup: leg.matchup, result: result[leg.result] || 'pending', final: null,
+      }));
+      const decimal = Number(row.combined_odds);
+      return { id: `supabase-${row.id}`, supabaseId: row.id, kind: 'sports', placedAt: Date.parse(row.placed_at), dayKey: row.placed_at.slice(0, 10),
+        stake: Number(row.stake_minutes), legs, decimal, american: TO.odds.fromDecimal(decimal), friend: null, boosted: false, insured: false,
+        multiplier: 1, status: status[row.status] || 'open', payout: Number(row.actual_payout_minutes || 0), potentialPayout: Number(row.potential_payout_minutes || 0),
+        settledAt: row.settled_at ? Date.parse(row.settled_at) : null, supabaseSynced: row.status !== 'pending' };
+    });
+    const wallet = walletRows[0];
+    const settings = settingsRows[0];
+    return {
+      bets,
+      ...(wallet ? { wallet: { balance: Number(wallet.balance_minutes), dayKey: wallet.current_day, lockedOut: !!wallet.is_locked, streakDays: Number(wallet.streak || 0) } } : {}),
+      ...(settings ? { settings: { ...(settings.app_preferences || {}), sports: settings.followed_sports || [] }, appPreferencesReady: supportsAppPreferences } : {}),
+    };
+  };
+  api.queueStateSave = (data) => {
+    if (!api.configured || !token()) return;
+    pendingState = JSON.parse(JSON.stringify(data));
+    if (!saveTimer) saveTimer = setTimeout(() => {
+      saveTimer = null;
+      api.flushState().catch((e) => {
+        console.warn('Could not sync TimeOut data to Supabase:', e.message);
+        if (Date.now() - lastSyncAlertAt > 15000 && TO.ui?.toast) {
+          lastSyncAlertAt = Date.now();
+          TO.ui.toast({ kind: 'loss', title: 'Couldn’t save to Supabase', msg: e.message });
+        }
+      });
+    }, Math.max(0, 1500 - (Date.now() - lastSaveAt)));
+  };
+  api.flushState = async () => {
+    clearTimeout(saveTimer); saveTimer = null;
+    if (!pendingState || !token()) return;
+    const data = pendingState;
+    pendingState = null;
+    const id = tokenUserId();
+    if (!id) { pendingState = data; throw new TO.AppError('bad_token', 'Your session is invalid. Log in again.'); }
+    try {
+      const settingsValue = { followed_sports: data.settings?.sports || [], timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Denver', notifications_enabled: Object.values(data.settings?.notify || {}).some(Boolean) };
+      if (supportsAppPreferences) settingsValue.app_preferences = data.settings || {};
+      const settingsSnapshot = JSON.stringify(settingsValue);
+      if (settingsSnapshot !== lastSettingsSnapshot) {
+        await rest(`user_settings?user_id=eq.${encodeURIComponent(id)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: settingsSnapshot });
+        lastSettingsSnapshot = settingsSnapshot;
+      }
+      for (const bet of data.bets || []) {
+        if (bet.kind !== 'sports' || bet.friend || !Number(bet.stake) || !bet.legs?.length || bet.legs.some((leg) => leg.kind !== 'game' || !leg.gameId)) continue;
+        if (!bet.supabaseId && !placing.has(bet.id)) {
+          placing.add(bet.id);
+          try {
+            const payout = Number(bet.payout) > 0 ? Number(bet.payout) : Math.max(0, Math.round(Number(bet.stake) * Number(bet.decimal) * Number(bet.multiplier || 1)));
+            const saved = await rest('rpc/timeout_place_bet', { method: 'POST', body: JSON.stringify({
+              p_stake_minutes: Number(bet.stake), p_combined_odds: Number(bet.decimal), p_potential_payout: payout,
+              p_current_day: data.wallet?.dayKey || bet.dayKey,
+              p_legs: bet.legs.map((leg) => ({ espn_event_id: String(leg.gameId), league: leg.league || 'unknown', matchup: leg.matchup || '', market: leg.market || 'moneyline', side: leg.side || '', line: leg.line, accepted_odds: Number(leg.price) })),
+            }) });
+            const betId = typeof saved === 'string' ? saved : saved.id;
+            if (!betId) throw new Error('Supabase did not return the saved bet ID.');
+            bet.supabaseId = betId;
+            bet.supabaseSynced = false;
+            const current = TO.data?.bets?.find((b) => b.id === bet.id);
+            if (current) { current.supabaseId = betId; current.supabaseSynced = false; TO.store.set(`timeout.data.${TO.account.id}`, TO.data); }
+          } finally { placing.delete(bet.id); }
+        }
+        if (bet.supabaseId && bet.status !== 'open' && !bet.supabaseSynced && !settling.has(bet.supabaseId)) {
+          settling.add(bet.supabaseId);
+          try {
+            const settled = await rest('rpc/timeout_settle_bet', { method: 'POST', body: JSON.stringify({
+              p_bet_id: bet.supabaseId, p_status: ({ push: 'pushed', void: 'voided' })[bet.status] || bet.status,
+              p_actual_payout: Number(bet.payout || 0),
+              p_leg_results: bet.legs.map((leg) => ({ espn_event_id: String(leg.gameId), market: leg.market, side: leg.side, line: leg.line, result: leg.result })),
+            }) });
+            bet.supabaseSynced = settled !== false;
+            const current = TO.data?.bets?.find((b) => b.supabaseId === bet.supabaseId);
+            if (current) { current.supabaseSynced = bet.supabaseSynced; TO.store.set(`timeout.data.${TO.account.id}`, TO.data); }
+          } finally { settling.delete(bet.supabaseId); }
+        }
+      }
+      lastSaveAt = Date.now();
+      api.syncError = null;
+    } catch (e) { pendingState = data; throw e; }
+  };
+  api.updateProfile = async (patch) => {
+    await ensureFreshSession();
+    const userId = tokenUserId();
+    if (!userId) throw new TO.AppError('bad_token', 'Your session is invalid. Log in again.');
+    const body = { id: userId };
+    if (patch.username != null) body.username = patch.username;
+    if (patch.photoUrl != null) body.avatar_url = patch.photoUrl;
+    if (Object.keys(body).length > 1) await rest(`profiles?id=eq.${encodeURIComponent(userId)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ username: body.username, avatar_url: body.avatar_url }) });
+    if (patch.email || patch.password) {
+      const res = await fetch(`${config.url}/auth/v1/user`, { method: 'PUT', headers: authHeaders(true), body: JSON.stringify({ ...(patch.email ? { email: patch.email } : {}), ...(patch.password ? { password: patch.password } : {}) }) });
+      await parseResponse(res);
+    }
+  };
   api.logout = async () => {
-    try { await request('POST', '/auth/logout'); } catch (e) { /* already logged out on the server */ }
+    await api.flushState().catch(() => {});
+    if (token()) {
+      try { const res = await fetch(`${config.url}/auth/v1/logout`, { method: 'POST', headers: authHeaders(true) }); await parseResponse(res); } catch (e) { /* session can already be expired */ }
+    }
     api.clearToken();
+    lastSettingsSnapshot = '';
   };
 })(window.TO);
 
@@ -4306,6 +4538,7 @@ window.TO = window.TO || {};
       return `<div class="livebox"><div class="small muted">${esc(p.q)}</div><div class="spread small"><span class="bold">${chance}% chance your side hits</span><span class="faint bold">${p.state === 'resolved' ? `Resolved ${p.outcome.toUpperCase()}` : `Resolves in ${TO.fmtIn(p.resolves - TO.now())}`}</span></div></div>`;
     }
     const g = S.game(leg.gameId);
+    if (!g) return `<div class="livebox"><div class="small bold">${esc(leg.matchup || 'Sports game')}</div><div class="small muted">Loading the latest score…</div></div>`;
     let head;
     if (g.state === 'live' || g.state === 'final') {
       head = `<div class="lb-score">${ui.teamBadge(g.away, 22)}<span>${esc(g.away.abbr)}</span><span class="sc">${g.awayScore}</span><span class="faint">–</span><span class="sc">${g.homeScore}</span><span>${esc(g.home.abbr)}</span>${ui.teamBadge(g.home, 22)}<span style="margin-left:auto" class="small ${g.state === 'live' ? '' : 'muted'}">${g.state === 'live' ? `<span class="live">LIVE</span> ${esc(g.clock)}` : esc(g.statusText)}</span></div>`;
@@ -4395,6 +4628,8 @@ window.TO = window.TO || {};
   }
 
   const betCard = (bet, opts) => (bet.status === 'open' ? openCard(bet, opts) : historyCard(bet, opts));
+  const gameLeg = (leg) => leg.kind === 'game' || (leg.kind === 'sports' && !!leg.gameId);
+  const isLiveBet = (bet) => bet.legs.some((leg) => leg.result === 'pending' && gameLeg(leg) && S.game(leg.gameId)?.state === 'live');
 
   function recordCard() {
     const st = TO.state.myStats();
@@ -4414,8 +4649,10 @@ window.TO = window.TO || {};
   }
 
   function render() {
-    const bets = TO.data.bets.filter((b) => b.kind === 'sports' && b.legs.every((leg) => leg.kind === 'sports'));
+    const bets = TO.data.bets.filter((b) => b.kind === 'sports' && b.legs.length && b.legs.every(gameLeg));
     const open = bets.filter((b) => b.status === 'open').sort((a, b) => b.placedAt - a.placedAt);
+    const liveNow = open.filter(isLiveBet);
+    const otherOpen = open.filter((b) => !isLiveBet(b));
     let settled = bets.filter((b) => b.status !== 'open').sort((a, b) => b.settledAt - a.settledAt);
     const counts = { all: settled.length, won: 0, lost: 0, void: 0 };
     settled.forEach((b) => { if (b.status === 'won') counts.won++; else if (b.status === 'lost') counts.lost++; else counts.void++; });
@@ -4424,7 +4661,7 @@ window.TO = window.TO || {};
     let list;
     if (view.tab === 'open') {
       list = open.length
-        ? open.map((b) => openCard(b)).join('')
+        ? `${liveNow.length ? `<div class="eyebrow row-s" style="padding:2px 16px;margin-top:4px"><span class="live"></span>Live now <span class="count-pill">${liveNow.length}</span></div>${liveNow.map((b) => openCard(b)).join('')}` : ''}${otherOpen.length ? `<div class="eyebrow" style="padding:2px 16px;margin-top:4px">Upcoming</div>${otherOpen.map((b) => openCard(b)).join('')}` : ''}`
         : `<div class="empty">${icon('ticket', 40)}<h3>No open bets</h3><p>Go to Home and tap any odds to start a bet. It takes two taps: pick a price, then tap Place bet.</p><button class="btn primary" data-act="tab" data-tab="home">Find a game</button></div>`;
     } else {
       const chip = (k, t) => `<button class="chip sm ${view.filter === k ? 'on' : ''}" data-act="bets-filter" data-f="${k}">${t}<span class="n">${counts[k]}</span></button>`;
@@ -5176,11 +5413,9 @@ window.TO = window.TO || {};
   function serverAccountCard(s) {
     const line = (k, v, id) => `<div class="spread"><span class="muted">${k}</span><b${id ? ` id="${id}"` : ''}>${esc(String(v))}</b></div>`;
     return `<div class="card stack-s" id="db-account">
-      <div class="row-s">${icon('check', 16)}<b>Saved in the TimeOut database</b></div>
+      <div class="row-s">${icon('check', 16)}<b>Connected to Supabase</b></div>
       ${line('User ID', s.id)}
       ${line('Member since', TO.fmtDate(Date.parse(s.createdAt)))}
-      ${line('Last login', fmtStamp(s.lastLoginAt), 'db-last-login')}
-      ${line('Total logins', s.loginCount, 'db-login-count')}
     </div>`;
   }
 
@@ -5189,7 +5424,17 @@ window.TO = window.TO || {};
     if (TO.api.online && a.server) {
       return `<div class="photo-pick"><span class="ph"><img src="${esc(a.photo)}" alt="Profile photo"></span><div><b>@${esc(a.username)}</b><div class="small muted">${esc(a.email)}</div></div></div>
         ${serverAccountCard(a.server)}
-        <div class="card stack-s"><b>Not connected to the database yet</b><div class="small muted">Changing your photo, username, email or password, and deleting your account, still need API routes. Add them in server/src/auth.js.</div></div>
+        <div class="card stack">
+          <h2 style="margin:0;font-size:17px">Profile</h2>
+          ${ui.field({ id: 'acct-username', label: 'Username', value: a.username, err: acctErr.username, attrs: 'autocapitalize="off" spellcheck="false"' })}
+          ${ui.field({ id: 'acct-email', label: 'Email', type: 'email', value: a.email, err: acctErr.email })}
+          <button class="btn primary" data-act="acct-save">Save changes</button>
+        </div>
+        <div class="card stack">
+          <h2 style="margin:0;font-size:17px">Change password</h2>
+          ${ui.field({ id: 'acct-new', label: 'New password', type: 'password', err: acctErr.newPassword, hint: 'At least 8 characters' })}
+          <button class="btn ghost" data-act="acct-pw">Update password</button>
+        </div>
         <div class="stack-s"><button class="btn ghost" data-act="logout">${icon('logout', 18)} Log out</button></div>`;
     }
     return `<div class="photo-pick"><label class="ph" for="acct-photo" style="cursor:pointer"><img src="${esc(a.photo)}" alt="Profile photo"><span class="cam">${icon('camera', 15)}</span></label><div><b>Profile photo</b><div class="small muted">Tap the photo to change it.</div></div><input type="file" id="acct-photo" accept="image/*" class="sr" data-change="acct-photo"></div>
@@ -5321,10 +5566,12 @@ window.TO = window.TO || {};
     St.logout();
     TO.app.boot();
   };
-  A['acct-save'] = () => {
+  A['acct-save'] = async () => {
     acctErr = {};
     try {
-      St.updateAccount({ username: document.getElementById('acct-username').value, email: document.getElementById('acct-email').value });
+      const patch = { username: document.getElementById('acct-username').value, email: document.getElementById('acct-email').value };
+      if (TO.account.server) await TO.api.updateProfile(patch);
+      St.updateAccount(patch);
       ui.toast({ kind: 'win', title: 'Account saved' });
     } catch (e) {
       if (!(e instanceof TO.AppError)) throw e;
@@ -5332,10 +5579,14 @@ window.TO = window.TO || {};
     }
     refresh();
   };
-  A['acct-pw'] = () => {
+  A['acct-pw'] = async () => {
     acctErr = {};
     try {
-      St.updateAccount({ currentPassword: document.getElementById('acct-cur').value, newPassword: document.getElementById('acct-new').value });
+      const newPassword = document.getElementById('acct-new').value;
+      const invalid = St.validatePassword(newPassword);
+      if (invalid) throw new TO.AppError('invalid', invalid, { fields: { newPassword: invalid } });
+      if (TO.account.server) await TO.api.updateProfile({ password: newPassword });
+      else St.updateAccount({ currentPassword: document.getElementById('acct-cur').value, newPassword });
       ui.toast({ kind: 'win', title: 'Password updated' });
     } catch (e) {
       if (!(e instanceof TO.AppError)) throw e;
@@ -5374,6 +5625,7 @@ window.TO = window.TO || {};
   C['acct-photo'] = async (el) => {
     try {
       const url = await ui.readPhoto(el.files[0]);
+      if (TO.account.server) await TO.api.updateProfile({ photoUrl: url });
       St.updateAccount({ photo: url });
       ui.toast({ kind: 'win', title: 'Photo updated' });
       refresh();
@@ -5424,7 +5676,7 @@ window.TO = window.TO || {};
       <div class="auth-inner" style="flex:none;gap:10px">
         <button class="btn primary full" data-act="auth-go" data-s="signup">Create account</button>
         <button class="btn ghost full" data-act="auth-go" data-s="login">Log in</button>
-        <button class="btn quiet full sm" data-act="auth-demo">${icon('flask', 16)} Try the demo account</button>
+        ${TO.api.configured ? '' : `<button class="btn quiet full sm" data-act="auth-demo">${icon('flask', 16)} Try the demo account</button>`}
       </div>
     </div>`;
   }
@@ -5438,14 +5690,14 @@ window.TO = window.TO || {};
     return `<div class="auth"><form class="auth-inner" data-form="login" novalidate>
       ${back()}
       <h1>Welcome back</h1>
-      <p class="sub">Log in with your username or email.</p>
+      <p class="sub">Log in with your email and password.</p>
       ${av.formError ? `<div class="form-error">${esc(av.formError)}</div>` : ''}
-      ${ui.field({ id: 'li-id', label: 'Username or email', value: v['li-id'] || '', err: av.errors.identifier, attrs: 'autocomplete="username" autocapitalize="off" spellcheck="false"' })}
+      ${ui.field({ id: 'li-id', label: 'Email', type: 'email', value: v['li-id'] || '', err: av.errors.identifier || av.errors.email, attrs: 'autocomplete="email" autocapitalize="off" spellcheck="false"' })}
       ${ui.field({ id: 'li-pw', label: 'Password', type: 'password', value: '', err: av.errors.password, attrs: 'autocomplete="current-password"' })}
       <button type="submit" class="btn primary full">Log in</button>
       <button type="button" class="btn quiet sm" data-act="forgot">Forgot password?</button>
       <div class="divider"></div>
-      <button type="button" class="btn ghost full" data-act="auth-demo">${icon('flask', 16)} Log in with the demo account</button>
+      ${TO.api.configured ? '' : `<button type="button" class="btn ghost full" data-act="auth-demo">${icon('flask', 16)} Log in with the demo account</button>`}
       <div class="small muted" style="text-align:center">New here? <button type="button" class="link-btn" data-act="auth-go" data-s="signup">Create an account</button></div>
     </form></div>`;
   }
@@ -5468,7 +5720,7 @@ window.TO = window.TO || {};
       ${ui.field({ id: 'su-pw', label: 'Password', type: 'password', value: v['su-pw'] || '', err: av.errors.password, hint: 'At least 8 characters', attrs: 'autocomplete="new-password"' })}
       ${ui.field({ id: 'su-pw2', label: 'Confirm password', type: 'password', value: v['su-pw2'] || '', err: av.errors.confirm, attrs: 'autocomplete="new-password"' })}
       <button type="submit" class="btn primary full">Create account</button>
-      <div class="tiny faint" style="text-align:center">${TO.api.online ? 'Your account is saved in the TimeOut database.' : 'Offline demo: accounts are saved in this browser, not on a server.'}</div>
+      <div class="tiny faint" style="text-align:center">${TO.api.configured ? 'Accounts and bets are saved securely with Supabase.' : 'Offline demo: accounts are saved in this browser, not on a server.'}</div>
       <div class="small muted" style="text-align:center">Already have an account? <button type="button" class="link-btn" data-act="auth-go" data-s="login">Log in</button></div>
     </form></div>`;
   }
@@ -5535,16 +5787,16 @@ window.TO = window.TO || {};
   }
 
   /** Vertical slice: POST /api/auth/login -> server updates users.last_login_at and login_count -> show them. */
-  async function serverLogin(identifier, password) {
-    const { user, previousLoginAt } = await TO.api.login(identifier, password);
-    St.adoptServerUser(user);
+  async function serverLogin(email, password) {
+    const { user } = await TO.api.login(email, password);
+    St.adoptServerUser(user, await TO.api.loadState());
     av.values = {};
     TO.tester.mark('login');
     TO.app.boot();
     ui.toast({
       kind: 'win',
       title: `Logged in as @${user.username}`,
-      msg: `Login #${user.loginCount}, saved to the database. ${previousLoginAt ? `Previous login: ${TO.fmtDate(Date.parse(previousLoginAt))}, ${TO.fmtTime(Date.parse(previousLoginAt))}.` : 'First login.'}`,
+      msg: 'Your bets and settings are synced to Supabase.',
     });
   }
 
@@ -5574,8 +5826,8 @@ window.TO = window.TO || {};
       try {
         if (av.errors.confirm) throw new TO.AppError('invalid', 'Fix the highlighted fields.');
         setBusy(form, 'Creating account…');
-        const { user } = await TO.api.register({ username: (v['su-user'] || '').trim(), email: (v['su-email'] || '').trim(), password: v['su-pw'] || '', photoUrl: av.photo });
-        St.adoptServerUser(user);
+        const { user, state } = await TO.api.register({ username: (v['su-user'] || '').trim(), email: (v['su-email'] || '').trim(), password: v['su-pw'] || '', photoUrl: av.photo });
+        St.adoptServerUser(user, state);
         av.values = {}; av.photo = null;
         TO.tester.mark('signup');
         startOnboarding();
@@ -5602,6 +5854,7 @@ window.TO = window.TO || {};
   const A = TO.actions;
   A['auth-go'] = (el) => show(el.dataset.s);
   A['auth-demo'] = async (el) => {
+    if (TO.api.configured) return;
     if (!TO.api.online) { St.loginDemo(); TO.tester.mark('login'); TO.app.boot(); return; }
     el.disabled = true;
     try {
@@ -5918,7 +6171,7 @@ window.TO = window.TO || {};
       <button class="icon-btn" data-act="menu" aria-label="Menu and settings">${icon('menu', 22)}${wl.appsLocked ? '<span class="dotbadge"></span>' : ''}</button>
       <div class="brand">${icon('hourglass', 20, 'brand-mark')}<span class="brand-word">Time<b>Out</b></span></div>
       <button class="bal-pill ${locked ? 'locked' : ''}" data-act="settings" data-section="screentime" aria-label="${locked ? 'Betting locked until midnight' : `${wl.balance} minutes available to bet`}">${icon(locked ? 'lock' : 'hourglass', 15)}${locked ? 'Locked' : `${wl.balance} min`}</button>`;
-    const open = TO.data.bets.filter((b) => b.status === 'open' && b.kind === 'sports' && b.legs.every((leg) => leg.kind === 'sports')).length;
+    const open = TO.data.bets.filter((b) => b.status === 'open' && b.kind === 'sports' && b.legs.length && b.legs.every((leg) => leg.kind === 'game' || (leg.kind === 'sports' && leg.gameId))).length;
     document.getElementById('tabbar').innerHTML = TABS.map(([k, label, ic]) => {
       const badge = k === 'bets' && open ? `<span class="badge green">${open}</span>` : k === 'social' && socialBadge ? `<span class="badge">${socialBadge}</span>` : '';
       return `<button class="tab ${app.tab === k ? 'on' : ''}" data-act="tab" data-tab="${k}" aria-current="${app.tab === k ? 'page' : 'false'}">${icon(ic, 23)}<span>${label}</span>${badge}</button>`;
@@ -6095,9 +6348,13 @@ window.TO = window.TO || {};
   TO.on('live:updated', () => {
     if (!inShell()) return;
     if (app.tab === 'home') TO.views.home.refreshLive();
+    if (app.tab === 'bets') app.renderView();
     if (ui.pageOpen('game')) TO.views.game.refresh();
     refreshSlip();
     app.refreshSlipbar();
+  });
+  TO.on('live:details-updated', () => {
+    if (inShell() && app.tab === 'bets') app.renderView();
   });
   document.addEventListener('input', (e) => { const fn = TO.inputs[e.target.id]; if (fn) fn(e.target); });
   document.addEventListener('change', (e) => { const k = e.target.dataset && e.target.dataset.change; if (k && TO.changes[k]) TO.changes[k](e.target); });
@@ -6144,7 +6401,8 @@ window.TO = window.TO || {};
   async function restoreServerSession() {
     if (!TO.api.hasToken()) { St.logout(); return; }
     try {
-      St.adoptServerUser(await TO.api.me());
+      const user = await TO.api.me();
+      St.adoptServerUser(user, await TO.api.loadState());
     } catch (e) {
       if (!(e instanceof TO.AppError)) throw e;
       if (e.status === 401) TO.api.clearToken();

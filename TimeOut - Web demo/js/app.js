@@ -54,7 +54,7 @@
       <button class="icon-btn" data-act="menu" aria-label="Menu and settings">${icon('menu', 22)}${wl.appsLocked ? '<span class="dotbadge"></span>' : ''}</button>
       <div class="brand">${icon('hourglass', 20, 'brand-mark')}<span class="brand-word">Time<b>Out</b></span></div>
       <button class="bal-pill ${locked ? 'locked' : ''}" data-act="settings" data-section="screentime" aria-label="${locked ? 'Betting locked until midnight' : `${wl.balance} minutes available to bet`}">${icon(locked ? 'lock' : 'hourglass', 15)}${locked ? 'Locked' : `${wl.balance} min`}</button>`;
-    const open = TO.data.bets.filter((b) => b.status === 'open' && b.kind === 'sports' && b.legs.every((leg) => leg.kind === 'sports')).length;
+    const open = TO.data.bets.filter((b) => b.status === 'open' && b.kind === 'sports' && b.legs.length && b.legs.every((leg) => leg.kind === 'game' || (leg.kind === 'sports' && leg.gameId))).length;
     document.getElementById('tabbar').innerHTML = TABS.map(([k, label, ic]) => {
       const badge = k === 'bets' && open ? `<span class="badge green">${open}</span>` : k === 'social' && socialBadge ? `<span class="badge">${socialBadge}</span>` : '';
       return `<button class="tab ${app.tab === k ? 'on' : ''}" data-act="tab" data-tab="${k}" aria-current="${app.tab === k ? 'page' : 'false'}">${icon(ic, 23)}<span>${label}</span>${badge}</button>`;
@@ -231,9 +231,13 @@
   TO.on('live:updated', () => {
     if (!inShell()) return;
     if (app.tab === 'home') TO.views.home.refreshLive();
+    if (app.tab === 'bets') app.renderView();
     if (ui.pageOpen('game')) TO.views.game.refresh();
     refreshSlip();
     app.refreshSlipbar();
+  });
+  TO.on('live:details-updated', () => {
+    if (inShell() && app.tab === 'bets') app.renderView();
   });
   document.addEventListener('input', (e) => { const fn = TO.inputs[e.target.id]; if (fn) fn(e.target); });
   document.addEventListener('change', (e) => { const k = e.target.dataset && e.target.dataset.change; if (k && TO.changes[k]) TO.changes[k](e.target); });
@@ -280,7 +284,8 @@
   async function restoreServerSession() {
     if (!TO.api.hasToken()) { St.logout(); return; }
     try {
-      St.adoptServerUser(await TO.api.me());
+      const user = await TO.api.me();
+      St.adoptServerUser(user, await TO.api.loadState());
     } catch (e) {
       if (!(e instanceof TO.AppError)) throw e;
       if (e.status === 401) TO.api.clearToken();

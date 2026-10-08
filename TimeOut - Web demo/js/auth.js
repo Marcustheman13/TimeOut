@@ -31,7 +31,7 @@
       <div class="auth-inner" style="flex:none;gap:10px">
         <button class="btn primary full" data-act="auth-go" data-s="signup">Create account</button>
         <button class="btn ghost full" data-act="auth-go" data-s="login">Log in</button>
-        <button class="btn quiet full sm" data-act="auth-demo">${icon('flask', 16)} Try the demo account</button>
+        ${TO.api.configured ? '' : `<button class="btn quiet full sm" data-act="auth-demo">${icon('flask', 16)} Try the demo account</button>`}
       </div>
     </div>`;
   }
@@ -45,14 +45,14 @@
     return `<div class="auth"><form class="auth-inner" data-form="login" novalidate>
       ${back()}
       <h1>Welcome back</h1>
-      <p class="sub">Log in with your username or email.</p>
+      <p class="sub">Log in with your email and password.</p>
       ${av.formError ? `<div class="form-error">${esc(av.formError)}</div>` : ''}
-      ${ui.field({ id: 'li-id', label: 'Username or email', value: v['li-id'] || '', err: av.errors.identifier, attrs: 'autocomplete="username" autocapitalize="off" spellcheck="false"' })}
+      ${ui.field({ id: 'li-id', label: 'Email', type: 'email', value: v['li-id'] || '', err: av.errors.identifier || av.errors.email, attrs: 'autocomplete="email" autocapitalize="off" spellcheck="false"' })}
       ${ui.field({ id: 'li-pw', label: 'Password', type: 'password', value: '', err: av.errors.password, attrs: 'autocomplete="current-password"' })}
       <button type="submit" class="btn primary full">Log in</button>
       <button type="button" class="btn quiet sm" data-act="forgot">Forgot password?</button>
       <div class="divider"></div>
-      <button type="button" class="btn ghost full" data-act="auth-demo">${icon('flask', 16)} Log in with the demo account</button>
+      ${TO.api.configured ? '' : `<button type="button" class="btn ghost full" data-act="auth-demo">${icon('flask', 16)} Log in with the demo account</button>`}
       <div class="small muted" style="text-align:center">New here? <button type="button" class="link-btn" data-act="auth-go" data-s="signup">Create an account</button></div>
     </form></div>`;
   }
@@ -75,7 +75,7 @@
       ${ui.field({ id: 'su-pw', label: 'Password', type: 'password', value: v['su-pw'] || '', err: av.errors.password, hint: 'At least 8 characters', attrs: 'autocomplete="new-password"' })}
       ${ui.field({ id: 'su-pw2', label: 'Confirm password', type: 'password', value: v['su-pw2'] || '', err: av.errors.confirm, attrs: 'autocomplete="new-password"' })}
       <button type="submit" class="btn primary full">Create account</button>
-      <div class="tiny faint" style="text-align:center">${TO.api.online ? 'Your account is saved in the TimeOut database.' : 'Offline demo: accounts are saved in this browser, not on a server.'}</div>
+      <div class="tiny faint" style="text-align:center">${TO.api.configured ? 'Accounts and bets are saved securely with Supabase.' : 'Offline demo: accounts are saved in this browser, not on a server.'}</div>
       <div class="small muted" style="text-align:center">Already have an account? <button type="button" class="link-btn" data-act="auth-go" data-s="login">Log in</button></div>
     </form></div>`;
   }
@@ -142,16 +142,16 @@
   }
 
   /** Vertical slice: POST /api/auth/login -> server updates users.last_login_at and login_count -> show them. */
-  async function serverLogin(identifier, password) {
-    const { user, previousLoginAt } = await TO.api.login(identifier, password);
-    St.adoptServerUser(user);
+  async function serverLogin(email, password) {
+    const { user } = await TO.api.login(email, password);
+    St.adoptServerUser(user, await TO.api.loadState());
     av.values = {};
     TO.tester.mark('login');
     TO.app.boot();
     ui.toast({
       kind: 'win',
       title: `Logged in as @${user.username}`,
-      msg: `Login #${user.loginCount}, saved to the database. ${previousLoginAt ? `Previous login: ${TO.fmtDate(Date.parse(previousLoginAt))}, ${TO.fmtTime(Date.parse(previousLoginAt))}.` : 'First login.'}`,
+      msg: 'Your bets and settings are synced to Supabase.',
     });
   }
 
@@ -181,8 +181,8 @@
       try {
         if (av.errors.confirm) throw new TO.AppError('invalid', 'Fix the highlighted fields.');
         setBusy(form, 'Creating account…');
-        const { user } = await TO.api.register({ username: (v['su-user'] || '').trim(), email: (v['su-email'] || '').trim(), password: v['su-pw'] || '', photoUrl: av.photo });
-        St.adoptServerUser(user);
+        const { user, state } = await TO.api.register({ username: (v['su-user'] || '').trim(), email: (v['su-email'] || '').trim(), password: v['su-pw'] || '', photoUrl: av.photo });
+        St.adoptServerUser(user, state);
         av.values = {}; av.photo = null;
         TO.tester.mark('signup');
         startOnboarding();
@@ -209,6 +209,7 @@
   const A = TO.actions;
   A['auth-go'] = (el) => show(el.dataset.s);
   A['auth-demo'] = async (el) => {
+    if (TO.api.configured) return;
     if (!TO.api.online) { St.loginDemo(); TO.tester.mark('login'); TO.app.boot(); return; }
     el.disabled = true;
     try {
