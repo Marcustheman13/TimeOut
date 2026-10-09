@@ -18,23 +18,17 @@ Full requirements: [docs/PRD - Prioritization & Design Sprint.pdf](docs/PRD%20-%
 
 ---
 
-## ERD
+ERD
 
-> **TODO (team):** Draw the ERD from our screens (at least 4 entities, attributes on each, every relationship labeled
-> one-to-one / one-to-many / many-to-many). Export it as `docs/erd.png` and delete the `<!--` `-->` around the image line below.
-> Then add the matching tables to [`server/db/schema.sql`](server/db/schema.sql) and sample rows to [`server/db/seed.sql`](server/db/seed.sql).
-
-<!-- ![TimeOut ERD](docs/erd.png) -->
+<img width="2000" height="1280" alt="RccS2" src="https://github.com/user-attachments/assets/c625aedc-bc51-438a-9ccc-78b673b4d61d" />
 
 
 Tables that already exist (used by the login vertical slice):
 
-| Table | Purpose | Key columns |
-| --- | --- | --- |
-| `users` | One row per account | `user_id` PK, `username` (unique), `email` (unique), `password_hash`, `photo_url`, `created_at`, `last_login_at`, `login_count` |
-| `sessions` | One row per logged-in device | `session_id` PK, `user_id` FK → users, `token_hash`, `device_label`, `created_at`, `expires_at` |
-
-`users` → `sessions` is **one-to-many** (one user can be logged in on several devices).
+Table	Purpose	Key columns
+users	One row per account	user_id PK, username (unique), email (unique), password_hash, photo_url, created_at, last_login_at, login_count
+sessions	One row per logged-in device	session_id PK, user_id FK → users, token_hash, device_label, created_at, expires_at
+users → sessions is one-to-many (one user can be logged in on several devices).
 
 ---
 
