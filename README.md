@@ -18,7 +18,11 @@ Full requirements: [docs/PRD - Prioritization & Design Sprint.pdf](docs/PRD%20-%
 
 ---
 
-ERD
+ORIGINAL ERD
+
+<img width="1706" height="1040" alt="Sports Betting ERD" src="https://github.com/user-attachments/assets/1183be55-ab84-49b5-9a56-1c6e293e26a4" />
+
+DATABASE INTEGRATED ERD
 
 <img width="2000" height="1280" alt="RccS2" src="https://github.com/user-attachments/assets/c625aedc-bc51-438a-9ccc-78b673b4d61d" />
 
