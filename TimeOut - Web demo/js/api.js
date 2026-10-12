@@ -12,6 +12,10 @@
   const placing = new Set();
   const settling = new Set();
 
+  function isOutOfBettingMinutes(error) {
+    return /insufficient|not enough|out of (betting )?(minutes|balance)|betting minutes/i.test(String(error?.message || ''));
+  }
+
   const config = window.TIMEOUT_SUPABASE || {};
   api.configured = !!(config.url && config.publishableKey);
   api.online = api.configured;
@@ -162,11 +166,18 @@
           placing.add(bet.id);
           try {
             const payout = Number(bet.payout) > 0 ? Number(bet.payout) : Math.max(0, Math.round(Number(bet.stake) * Number(bet.decimal) * Number(bet.multiplier || 1)));
-            const saved = await rest('rpc/timeout_place_bet', { method: 'POST', body: JSON.stringify({
-              p_stake_minutes: Number(bet.stake), p_combined_odds: Number(bet.decimal), p_potential_payout: payout,
-              p_current_day: data.wallet?.dayKey || bet.dayKey,
-              p_legs: bet.legs.map((leg) => ({ espn_event_id: String(leg.gameId), league: leg.league || 'unknown', matchup: leg.matchup || '', market: leg.market || 'moneyline', side: leg.side || '', line: leg.line, accepted_odds: Number(leg.price) })),
-            }) });
+            let saved;
+            try {
+              saved = await rest('rpc/timeout_place_bet', { method: 'POST', body: JSON.stringify({
+                p_stake_minutes: Number(bet.stake), p_combined_odds: Number(bet.decimal), p_potential_payout: payout,
+                p_current_day: data.wallet?.dayKey || bet.dayKey,
+                p_legs: bet.legs.map((leg) => ({ espn_event_id: String(leg.gameId), league: leg.league || 'unknown', matchup: leg.matchup || '', market: leg.market || 'moneyline', side: leg.side || '', line: leg.line, accepted_odds: Number(leg.price) })),
+              }) });
+            } catch (error) {
+              if (isOutOfBettingMinutes(error)) error.outOfBettingMinutes = true;
+              error.failedBetId = bet.id;
+              throw error;
+            }
             const betId = typeof saved === 'string' ? saved : saved.id;
             if (!betId) throw new Error('Supabase did not return the saved bet ID.');
             bet.supabaseId = betId;
@@ -191,7 +202,23 @@
       }
       lastSaveAt = Date.now();
       api.syncError = null;
-    } catch (e) { pendingState = data; throw e; }
+    } catch (e) {
+      if (e.outOfBettingMinutes) {
+        const rejectedId = e.failedBetId;
+        pendingState = null;
+        data.bets = (data.bets || []).filter((bet) => bet.id !== rejectedId);
+        if (TO.data) {
+          TO.data.bets = TO.data.bets.filter((bet) => bet.id !== rejectedId);
+          if (TO.data.wallet) { TO.data.wallet.balance = 0; TO.data.wallet.lockedOut = true; }
+          if (TO.account) TO.store.set(`timeout.data.${TO.account.id}`, TO.data);
+        }
+        TO.ui?.toast({ kind: 'loss', title: 'Out of betting minutes', msg: 'Betting reopens at midnight.' });
+        TO.app?.render?.();
+        return;
+      }
+      pendingState = data;
+      throw e;
+    }
   };
   api.updateProfile = async (patch) => {
     await ensureFreshSession();

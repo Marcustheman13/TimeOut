@@ -231,9 +231,9 @@
   }
 
   function selectedGroup() { return cfbGroup; }
-  async function fetchLeague(league, group = '80', now = TO.now()) {
+  async function fetchLeague(league, group = '80', now = TO.now(), dates = scoreboardDays(now)) {
     const [path] = LEAGUES[league];
-    const responses = await Promise.all(scoreboardDays(now).map(async (date) => {
+    const responses = await Promise.all(dates.map(async (date) => {
       const params = new URLSearchParams({ dates: date });
       if (league === 'ncaaf') {
         if (group !== 'all') params.set('groups', group);
@@ -246,6 +246,39 @@
     const events = new Map();
     responses.forEach((payload) => (payload.events || []).forEach((event) => events.set(event.id, event)));
     return [...events.values()].map((event) => gameFrom(event, league, LEAGUES[league][1])).filter(Boolean);
+  }
+
+  // Keep old unresolved tickets gradeable after their games fall out of the current scoreboard cache.
+  async function loadOldBetGames(now) {
+    const cutoff = todayBounds(now)[0] - 2 * TO.DAY;
+    const wantedByGroup = new Map();
+    for (const bet of TO.data?.bets || []) {
+      if (bet.status !== 'open') continue;
+      for (const leg of bet.legs || []) {
+        if (leg.result !== 'pending' || !leg.gameId || !LEAGUES[leg.league] || bet.placedAt >= cutoff || byId(leg.gameId)) continue;
+        const day = TO.dayKey(bet.placedAt);
+        const key = `${leg.league}|${day}`;
+        if (!wantedByGroup.has(key)) wantedByGroup.set(key, { league: leg.league, day, ids: new Set() });
+        wantedByGroup.get(key).ids.add(String(leg.gameId));
+      }
+    }
+    const jobs = [...wantedByGroup.values()];
+    let loaded = false;
+    const results = await Promise.allSettled(jobs.map(({ league, day, ids }) =>
+      fetchLeague(league, cfbGroup, TO.dayStart(day) + 12 * TO.HOUR).then((games) => games.filter((game) =>
+        ids.has(String(game.id)) || ids.has(String(game.eventID)) || [...ids].some((id) => id.endsWith(`-${game.eventID}`))))));
+    results.forEach((result) => {
+      if (result.status !== 'fulfilled') return;
+      for (const game of result.value) {
+        game.odds = { moneyline: [], spread: [], total: [], all: [], suspended: true };
+        const games = cache.get(game.league) || [];
+        if (!games.some((item) => item.id === game.id)) {
+          cache.set(game.league, [...games, game]);
+          loaded = true;
+        }
+      }
+    });
+    return loaded;
   }
 
   async function resolveOddsItem(item) {
@@ -388,7 +421,10 @@
     loading = false;
     loadingDayKey = '';
     TO.emit('live:updated');
-    const todaysGames = [...cache.values()].flat();
+    loadOldBetGames(completedAt).then((loaded) => {
+      if (loaded) TO.emit('live:updated');
+    }).catch((error) => console.warn('Could not load scores for an old open bet:', error));
+    const todaysGames = [...cache.values()].flat().filter((game) => game.start >= dayStart - TO.DAY);
     loadOdds(todaysGames, completedAt);
     if (refreshQueued) {
       refreshQueued = false;

@@ -230,6 +230,9 @@
   });
   TO.on('live:updated', () => {
     if (!inShell()) return;
+    const settled = St.settle(TO.now());
+    notifySettled(settled);
+    if (settled.length) app.renderChrome();
     if (app.tab === 'home') TO.views.home.refreshLive();
     if (app.tab === 'bets') app.renderView();
     if (ui.pageOpen('game')) TO.views.game.refresh();
