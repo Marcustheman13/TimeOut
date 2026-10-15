@@ -113,11 +113,7 @@ struct BetShareCard: View {
         VStack(alignment: .leading, spacing: 18) {
             HStack {
                 HStack(spacing: 6) {
-                    Image(systemName: "hourglass.bottomhalf.filled")
-                        .foregroundStyle(Theme.accent)
-                    Text(Theme.brand)
-                        .font(.display(22, weight: .black))
-                        .italic()
+                    BrandLogo(size: 22)
                         .foregroundStyle(.white)
                     if tier > .rookie {
                         TierBadge(tier: tier, compact: true)

@@ -259,4 +259,11 @@ window.TO = window.TO || {};
 
   TO.icon = (name, size = 20, extra = '') =>
     `<svg class="ic ${extra}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[name] || ''}</svg>`;
+
+  // The TimeOut logo: a referee's "T" slanted 10° to match the italic wordmark. Source files are in /branding.
+  TO.brandMark = (size = 20, extra = '') =>
+    `<svg class="ic ${extra}" width="${Math.round(size * 1.12)}" height="${size}" viewBox="18.5 20 67 60" fill="currentColor" aria-hidden="true"><g transform="translate(48 50) skewX(-10) translate(-50 -50)"><rect x="19" y="23" width="62" height="16" rx="8"/><rect x="42" y="44" width="16" height="33" rx="8"/></g></svg>`;
+  // The same T on its green app-icon tile, for the welcome and login screens.
+  TO.brandIcon = (size = 56, extra = '') =>
+    `<svg class="brand-icon ${extra}" width="${size}" height="${size}" viewBox="0 0 100 100" role="img" aria-label="TimeOut"><rect width="100" height="100" rx="22.5" fill="#22D66E"/><g transform="translate(48 50) skewX(-10) translate(-50 -50)" fill="#03140A"><rect x="19" y="23" width="62" height="16" rx="8"/><rect x="42" y="44" width="16" height="33" rx="8"/></g></svg>`;
 })(window.TO);

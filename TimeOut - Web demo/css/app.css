@@ -150,9 +150,9 @@ button:disabled { cursor: not-allowed; }
 }
 .icon-btn:hover { background: var(--surface); }
 .icon-btn .dotbadge { position: absolute; top: 7px; right: 7px; width: 8px; height: 8px; border-radius: 50%; background: var(--live); box-shadow: 0 0 0 2px var(--bg); }
-.brand { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.brand { display: flex; align-items: center; gap: 7px; min-width: 0; }
 .brand-mark { color: var(--accent); }
-.brand-word { font-family: var(--font-display); font-weight: 900; font-style: italic; font-size: 25px; letter-spacing: 0.01em; line-height: 1; }
+.brand-word { font-family: var(--font-display); font-weight: 900; font-style: italic; font-size: 25px; letter-spacing: 0.02em; line-height: 1; }
 .brand-word b { color: var(--accent); font-weight: 900; }
 .top-title { font-family: var(--font-display); font-weight: 800; font-size: 22px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .bal-pill {
@@ -794,8 +794,10 @@ label.list-row { cursor: pointer; }
     radial-gradient(420px 320px at 80% 10%, rgba(34, 214, 110, 0.22), transparent 70%),
     radial-gradient(360px 300px at 0% 60%, rgba(79, 179, 255, 0.12), transparent 70%);
 }
-.welcome-hero .wordmark { font-family: var(--font-display); font-weight: 900; font-style: italic; font-size: 64px; line-height: 0.9; letter-spacing: 0.005em; }
+.welcome-hero .wordmark { font-family: var(--font-display); font-weight: 900; font-style: italic; font-size: 64px; line-height: 0.9; letter-spacing: 0.02em; }
 .welcome-hero .wordmark b { color: var(--accent); }
+.brand-icon { display: block; flex: none; filter: drop-shadow(0 10px 24px rgba(34, 214, 110, 0.22)); }
+.welcome-hero .brand-icon { margin-bottom: 4px; }
 .welcome-hero .tagline { font-family: var(--font-display); font-weight: 700; font-size: 26px; line-height: 1.05; color: var(--text); max-width: 15ch; }
 .welcome-points { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
 .welcome-points div { display: flex; gap: 10px; align-items: flex-start; font-size: 14.5px; color: var(--text-2); font-weight: 600; }

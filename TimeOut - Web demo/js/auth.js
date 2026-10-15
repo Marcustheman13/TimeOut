@@ -1,7 +1,7 @@
 /* TimeOut web demo — welcome, log in, create account and onboarding. */
 (function (TO) {
   'use strict';
-  const { esc, icon } = TO;
+  const { esc, icon, brandIcon } = TO;
   const S = TO.sim;
   const ui = TO.ui;
   const St = TO.state;
@@ -20,7 +20,8 @@
       <div class="welcome-hero">
         ${ticker()}
         <div style="margin-top:auto"></div>
-        <div class="wordmark">Time<b>Out</b></div>
+        ${brandIcon(64)}
+        <div class="wordmark">TIME<b>OUT</b></div>
         <div class="tagline">Bet your screen time, not your money.</div>
         <div class="welcome-points">
           <div>${icon('hourglass', 18)}<span>60 betting minutes a day. Win and you get more phone time tomorrow.</span></div>
@@ -29,8 +30,8 @@
         </div>
       </div>
       <div class="auth-inner" style="flex:none;gap:10px">
-        <button class="btn primary full" data-act="auth-go" data-s="signup">Create account</button>
-        <button class="btn ghost full" data-act="auth-go" data-s="login">Log in</button>
+        <button class="btn primary full" data-act="auth-go" data-s="login">Log in</button>
+        <button class="btn ghost full" data-act="auth-go" data-s="signup">Create account</button>
         ${TO.api.configured ? '' : `<button class="btn quiet full sm" data-act="auth-demo">${icon('flask', 16)} Try the demo account</button>`}
       </div>
     </div>`;
@@ -44,6 +45,7 @@
     const v = av.values;
     return `<div class="auth"><form class="auth-inner" data-form="login" novalidate>
       ${back()}
+      ${brandIcon(52)}
       <h1>Welcome back</h1>
       <p class="sub">Log in with your email and password.</p>
       ${av.formError ? `<div class="form-error">${esc(av.formError)}</div>` : ''}
@@ -62,6 +64,7 @@
     const photo = av.photo || TO.initialsAvatar(v['su-user'] || '?', '#1d2430');
     return `<div class="auth"><form class="auth-inner" data-form="signup" novalidate>
       ${back()}
+      ${brandIcon(52)}
       <h1>Create your account</h1>
       <p class="sub">Friends find you by your username.</p>
       ${av.formError ? `<div class="form-error">${esc(av.formError)}</div>` : ''}
