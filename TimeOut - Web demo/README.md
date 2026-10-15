@@ -1,5 +1,8 @@
 # TimeOut — clickable web demo
 
+> **▶ Try the app:** [Phone view](https://marcustheman13.github.io/TimeOut/) · [Computer view](https://marcustheman13.github.io/TimeOut/web.html)
+> Live ESPN odds and real accounts, nothing to install. It updates by itself when the web demo changes on `main`.
+
 A working HTML/CSS/JS mockup of TimeOut, the sportsbook where you bet screen time instead of money.
 It follows the group PRD and screen specs in `../docs/PRD - Prioritization & Design Sprint.pdf`.
 For the backend, database and team setup, see the [main README](../README.md).

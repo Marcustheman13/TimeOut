@@ -3,6 +3,9 @@
 **The sportsbook where you bet screen time instead of money.**
 Group 9, Section 1: Owen Smith, Easton Putnam, Will Fairholm, Marcus Williams.
 
+> **▶ Try the app:** [Phone view](https://marcustheman13.github.io/TimeOut/) · [Computer view](https://marcustheman13.github.io/TimeOut/web.html)
+> Live ESPN odds and real accounts, nothing to install. It updates by itself when the web demo changes on `main`.
+
 ---
 
 ## App Summary
