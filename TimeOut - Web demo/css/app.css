@@ -811,6 +811,9 @@ label.list-row { cursor: pointer; }
 .photo-pick .ph { position: relative; width: 84px; height: 84px; border-radius: 50%; flex: none; }
 .photo-pick .ph img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; background: var(--raised); }
 .photo-pick .ph .cam { position: absolute; right: -2px; bottom: -2px; width: 30px; height: 30px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; border: 3px solid var(--bg); }
+.verify-email .verify-ic { width: 64px; height: 64px; border-radius: 20px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); }
+.verify-email .sub b { word-break: break-all; }
+.verify-dot { flex: none; width: 10px; height: 10px; margin-top: 4px; border-radius: 50%; background: var(--accent); animation: pulse 1.1s ease-in-out infinite alternate; }
 .form-error { padding: 10px 12px; border-radius: 12px; background: var(--loss-soft); color: var(--loss); font-weight: 700; font-size: 13.5px; }
 .steps { display: flex; gap: 6px; }
 .steps i { flex: 1; height: 4px; border-radius: 2px; background: var(--raised); }
@@ -841,6 +844,10 @@ label.list-row { cursor: pointer; }
 .flash { animation: flash 1.1s ease; }
 @keyframes flash { 0%, 60% { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); } 100% { box-shadow: none; } }
 .parlay-list .game-card { margin: 0; }
+.day-bar { margin-top: 10px; }
+.simulated-note { margin: 0 16px; }
+.day-chip { flex: none; }
+.parlay-days .hscroll { padding: 0; }
 .parlay-list .league-head { padding: 6px 0 0; }
 
 /* No connection */

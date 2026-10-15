@@ -822,6 +822,9 @@ label.list-row { cursor: pointer; }
 .photo-pick .ph { position: relative; width: 84px; height: 84px; border-radius: 50%; flex: none; }
 .photo-pick .ph img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; background: var(--raised); }
 .photo-pick .ph .cam { position: absolute; right: -2px; bottom: -2px; width: 30px; height: 30px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; border: 3px solid var(--bg); }
+.verify-email .verify-ic { width: 64px; height: 64px; border-radius: 20px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); }
+.verify-email .sub b { word-break: break-all; }
+.verify-dot { flex: none; width: 10px; height: 10px; margin-top: 4px; border-radius: 50%; background: var(--accent); animation: pulse 1.1s ease-in-out infinite alternate; }
 .form-error { padding: 10px 12px; border-radius: 12px; background: var(--loss-soft); color: var(--loss); font-weight: 700; font-size: 13.5px; }
 .steps { display: flex; gap: 6px; }
 .steps i { flex: 1; height: 4px; border-radius: 2px; background: var(--raised); }
@@ -852,6 +855,10 @@ label.list-row { cursor: pointer; }
 .flash { animation: flash 1.1s ease; }
 @keyframes flash { 0%, 60% { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); } 100% { box-shadow: none; } }
 .parlay-list .game-card { margin: 0; }
+.day-bar { margin-top: 10px; }
+.simulated-note { margin: 0 16px; }
+.day-chip { flex: none; }
+.parlay-days .hscroll { padding: 0; }
 .parlay-list .league-head { padding: 6px 0 0; }
 
 /* No connection */
@@ -1091,7 +1098,7 @@ button.wt-stat:hover { border-color: #3a4558; }
 .web .view .card[style*="margin:0 16px"] { margin-inline: 0 !important; }
 .web .view :is(.pad, .section-title, .hscroll, .league-head) { padding-inline: 0; }
 .web .view :is(.status-strip, .app-lock) { width: 100%; }
-.web .view .hscroll { flex-wrap: wrap; overflow: visible; }
+.web :is(.view, .page) .hscroll { flex-wrap: wrap; overflow: visible; }
 .web .view .pad > .seg { max-width: 460px; }
 .web .card { border-radius: 18px; }
 .web .card.tappable:hover, .web button.card:hover { border-color: #3a4558; }
@@ -1145,6 +1152,7 @@ button.wt-stat:hover { border-color: #3a4558; }
 }
 .web .feed > :is(.filterbar, .league-head, .empty, .pad, .section-title, .promo, .note, .build-parlay) { grid-column: 1 / -1; }
 .web .view .build-parlay { width: 100%; margin-inline: 0; }
+.web .view .simulated-note { margin-inline: 0; }
 .web .view :is(.cfb-select-label, .cfb-select) { margin-inline: 0; }
 .web .view .cfb-select { width: 100%; max-width: 460px; }
 .web .filterbar { top: -28px; padding: 16px 0 12px; margin-top: -8px; }
@@ -3388,6 +3396,7 @@ window.TO = window.TO || {};
   let loadingDayKey = '';
   let refreshQueued = false;
   let loadError = false;
+  let unreachable = false; // ESPN couldn't be reached at all (no network, or a page that can't call other sites)
   let cfbGroup = 'all';
 
   function todayBounds(now) {
@@ -3596,9 +3605,9 @@ window.TO = window.TO || {};
   }
 
   function selectedGroup() { return cfbGroup; }
-  async function fetchLeague(league, group = '80', now = TO.now()) {
+  async function fetchLeague(league, group = '80', now = TO.now(), days = scoreboardDays(now)) {
     const [path] = LEAGUES[league];
-    const responses = await Promise.all(scoreboardDays(now).map(async (date) => {
+    const responses = await Promise.all(days.map(async (date) => {
       const params = new URLSearchParams({ dates: date });
       if (league === 'ncaaf') {
         if (group !== 'all') params.set('groups', group);
@@ -3748,6 +3757,7 @@ window.TO = window.TO || {};
       cache.set(league, games);
     });
     loadError = failed && !results.some((r) => r.status === 'fulfilled');
+    unreachable = loadError;
     updatedAt = completedAt;
     updatedDayKey = requestedDay;
     loading = false;
@@ -3762,8 +3772,58 @@ window.TO = window.TO || {};
     }
   }
 
+  // ---------- Tomorrow's games (Home's Today / Tomorrow picker) ----------
+  // Fetched in the background and refreshed every 10 minutes. Raise UPCOMING_DAYS to offer more days ahead
+  // (ESPN's scoreboard takes one day per request). Odds for a future day load when someone opens that day.
+  const UPCOMING_DAYS = 1;
+  const UPCOMING_TTL = 10 * TO.MIN;
+  const upcoming = new Map(); // league -> scheduled games after today, up to UPCOMING_DAYS ahead
+  let upcomingAt = 0;
+  let upcomingDayKey = '';
+  let upcomingLoading = false;
+
+  /** 0 = today, 1 = tomorrow, ... in the viewer's own time zone. */
+  function dayOffset(start, now) {
+    const [today] = todayBounds(now);
+    const d = new Date(start);
+    return Math.round((new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime() - today) / TO.DAY);
+  }
+
+  const followedLeagues = () => TO.data?.settings?.sports?.filter((key) => LEAGUES[key]) || Object.keys(LEAGUES);
+
+  async function refreshUpcoming(now = TO.now()) {
+    const leagues = followedLeagues();
+    const fresh = localDayKey(now) === upcomingDayKey && now - upcomingAt < UPCOMING_TTL && leagues.every((l) => upcoming.has(l));
+    if (upcomingLoading || fresh) return;
+    upcomingLoading = true;
+    const [, todayEnd] = todayBounds(now);
+    const weekEnd = todayEnd + UPCOMING_DAYS * TO.DAY;
+    const first = espnDayKey(todayEnd);
+    const days = Array.from({ length: UPCOMING_DAYS + 1 }, (_, i) => shiftDayKey(first, i));
+    const results = await Promise.allSettled(leagues.map((league) => fetchLeague(league, cfbGroup, now, days)));
+    results.forEach((result, index) => {
+      const league = leagues[index];
+      // A failed league keeps what it had (or nothing) until the next scheduled refresh, so a dead network
+      // can't turn into a tight retry loop.
+      if (result.status !== 'fulfilled') { if (!upcoming.has(league)) upcoming.set(league, []); return; }
+      let games = result.value.filter((game) => game.start >= todayEnd && game.start < weekEnd && game.state !== 'final');
+      if (league === 'ncaaf' && cfbGroup === '80') games = games.filter((game) => game.home.rank || game.away.rank);
+      const before = new Map((upcoming.get(league) || []).map((game) => [game.id, game]));
+      games.forEach((game) => {
+        const old = before.get(game.id);
+        if (old) { game._oddsBooks = old._oddsBooks; game._oddsRequested = old._oddsRequested; }
+        game.odds = makeOdds(game, now);
+      });
+      upcoming.set(league, games);
+    });
+    upcomingAt = TO.now();
+    upcomingDayKey = localDayKey(now);
+    upcomingLoading = false;
+    if (results.some((r) => r.status === 'fulfilled')) TO.emit('live:updated');
+  }
+
   function byId(id) {
-    for (const games of cache.values()) {
+    for (const games of [...cache.values(), ...upcoming.values()]) {
       const game = games.find((item) => item.id === id || item.eventID === id);
       if (game) return game;
     }
@@ -3773,9 +3833,23 @@ window.TO = window.TO || {};
   // Keep the existing selection, slip and settlement code, but supply ESPN game data and prices.
   const simGame = S.game, simBoard = S.board, simOdds = S.odds, simCurrent = S.currentSelection, simGrade = S.grade;
   S.game = (id, now) => byId(id) || simGame(id, now);
+  /** options.day: 0 = today (live and today's games), 1 = tomorrow (up to UPCOMING_DAYS).
+   *  options.peek: just look (for counts), don't start loading odds. */
   S.board = (now = TO.now(), options = {}) => {
     if (localDayKey(now) !== updatedDayKey || now - updatedAt > 25000) refresh(now);
+    refreshUpcoming(now);
+    // Without ESPN, fall back to the simulated games so the demo still works (today only).
+    if (unreachable) return options.day ? [] : simBoard(now, options);
     const leagues = options.leagues || S.LEAGUE_ORDER;
+    const day = options.day || 0;
+    if (day > 0) {
+      const games = leagues.flatMap((league) => upcoming.get(league) || [])
+        .filter((game) => dayOffset(game.start, now) === day)
+        .sort((a, b) => a.start - b.start);
+      const needOdds = options.peek ? [] : games.filter((game) => !game._oddsRequested);
+      if (needOdds.length) { needOdds.forEach((game) => { game._oddsRequested = true; }); loadOdds(needOdds, now); }
+      return games;
+    }
     const [start, end] = todayBounds(now);
     return leagues.flatMap((league) => {
       const games = [...(cache.get(league) || [])];
@@ -3804,10 +3878,12 @@ window.TO = window.TO || {};
     refresh, loadDetails, stats: realStats, selectedGroup, setGroup(group) {
       cfbGroup = CFB_GROUPS.some(([id]) => id === group) ? group : 'all';
       cache.delete('ncaaf'); updatedAt = 0; updatedDayKey = '';
+      upcoming.delete('ncaaf'); upcomingAt = 0;
       if (loading) refreshQueued = true;
       else refresh();
     },
-    groups: CFB_GROUPS, get loading() { return loading; }, get failed() { return loadError; },
+    groups: CFB_GROUPS, get loading() { return loading; }, get failed() { return loadError; }, get offline() { return unreachable; },
+    days: UPCOMING_DAYS, get upcomingLoading() { return upcomingLoading || !upcomingAt; },
   };
 })(window.TO);
 
@@ -3880,7 +3956,47 @@ window.TIMEOUT_SUPABASE = {
     if (session?.access_token) TO.store.set(TOKEN_KEY, { ...session, expires_at: session.expires_at || Math.floor(Date.now() / 1000) + Number(session.expires_in || 3600) });
   }
 
-  api.init = async () => api.configured;
+  /** Falls back to the on-device demo accounts when Supabase can't be reached at all, e.g. on a shared page
+   *  that isn't allowed to contact other sites. Without internet the offline banner explains things instead. */
+  api.init = async () => {
+    if (!api.configured || !navigator.onLine) return api.configured;
+    try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 5000);
+      await fetch(`${config.url}/auth/v1/health`, { headers: { apikey: config.publishableKey }, signal: ctrl.signal });
+      clearTimeout(timer);
+    } catch (e) {
+      console.warn('Supabase unreachable, using on-device demo accounts:', e.message);
+      api.configured = false;
+      api.online = false;
+    }
+    return api.configured;
+  };
+
+  /** Where the confirmation email sends people back to: the page they signed up on (phone or computer view).
+   *  Supabase only allows it if it matches a Redirect URL in Authentication > URL Configuration. */
+  const returnUrl = () => `${location.origin}${location.pathname}`;
+
+  api.resendConfirmation = async (email) => {
+    await authRequest(`resend?redirect_to=${encodeURIComponent(returnUrl())}`, { type: 'signup', email: String(email || '').trim() });
+  };
+
+  /** The confirmation link lands back here with the new session in the URL hash (#access_token=…&refresh_token=…).
+   *  Saves it and cleans the URL. Returns 'signed-in', an error message, or null when there's nothing to handle. */
+  api.consumeAuthRedirect = () => {
+    const hash = new URLSearchParams(location.hash.replace(/^#/, ''));
+    const query = new URLSearchParams(location.search);
+    const error = hash.get('error_description') || query.get('error_description');
+    const access = hash.get('access_token');
+    if (!access && !error) return null;
+    history.replaceState(null, '', location.pathname);
+    if (error) return { error: error.replace(/\+/g, ' ') };
+    saveSession({ access_token: access, refresh_token: hash.get('refresh_token'), expires_in: Number(hash.get('expires_in') || 3600), expires_at: Number(hash.get('expires_at')) || undefined, token_type: hash.get('token_type') || 'bearer' });
+    lastSettingsSnapshot = '';
+    supportsAppPreferences = true;
+    return { signedIn: true, type: hash.get('type') };
+  };
+  api.sessionKey = TOKEN_KEY;
   api.hasToken = () => !!token();
   api.clearToken = () => TO.store.del(TOKEN_KEY);
   api.login = async (email, password) => {
@@ -3893,9 +4009,14 @@ window.TIMEOUT_SUPABASE = {
   };
   api.register = async ({ username, email, password, photoUrl }) => {
     if (!/^[a-zA-Z0-9_.]{3,20}$/.test(username)) throw new TO.AppError('invalid', 'Use 3–20 letters, numbers, dots or underscores.', { fields: { username: 'Use 3–20 letters, numbers, dots or underscores.' } });
-    const result = await authRequest('signup', { email: String(email || '').trim(), password, data: { username, display_name: username, avatar_url: photoUrl || null } });
-    if (!result.session?.access_token) throw new TO.AppError('email_confirmation', 'Check your email to confirm your account, then log in.');
-    saveSession(result.session);
+    const result = await authRequest(`signup?redirect_to=${encodeURIComponent(returnUrl())}`, { email: String(email || '').trim(), password, data: { username, display_name: username, avatar_url: photoUrl || null } });
+    // Supabase answers a sign-up for an email that's already registered with a user that has no identities.
+    if (Array.isArray(result.identities) && result.identities.length === 0) {
+      throw new TO.AppError('taken', 'An account with this email already exists. Log in instead.', { fields: { email: 'An account with this email already exists.' } });
+    }
+    // Email confirmation is on: there's no session until the link in the email is opened.
+    if (!result.session?.access_token && !result.access_token) return { needsConfirmation: true, email: String(email || '').trim() };
+    saveSession(result.session || result);
     lastSettingsSnapshot = '';
     supportsAppPreferences = true;
     const user = await api.me();
@@ -4556,6 +4677,7 @@ window.TIMEOUT_SUPABASE = {
     return {
       title: 'Build a parlay',
       body: `<div class="note blue">${icon('info', 16)}<span>Pick up to ${TO.RULES.maxLegs} sides from <b>different games</b>. Every pick has to win for the parlay to pay. ${inSlip.size ? `Games already on your slip are highlighted.` : ''}</span></div>
+        <div class="parlay-days">${TO.views.home.dayBar()}</div>
         ${full ? `<div class="note warn">${icon('alert', 16)}<span>Your parlay is full. Remove a pick on the slip to add a different one.</span></div>` : ''}
         <div class="stack parlay-list">${groups || `<div class="empty">${icon('target', 36)}<h3>No games open for betting</h3><p>Check back when the next games start.</p></div>`}</div>
         <div class="page-fab parlay-fab"><button class="btn primary full" data-act="parlay-review" ${n ? '' : 'disabled'}><span class="count-pill" style="background:var(--accent-ink);color:var(--accent)">${n}</span>${n > 1 ? `Review ${n}-pick parlay` : 'Review bet slip'}${n > 1 ? `<span class="display" style="margin-left:auto;font-size:19px">${TO.odds.fmt(TO.odds.fromDecimal(dec))}</span>` : ''}</button></div>`,
@@ -4678,8 +4800,32 @@ window.TIMEOUT_SUPABASE = {
   const activeFilter = () => ['pred', 'todo', 'sim'].includes(TO.data.feedFilter) ? 'all' : (TO.data.feedFilter || 'all');
   const sportsOnly = (bet) => bet.kind === 'sports' && bet.legs.every((leg) => leg.gameId && S.game(leg.gameId)?.league !== 'sim');
 
-  function boardGames() {
-    return S.board(TO.now(), { offDay: offDay(), leagues: S.LEAGUE_ORDER.filter((l) => l !== 'sim' && followed().includes(l)) }).filter((g) => !g.simulated && g.league !== 'sim');
+  // Which day the board shows: 0 = today, 1 = tomorrow. Live games are always today.
+  let feedDay = 0;
+  const activeDay = () => (activeFilter() === 'live' ? 0 : feedDay);
+
+  function boardGames(day = activeDay(), peek = false) {
+    return S.board(TO.now(), { offDay: offDay(), day, peek, leagues: S.LEAGUE_ORDER.filter((l) => l !== 'sim' && followed().includes(l)) }).filter((g) => !g.simulated && g.league !== 'sim');
+  }
+
+  function dayLabel(offset) {
+    if (offset === 0) return 'Today';
+    if (offset === 1) return 'Tomorrow';
+    const d = new Date(TO.now() + offset * TO.DAY);
+    return `${d.toLocaleDateString([], { weekday: 'short' })} ${d.getMonth() + 1}/${d.getDate()}`;
+  }
+
+  /** Today and tomorrow. Counts are games still to be played that day, in the sports being shown. */
+  function dayBar() {
+    if (activeFilter() === 'live' || TO.live.offline) return '';
+    const f = activeFilter();
+    const chips = [];
+    for (let i = 0; i <= TO.live.days; i++) {
+      const games = boardGames(i, true).filter((g) => g.state !== 'final' && (f === 'all' || g.league === f));
+      const n = games.length;
+      chips.push(`<button class="chip sm day-chip ${feedDay === i ? 'on' : ''}" data-act="feed-day" data-day="${i}" aria-pressed="${feedDay === i}">${esc(dayLabel(i))}${n ? `<span class="n">${n}</span>` : ''}</button>`);
+    }
+    return `<div class="hscroll day-bar" data-hkey="days" aria-label="Pick a day">${chips.join('')}</div>`;
   }
 
   function myOpenBetOn(ref) {
@@ -4778,8 +4924,8 @@ window.TIMEOUT_SUPABASE = {
       chips.push(chip(l, l === 'ncaaf' ? 'College Football' : S.LEAGUES[l].short === 'SIM' ? 'Sim League' : S.LEAGUES[l].short, n));
     }
     chips.push(`<button class="chip dashed" data-act="settings" data-section="sports">${icon('sliders', 14)}Edit</button>`);
-    const cfb = f === 'ncaaf' || f === 'all' ? `<label class="cfb-select-label" for="cfb-group">College Football</label><select id="cfb-group" class="cfb-select" aria-label="College football conference">${TO.live.groups.map(([id, name]) => `<option value="${id}" ${TO.live.selectedGroup() === id ? 'selected' : ''}>${esc(name)}</option>`).join('')}</select>` : '';
-    return `<div class="filterbar"><div class="hscroll" data-hkey="filters">${chips.join('')}</div>${cfb}</div>`;
+    const cfb = (f === 'ncaaf' || f === 'all') && !TO.live.offline ? `<label class="cfb-select-label" for="cfb-group">College Football</label><select id="cfb-group" class="cfb-select" aria-label="College football conference">${TO.live.groups.map(([id, name]) => `<option value="${id}" ${TO.live.selectedGroup() === id ? 'selected' : ''}>${esc(name)}</option>`).join('')}</select>` : '';
+    return `<div class="filterbar"><div class="hscroll" data-hkey="filters">${chips.join('')}</div>${dayBar()}${cfb}</div>`;
   }
 
   // ---------- Game card ----------
@@ -4862,11 +5008,16 @@ window.TIMEOUT_SUPABASE = {
   }
 
   function emptyBoard(f) {
-    const title = f === 'live' ? 'No live games right now' : 'Sorry, no games are happening for this sport today.';
+    const day = activeDay();
+    const when = day === 0 ? 'today' : day === 1 ? 'tomorrow' : `on ${dayLabel(day)}`;
+    const loading = day > 0 && TO.live.upcomingLoading;
+    const title = f === 'live' ? 'No live games right now' : loading ? 'Loading the schedule…' : `Sorry, no games are happening for this sport ${when}.`;
+    const next = f !== 'live' && !loading ? Array.from({ length: TO.live.days + 1 }, (_, i) => i).find((i) => i !== day && boardGames(i, true).some((g) => f === 'all' || g.league === f)) : null;
     return `<div class="empty">
-      ${icon('target', 40)}
+      ${icon(loading ? 'clock' : 'target', 40)}
       <h3>${title}</h3>
       ${f === 'live' ? '<p>Check back when a game is underway.</p>' : ''}
+      ${next != null ? `<button class="btn primary" data-act="feed-day" data-day="${next}">See games ${next === 1 ? 'tomorrow' : `on ${esc(dayLabel(next))}`}</button>` : ''}
     </div>`;
   }
 
@@ -4906,6 +5057,7 @@ window.TIMEOUT_SUPABASE = {
       <div class="stack feed" style="gap:12px">
         ${filterBar(games)}
         ${buildParlayControl()}
+        ${TO.live.offline ? `<div class="note blue simulated-note">${icon('info', 16)}<span>Live ESPN odds can't be reached here, so these are simulated games with real team names. Everything else works the same.</span></div>` : ''}
         ${feed(games)}
       </div>
     </div>`;
@@ -4941,10 +5093,18 @@ window.TIMEOUT_SUPABASE = {
     if (next.firstElementChild) syncNode(view.firstElementChild, next.firstElementChild);
   }
 
-  TO.views.home = { render, gameCard, refreshLive, boardGames };
+  TO.views.home = { render, gameCard, refreshLive, boardGames, dayBar };
 
   // ---------- Actions ----------
   const A = TO.actions;
+  A['feed-day'] = (el) => {
+    feedDay = Number(el.dataset.day) || 0;
+    TO.app.render();
+    if (TO.ui.pageOpen('parlay')) TO.ui.refreshPage('parlay');
+    const v = document.getElementById('view');
+    const fb = v && v.querySelector('.filterbar');
+    if (fb && v.scrollTop > fb.offsetTop) v.scrollTop = fb.offsetTop;
+  };
   A.filter = (el) => { TO.data.feedFilter = el.dataset.f; TO.state.save(); TO.app.render(); const v = document.getElementById('view'); const fb = v.querySelector('.filterbar'); if (fb && v.scrollTop > fb.offsetTop) v.scrollTop = fb.offsetTop; };
   A['go-sim'] = () => {
     if (!followed().includes('sim')) TO.state.setSetting('sports', [...followed(), 'sim']);
@@ -6359,15 +6519,96 @@ window.TIMEOUT_SUPABASE = {
     return `<div class="auth"><div class="auth-inner">${steps}${step > 1 ? `<button class="icon-btn" style="margin-left:-10px" data-act="ob-back" aria-label="Back">${icon('chevL', 22)}</button>` : ''}${body}<div class="stack-s" style="margin-top:auto">${next}</div></div></div>`;
   }
 
+  // ---------- Verify email (after Create account, until the link in the email is opened) ----------
+  const VERIFY_POLL_MS = 5000;
+  const VERIFY_GIVE_UP_MS = 30 * TO.MIN;
+  const RESEND_WAIT_MS = 60 * 1000;
+  // The password is kept in memory only, so this page can log in by itself once the email is confirmed.
+  const pending = { email: '', password: '', since: 0, resentAt: 0, timer: null, checking: false, note: '' };
+
+  function verify() {
+    const wait = Math.max(0, pending.resentAt + RESEND_WAIT_MS - Date.now());
+    const stopped = Date.now() - pending.since > VERIFY_GIVE_UP_MS;
+    return `<div class="auth"><div class="auth-inner verify-email">
+      <button type="button" class="icon-btn" style="margin-left:-10px" data-act="verify-cancel" aria-label="Back">${icon('chevL', 22)}</button>
+      <span class="verify-ic">${icon('send', 30)}</span>
+      <h1>Verify your email</h1>
+      <p class="sub">We sent a confirmation link to <b style="color:var(--text)">${esc(pending.email)}</b>. Open it to finish creating your account.</p>
+      ${av.formError ? `<div class="form-error">${esc(av.formError)}</div>` : ''}
+      <div class="note ${stopped ? '' : 'green'}">${stopped ? icon('clock', 16) : '<span class="verify-dot"></span>'}<span>${stopped
+        ? 'Still waiting. Once you\'ve opened the link, tap the button below.'
+        : 'Waiting for you to confirm. You\'ll be logged in automatically as soon as you do, on this page or from the link.'}</span></div>
+      ${pending.note ? `<div class="small muted" style="text-align:center">${esc(pending.note)}</div>` : ''}
+      <button type="button" class="btn primary full" data-act="verify-check" ${pending.checking ? 'disabled' : ''}>${pending.checking ? 'Checking…' : 'I\'ve confirmed my email'}</button>
+      <button type="button" class="btn ghost full" data-act="verify-resend" ${wait ? 'disabled' : ''}>${icon('refresh', 16)} ${wait ? `Resend email in ${Math.ceil(wait / 1000)}s` : 'Resend email'}</button>
+      <div class="small muted" style="text-align:center">Can't find it? Check spam or promotions. Wrong email? <button type="button" class="link-btn" data-act="verify-cancel">Start over</button></div>
+    </div></div>`;
+  }
+
+  function stopVerifyPolling() {
+    clearInterval(pending.timer);
+    pending.timer = null;
+  }
+
+  /** Tries to log in with the new account. Supabase refuses with "Email not confirmed" until the link is opened. */
+  async function checkVerified(manual) {
+    if (pending.checking || !pending.email) return;
+    if (!manual && (document.hidden || Date.now() - pending.since > VERIFY_GIVE_UP_MS)) return;
+    pending.checking = true;
+    if (manual) render();
+    try {
+      // Another tab may already have signed in from the email link.
+      if (TO.api.hasToken()) { await finishVerified(await TO.api.me()); return; }
+      const { user } = await TO.api.login(pending.email, pending.password);
+      await finishVerified(user);
+    } catch (e) {
+      if (!(e instanceof TO.AppError)) throw e;
+      const unconfirmed = /not confirmed|confirm/i.test(e.message);
+      if (manual) av.formError = unconfirmed ? 'Your email isn\'t confirmed yet. Open the link we sent, then try again.' : e.message;
+    } finally {
+      pending.checking = false;
+      if (av.screen === 'verify') render();
+    }
+  }
+
+  async function finishVerified(user) {
+    stopVerifyPolling();
+    pending.password = '';
+    St.adoptServerUser(user, await TO.api.loadState());
+    av.values = {}; av.photo = null;
+    av.screen = 'onboard';
+    TO.tester.mark('signup');
+    TO.app.boot(); // new accounts land in onboarding
+    ui.toast({ kind: 'win', title: 'Email verified', msg: `Welcome to TimeOut, @${user.username}.` });
+  }
+
+  function startVerify(email, password) {
+    stopVerifyPolling();
+    Object.assign(pending, { email, password, since: Date.now(), resentAt: Date.now(), checking: false, note: '' });
+    av.screen = 'verify'; av.errors = {}; av.formError = '';
+    render();
+    pending.timer = setInterval(() => {
+      if (av.screen !== 'verify') { stopVerifyPolling(); return; }
+      checkVerified(false);
+      render(); // keeps the resend countdown current
+    }, VERIFY_POLL_MS);
+  }
+
+  // The email link signs in whichever tab it opens in. When that tab saves the session, this one follows.
+  window.addEventListener('storage', (e) => {
+    if (av.screen === 'verify' && e.key === TO.api.sessionKey && e.newValue) checkVerified(true);
+  });
+
   function render() {
     const root = document.getElementById('app-body');
-    const map = { welcome, login, signup, onboard };
+    const map = { welcome, login, signup, onboard, verify };
     root.innerHTML = map[av.screen]();
     const first = root.querySelector('input:not([type=file])');
     if (first && av.screen !== 'welcome' && !av.errors.password && av.screen !== 'onboard') setTimeout(() => { try { first.focus({ preventScroll: true }); } catch (e) { /* ignore */ } }, 50);
   }
 
   function show(screen) {
+    if (screen !== 'verify') { stopVerifyPolling(); pending.password = ''; }
     av.screen = screen; av.errors = {}; av.formError = '';
     if (screen === 'welcome') { av.values = {}; av.photo = null; }
     render();
@@ -6435,7 +6676,9 @@ window.TIMEOUT_SUPABASE = {
       try {
         if (av.errors.confirm) throw new TO.AppError('invalid', 'Fix the highlighted fields.');
         setBusy(form, 'Creating account…');
-        const { user, state } = await TO.api.register({ username: (v['su-user'] || '').trim(), email: (v['su-email'] || '').trim(), password: v['su-pw'] || '', photoUrl: av.photo });
+        const result = await TO.api.register({ username: (v['su-user'] || '').trim(), email: (v['su-email'] || '').trim(), password: v['su-pw'] || '', photoUrl: av.photo });
+        if (result.needsConfirmation) { startVerify(result.email, v['su-pw'] || ''); return; }
+        const { user, state } = result;
         St.adoptServerUser(user, state);
         av.values = {}; av.photo = null;
         TO.tester.mark('signup');
@@ -6462,6 +6705,21 @@ window.TIMEOUT_SUPABASE = {
 
   const A = TO.actions;
   A['auth-go'] = (el) => show(el.dataset.s);
+  A['verify-check'] = () => checkVerified(true);
+  A['verify-cancel'] = () => { av.values = { 'su-user': av.values['su-user'], 'su-email': pending.email }; show('signup'); };
+  A['verify-resend'] = async () => {
+    if (Date.now() < pending.resentAt + RESEND_WAIT_MS) return;
+    try {
+      await TO.api.resendConfirmation(pending.email);
+      pending.resentAt = Date.now();
+      pending.note = `Sent a new link to ${pending.email}.`;
+      av.formError = '';
+    } catch (e) {
+      if (!(e instanceof TO.AppError)) throw e;
+      av.formError = e.message;
+    }
+    render();
+  };
   A['auth-demo'] = async (el) => {
     if (TO.api.configured) return;
     if (!TO.net.online()) { ui.toast({ kind: 'loss', title: 'No internet connection', msg: 'Check your Wi-Fi or data and try again.' }); return; }
@@ -7064,9 +7322,17 @@ window.TIMEOUT_SUPABASE = {
   async function start() {
     fit();
     renderNet();
+    // Arriving from the link in a confirmation email: the URL carries the new session (or why it failed).
+    const redirect = TO.api.configured && TO.api.consumeAuthRedirect ? TO.api.consumeAuthRedirect() : null;
     if (await TO.api.init()) await restoreServerSession();
     else St.ensureDemoAccount();
     app.boot();
+    if (redirect && redirect.signedIn && TO.account) {
+      ui.toast({ kind: 'win', title: 'Email verified', msg: `You're logged in as @${TO.account.username}.` });
+    } else if (redirect && redirect.error && !TO.account) {
+      TO.views.auth.show('login');
+      ui.toast({ kind: 'loss', title: 'That link didn\'t work', msg: `${redirect.error}. Log in, or create your account again to get a new link.`, ms: 8000 });
+    }
     setInterval(() => app.tick(false), 1000);
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);

@@ -145,7 +145,7 @@ button.wt-stat:hover { border-color: #3a4558; }
 .web .view .card[style*="margin:0 16px"] { margin-inline: 0 !important; }
 .web .view :is(.pad, .section-title, .hscroll, .league-head) { padding-inline: 0; }
 .web .view :is(.status-strip, .app-lock) { width: 100%; }
-.web .view .hscroll { flex-wrap: wrap; overflow: visible; }
+.web :is(.view, .page) .hscroll { flex-wrap: wrap; overflow: visible; }
 .web .view .pad > .seg { max-width: 460px; }
 .web .card { border-radius: 18px; }
 .web .card.tappable:hover, .web button.card:hover { border-color: #3a4558; }
@@ -199,6 +199,7 @@ button.wt-stat:hover { border-color: #3a4558; }
 }
 .web .feed > :is(.filterbar, .league-head, .empty, .pad, .section-title, .promo, .note, .build-parlay) { grid-column: 1 / -1; }
 .web .view .build-parlay { width: 100%; margin-inline: 0; }
+.web .view .simulated-note { margin-inline: 0; }
 .web .view :is(.cfb-select-label, .cfb-select) { margin-inline: 0; }
 .web .view .cfb-select { width: 100%; max-width: 460px; }
 .web .filterbar { top: -28px; padding: 16px 0 12px; margin-top: -8px; }

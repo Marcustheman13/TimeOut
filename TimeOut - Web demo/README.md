@@ -37,6 +37,7 @@ in the demo bar at the top of the page jumps between the two. The demo bar isn't
 
 | Spec item | Where to find it |
 | --- | --- |
+| Today's and tomorrow's games | Home: the **Today / Tomorrow** picker under the sport filters. Tomorrow's odds load when you open it. |
 | Home: balance + open bets at top, live feed by sport, 3-tap betting | Home tab. Tap any price, then **Place bet** (2 taps). A new price replaces the pick; closing the slip (✕) clears it. |
 | Parlays | In the slip, **Add another pick for a parlay** opens a page of open games. Pick up to 3, then **Review parlay**. |
 | Odds/scores refresh ≤ 30 s; odds change on an open slip needs re-confirm | Live odds refresh every 15 s. Slip shows old → new price and an **Accept new odds** button. |
@@ -77,6 +78,9 @@ The web demo uses Supabase Auth for email/password accounts, saves user preferen
 
 1. The main schema and bet RPCs have been applied. Run [`../server/db/supabase-settings-migration.sql`](../server/db/supabase-settings-migration.sql) in **SQL Editor** to add the JSON settings field used for locked apps and other app preferences.
 2. Confirm **Email provider** is enabled under **Authentication → Providers**. Email confirmation is enabled, so new users must confirm their email before logging in.
+   After **Create account**, the app shows a *Verify your email* page. It logs the new user in by itself as soon as the email is confirmed, and the link in the email also logs them straight in. For the link to come back to the app, add these under **Authentication → URL Configuration → Redirect URLs** (plus your real site's address once it's hosted):
+   - `http://localhost:3000/**`
+   - `http://localhost:8765/**` (only if you preview with the static server)
 3. Serve this app over HTTP (`cd server && npm start`, then open `http://localhost:3000`). Supabase sign-in does not work from the serverless `file://` mode.
 
 The frontend's publishable key is in `js/supabase-config.js`; publishable keys are intended to be public. The main schema enables row-level security, and the RPCs verify the signed-in owner before changing bets or wallet balances. Never put a Supabase secret/service-role key in this project or in browser code. The legacy local demo remains available only when Supabase is not configured.

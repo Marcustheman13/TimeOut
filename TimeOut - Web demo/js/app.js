@@ -328,9 +328,17 @@
   async function start() {
     fit();
     renderNet();
+    // Arriving from the link in a confirmation email: the URL carries the new session (or why it failed).
+    const redirect = TO.api.configured && TO.api.consumeAuthRedirect ? TO.api.consumeAuthRedirect() : null;
     if (await TO.api.init()) await restoreServerSession();
     else St.ensureDemoAccount();
     app.boot();
+    if (redirect && redirect.signedIn && TO.account) {
+      ui.toast({ kind: 'win', title: 'Email verified', msg: `You're logged in as @${TO.account.username}.` });
+    } else if (redirect && redirect.error && !TO.account) {
+      TO.views.auth.show('login');
+      ui.toast({ kind: 'loss', title: 'That link didn\'t work', msg: `${redirect.error}. Log in, or create your account again to get a new link.`, ms: 8000 });
+    }
     setInterval(() => app.tick(false), 1000);
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);

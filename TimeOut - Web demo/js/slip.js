@@ -277,6 +277,7 @@
     return {
       title: 'Build a parlay',
       body: `<div class="note blue">${icon('info', 16)}<span>Pick up to ${TO.RULES.maxLegs} sides from <b>different games</b>. Every pick has to win for the parlay to pay. ${inSlip.size ? `Games already on your slip are highlighted.` : ''}</span></div>
+        <div class="parlay-days">${TO.views.home.dayBar()}</div>
         ${full ? `<div class="note warn">${icon('alert', 16)}<span>Your parlay is full. Remove a pick on the slip to add a different one.</span></div>` : ''}
         <div class="stack parlay-list">${groups || `<div class="empty">${icon('target', 36)}<h3>No games open for betting</h3><p>Check back when the next games start.</p></div>`}</div>
         <div class="page-fab parlay-fab"><button class="btn primary full" data-act="parlay-review" ${n ? '' : 'disabled'}><span class="count-pill" style="background:var(--accent-ink);color:var(--accent)">${n}</span>${n > 1 ? `Review ${n}-pick parlay` : 'Review bet slip'}${n > 1 ? `<span class="display" style="margin-left:auto;font-size:19px">${TO.odds.fmt(TO.odds.fromDecimal(dec))}</span>` : ''}</button></div>`,

@@ -106,15 +106,96 @@
     return `<div class="auth"><div class="auth-inner">${steps}${step > 1 ? `<button class="icon-btn" style="margin-left:-10px" data-act="ob-back" aria-label="Back">${icon('chevL', 22)}</button>` : ''}${body}<div class="stack-s" style="margin-top:auto">${next}</div></div></div>`;
   }
 
+  // ---------- Verify email (after Create account, until the link in the email is opened) ----------
+  const VERIFY_POLL_MS = 5000;
+  const VERIFY_GIVE_UP_MS = 30 * TO.MIN;
+  const RESEND_WAIT_MS = 60 * 1000;
+  // The password is kept in memory only, so this page can log in by itself once the email is confirmed.
+  const pending = { email: '', password: '', since: 0, resentAt: 0, timer: null, checking: false, note: '' };
+
+  function verify() {
+    const wait = Math.max(0, pending.resentAt + RESEND_WAIT_MS - Date.now());
+    const stopped = Date.now() - pending.since > VERIFY_GIVE_UP_MS;
+    return `<div class="auth"><div class="auth-inner verify-email">
+      <button type="button" class="icon-btn" style="margin-left:-10px" data-act="verify-cancel" aria-label="Back">${icon('chevL', 22)}</button>
+      <span class="verify-ic">${icon('send', 30)}</span>
+      <h1>Verify your email</h1>
+      <p class="sub">We sent a confirmation link to <b style="color:var(--text)">${esc(pending.email)}</b>. Open it to finish creating your account.</p>
+      ${av.formError ? `<div class="form-error">${esc(av.formError)}</div>` : ''}
+      <div class="note ${stopped ? '' : 'green'}">${stopped ? icon('clock', 16) : '<span class="verify-dot"></span>'}<span>${stopped
+        ? 'Still waiting. Once you\'ve opened the link, tap the button below.'
+        : 'Waiting for you to confirm. You\'ll be logged in automatically as soon as you do, on this page or from the link.'}</span></div>
+      ${pending.note ? `<div class="small muted" style="text-align:center">${esc(pending.note)}</div>` : ''}
+      <button type="button" class="btn primary full" data-act="verify-check" ${pending.checking ? 'disabled' : ''}>${pending.checking ? 'Checking…' : 'I\'ve confirmed my email'}</button>
+      <button type="button" class="btn ghost full" data-act="verify-resend" ${wait ? 'disabled' : ''}>${icon('refresh', 16)} ${wait ? `Resend email in ${Math.ceil(wait / 1000)}s` : 'Resend email'}</button>
+      <div class="small muted" style="text-align:center">Can't find it? Check spam or promotions. Wrong email? <button type="button" class="link-btn" data-act="verify-cancel">Start over</button></div>
+    </div></div>`;
+  }
+
+  function stopVerifyPolling() {
+    clearInterval(pending.timer);
+    pending.timer = null;
+  }
+
+  /** Tries to log in with the new account. Supabase refuses with "Email not confirmed" until the link is opened. */
+  async function checkVerified(manual) {
+    if (pending.checking || !pending.email) return;
+    if (!manual && (document.hidden || Date.now() - pending.since > VERIFY_GIVE_UP_MS)) return;
+    pending.checking = true;
+    if (manual) render();
+    try {
+      // Another tab may already have signed in from the email link.
+      if (TO.api.hasToken()) { await finishVerified(await TO.api.me()); return; }
+      const { user } = await TO.api.login(pending.email, pending.password);
+      await finishVerified(user);
+    } catch (e) {
+      if (!(e instanceof TO.AppError)) throw e;
+      const unconfirmed = /not confirmed|confirm/i.test(e.message);
+      if (manual) av.formError = unconfirmed ? 'Your email isn\'t confirmed yet. Open the link we sent, then try again.' : e.message;
+    } finally {
+      pending.checking = false;
+      if (av.screen === 'verify') render();
+    }
+  }
+
+  async function finishVerified(user) {
+    stopVerifyPolling();
+    pending.password = '';
+    St.adoptServerUser(user, await TO.api.loadState());
+    av.values = {}; av.photo = null;
+    av.screen = 'onboard';
+    TO.tester.mark('signup');
+    TO.app.boot(); // new accounts land in onboarding
+    ui.toast({ kind: 'win', title: 'Email verified', msg: `Welcome to TimeOut, @${user.username}.` });
+  }
+
+  function startVerify(email, password) {
+    stopVerifyPolling();
+    Object.assign(pending, { email, password, since: Date.now(), resentAt: Date.now(), checking: false, note: '' });
+    av.screen = 'verify'; av.errors = {}; av.formError = '';
+    render();
+    pending.timer = setInterval(() => {
+      if (av.screen !== 'verify') { stopVerifyPolling(); return; }
+      checkVerified(false);
+      render(); // keeps the resend countdown current
+    }, VERIFY_POLL_MS);
+  }
+
+  // The email link signs in whichever tab it opens in. When that tab saves the session, this one follows.
+  window.addEventListener('storage', (e) => {
+    if (av.screen === 'verify' && e.key === TO.api.sessionKey && e.newValue) checkVerified(true);
+  });
+
   function render() {
     const root = document.getElementById('app-body');
-    const map = { welcome, login, signup, onboard };
+    const map = { welcome, login, signup, onboard, verify };
     root.innerHTML = map[av.screen]();
     const first = root.querySelector('input:not([type=file])');
     if (first && av.screen !== 'welcome' && !av.errors.password && av.screen !== 'onboard') setTimeout(() => { try { first.focus({ preventScroll: true }); } catch (e) { /* ignore */ } }, 50);
   }
 
   function show(screen) {
+    if (screen !== 'verify') { stopVerifyPolling(); pending.password = ''; }
     av.screen = screen; av.errors = {}; av.formError = '';
     if (screen === 'welcome') { av.values = {}; av.photo = null; }
     render();
@@ -182,7 +263,9 @@
       try {
         if (av.errors.confirm) throw new TO.AppError('invalid', 'Fix the highlighted fields.');
         setBusy(form, 'Creating account…');
-        const { user, state } = await TO.api.register({ username: (v['su-user'] || '').trim(), email: (v['su-email'] || '').trim(), password: v['su-pw'] || '', photoUrl: av.photo });
+        const result = await TO.api.register({ username: (v['su-user'] || '').trim(), email: (v['su-email'] || '').trim(), password: v['su-pw'] || '', photoUrl: av.photo });
+        if (result.needsConfirmation) { startVerify(result.email, v['su-pw'] || ''); return; }
+        const { user, state } = result;
         St.adoptServerUser(user, state);
         av.values = {}; av.photo = null;
         TO.tester.mark('signup');
@@ -209,6 +292,21 @@
 
   const A = TO.actions;
   A['auth-go'] = (el) => show(el.dataset.s);
+  A['verify-check'] = () => checkVerified(true);
+  A['verify-cancel'] = () => { av.values = { 'su-user': av.values['su-user'], 'su-email': pending.email }; show('signup'); };
+  A['verify-resend'] = async () => {
+    if (Date.now() < pending.resentAt + RESEND_WAIT_MS) return;
+    try {
+      await TO.api.resendConfirmation(pending.email);
+      pending.resentAt = Date.now();
+      pending.note = `Sent a new link to ${pending.email}.`;
+      av.formError = '';
+    } catch (e) {
+      if (!(e instanceof TO.AppError)) throw e;
+      av.formError = e.message;
+    }
+    render();
+  };
   A['auth-demo'] = async (el) => {
     if (TO.api.configured) return;
     if (!TO.net.online()) { ui.toast({ kind: 'loss', title: 'No internet connection', msg: 'Check your Wi-Fi or data and try again.' }); return; }

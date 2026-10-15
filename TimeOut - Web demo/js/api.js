@@ -57,7 +57,47 @@
     if (session?.access_token) TO.store.set(TOKEN_KEY, { ...session, expires_at: session.expires_at || Math.floor(Date.now() / 1000) + Number(session.expires_in || 3600) });
   }
 
-  api.init = async () => api.configured;
+  /** Falls back to the on-device demo accounts when Supabase can't be reached at all, e.g. on a shared page
+   *  that isn't allowed to contact other sites. Without internet the offline banner explains things instead. */
+  api.init = async () => {
+    if (!api.configured || !navigator.onLine) return api.configured;
+    try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 5000);
+      await fetch(`${config.url}/auth/v1/health`, { headers: { apikey: config.publishableKey }, signal: ctrl.signal });
+      clearTimeout(timer);
+    } catch (e) {
+      console.warn('Supabase unreachable, using on-device demo accounts:', e.message);
+      api.configured = false;
+      api.online = false;
+    }
+    return api.configured;
+  };
+
+  /** Where the confirmation email sends people back to: the page they signed up on (phone or computer view).
+   *  Supabase only allows it if it matches a Redirect URL in Authentication > URL Configuration. */
+  const returnUrl = () => `${location.origin}${location.pathname}`;
+
+  api.resendConfirmation = async (email) => {
+    await authRequest(`resend?redirect_to=${encodeURIComponent(returnUrl())}`, { type: 'signup', email: String(email || '').trim() });
+  };
+
+  /** The confirmation link lands back here with the new session in the URL hash (#access_token=…&refresh_token=…).
+   *  Saves it and cleans the URL. Returns 'signed-in', an error message, or null when there's nothing to handle. */
+  api.consumeAuthRedirect = () => {
+    const hash = new URLSearchParams(location.hash.replace(/^#/, ''));
+    const query = new URLSearchParams(location.search);
+    const error = hash.get('error_description') || query.get('error_description');
+    const access = hash.get('access_token');
+    if (!access && !error) return null;
+    history.replaceState(null, '', location.pathname);
+    if (error) return { error: error.replace(/\+/g, ' ') };
+    saveSession({ access_token: access, refresh_token: hash.get('refresh_token'), expires_in: Number(hash.get('expires_in') || 3600), expires_at: Number(hash.get('expires_at')) || undefined, token_type: hash.get('token_type') || 'bearer' });
+    lastSettingsSnapshot = '';
+    supportsAppPreferences = true;
+    return { signedIn: true, type: hash.get('type') };
+  };
+  api.sessionKey = TOKEN_KEY;
   api.hasToken = () => !!token();
   api.clearToken = () => TO.store.del(TOKEN_KEY);
   api.login = async (email, password) => {
@@ -70,9 +110,14 @@
   };
   api.register = async ({ username, email, password, photoUrl }) => {
     if (!/^[a-zA-Z0-9_.]{3,20}$/.test(username)) throw new TO.AppError('invalid', 'Use 3–20 letters, numbers, dots or underscores.', { fields: { username: 'Use 3–20 letters, numbers, dots or underscores.' } });
-    const result = await authRequest('signup', { email: String(email || '').trim(), password, data: { username, display_name: username, avatar_url: photoUrl || null } });
-    if (!result.session?.access_token) throw new TO.AppError('email_confirmation', 'Check your email to confirm your account, then log in.');
-    saveSession(result.session);
+    const result = await authRequest(`signup?redirect_to=${encodeURIComponent(returnUrl())}`, { email: String(email || '').trim(), password, data: { username, display_name: username, avatar_url: photoUrl || null } });
+    // Supabase answers a sign-up for an email that's already registered with a user that has no identities.
+    if (Array.isArray(result.identities) && result.identities.length === 0) {
+      throw new TO.AppError('taken', 'An account with this email already exists. Log in instead.', { fields: { email: 'An account with this email already exists.' } });
+    }
+    // Email confirmation is on: there's no session until the link in the email is opened.
+    if (!result.session?.access_token && !result.access_token) return { needsConfirmation: true, email: String(email || '').trim() };
+    saveSession(result.session || result);
     lastSettingsSnapshot = '';
     supportsAppPreferences = true;
     const user = await api.me();
