@@ -55,7 +55,7 @@
       o.total.length ? block(`Total ${Sp.unit} · both teams combined`, o.total, (s) => (s.side === 'over' ? 'Over' : 'Under')) : '',
     ].filter(Boolean);
     if (!available.length) return `<div class="card small muted">ESPN betting lines are not available for this game yet.</div>`;
-    return `<div class="card stack">
+    return `<div class="card stack" id="game-markets">
       <div class="spread"><h2 style="margin:0;font-size:17px">Pick a side</h2><span class="tiny faint bold">ESPN odds refresh every 25 seconds</span></div>
       ${available.join('')}
       <div class="tiny faint">ESPN lines and prices. Tap a price to add it to your bet slip.</div>
@@ -80,12 +80,20 @@
     return `<div class="card stack"><h2 style="margin:0;font-size:17px">ESPN team information</h2>${teams.map((team) => `<div class="spread"><span class="row-s bold">${ui.teamBadge(team, 22)}${esc(team.name)}</span><span class="small muted">${[team.rank ? `#${team.rank}` : '', team.record || ''].filter(Boolean).map(esc).join(' · ')}</span></div>`).join('')}</div>`;
   }
 
+  /** Floating button: jumps to the odds, or back to the slip once there's a pick on it. */
+  function fab(g, o) {
+    if (g.state !== 'live' && g.state !== 'scheduled') return '';
+    const n = TO.slip.legs.length;
+    if (n) return `<div class="page-fab game-fab has-slip"><button class="btn primary full" data-act="open-slip">${icon('ticket', 18)} Open bet slip · ${n} pick${n === 1 ? '' : 's'}</button></div>`;
+    return `<div class="page-fab game-fab"><button class="btn primary full" data-act="game-bet" ${o.suspended ? 'disabled' : ''}>${icon(o.suspended ? 'lock' : 'ticket', 18)} ${o.suspended ? 'Betting is closed on this game' : 'Make a bet'}</button></div>`;
+  }
+
   function render() {
     const g = S.game(currentId);
     const o = S.odds(currentId);
     return {
       title: `${esc(g.away.abbr)} @ ${esc(g.home.abbr)}`,
-      body: `${scoreboard(g)}${banner(g, o)}${myBets(g)}${markets(g, o)}${statsCard(g)}${researchCard(g)}`,
+      body: `${scoreboard(g)}${banner(g, o)}${myBets(g)}${markets(g, o)}${statsCard(g)}${researchCard(g)}${fab(g, o)}`,
     };
   }
 
@@ -99,4 +107,13 @@
 
   TO.views.game = { open, refresh: () => ui.refreshPage('game') };
   TO.actions['open-game'] = (el) => open(el.dataset.id);
+  TO.actions['game-bet'] = () => {
+    const m = document.getElementById('game-markets');
+    if (!m) return;
+    m.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    m.classList.remove('flash');
+    void m.offsetWidth; // restart the highlight
+    m.classList.add('flash');
+    ui.toast({ kind: 'info', title: 'Pick a price', msg: 'Tap any odds and your bet slip opens with it.', ms: 2600 });
+  };
 })(window.TO);

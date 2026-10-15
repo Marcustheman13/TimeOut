@@ -68,6 +68,11 @@
           ${b('t-zero', 'lock', 'Set betting balance to 0', 'wide')}
         </div>
       </div>
+      <div class="tgroup"><h3>Connection</h3>
+        <div class="tgrid">
+          <button class="tbtn wide ${TO.net.simulatedOffline ? 'on' : ''}" data-act="t-offline">${icon('wifiOff', 15)}<span>${TO.net.simulatedOffline ? 'No internet: ON (tap to reconnect)' : 'Simulate losing internet'}</span></button>
+        </div>
+      </div>
       <div class="tgroup"><h3>Friends</h3>
         <div class="tgrid">
           ${b('t-fr', 'userPlus', 'Get a friend request')}${b('t-ch', 'target', 'Get a bet challenge')}
@@ -165,6 +170,10 @@
   };
   A['t-use'] = () => { TO.state.addUsage(10); after(); };
   A['t-use30'] = () => { TO.state.addUsage(30); after(); };
+  A['t-offline'] = () => {
+    TO.net.simulatedOffline = !TO.net.simulatedOffline;
+    TO.app.netChanged();
+  };
   A['t-zero'] = () => {
     const w = TO.data.wallet;
     w.balance = 0; w.lockedOut = true;

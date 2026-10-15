@@ -128,7 +128,9 @@
     el.dataset.page = name;
     el._opts = opts;
     el.innerHTML = `<div class="page-top"><button class="icon-btn" data-act="close-page" data-name="${name}" aria-label="Back">${icon('chevL', 22)}</button><div class="t"></div><div class="pt-right"></div></div><div class="page-scroll"></div>`;
-    ui.layer().insertBefore(el, ui.layer().firstChild);
+    // Newer pages stack above older ones (a game opened from the parlay builder), but below sheets and dialogs.
+    const pages = ui.layer().querySelectorAll('[data-page]');
+    ui.layer().insertBefore(el, pages.length ? pages[pages.length - 1].nextSibling : ui.layer().firstChild);
     ui.refreshPage(name);
     return el;
   };
@@ -184,6 +186,13 @@
     setTimeout(kill, ms);
   };
   TO.on('toast', (t) => ui.toast(t));
+
+  /** For actions that need a connection (placing bets). False, with a toast, when offline. */
+  TO.net.guard = () => {
+    if (TO.net.online()) return true;
+    ui.toast({ kind: 'loss', title: 'No internet connection', msg: 'Betting is paused until you\'re back online.' });
+    return false;
+  };
 
   // ---------- Images ----------
   /** Reads an uploaded photo and returns a square 256px JPEG data URL. */

@@ -81,6 +81,7 @@ When we want everyone on one database, one person creates a free Supabase or Neo
    ```
    You should see `TimeOut is running at http://localhost:3000`. The first run creates the tables and sample data automatically.
 5. **Open the app:** <http://localhost:3000>. On a laptop it shows a phone with a tester console beside it.
+   For the full-window browser version, open <http://localhost:3000/web>.
 
 **Test accounts** (from `server/db/seed.sql`, all use the password `timeout123`): `demo`, `mike_t`, `jess.plays`, `lily_k`.
 Or press **Create account** to make your own.
@@ -100,7 +101,7 @@ On a shared Supabase or Neon database you can run them while the server is up, o
 **Shared database setup (one person, once):** create a free project at [supabase.com](https://supabase.com) or [neon.tech](https://neon.tech), copy its Postgres connection string
 (Supabase: *Connect > Session pooler > URI*), put it in your `server/.env` as `DATABASE_URL=...`, run `npm run db:reset`, then send the string to teammates privately.
 
-**No server?** You can still double-click `TimeOut - Web demo/index.html` (or `dist/TimeOut.html`). It runs in offline demo mode with accounts saved only in that browser.
+**No server?** You can still double-click `TimeOut - Web demo/index.html` or `web.html` (or `dist/TimeOut.html` / `dist/TimeOut-web.html`). It runs in offline demo mode with accounts saved only in that browser.
 
 ---
 
@@ -141,6 +142,8 @@ TimeOut/
 │   ├── scripts/                 ← db:reset and db:query
 │   └── .env.example             ← copy to .env (which git ignores)
 ├── TimeOut - Web demo/          ← the clickable web app (HTML/CSS/JS)
+│   ├── index.html / web.html     ← phone version / browser version of the same app
+│   ├── css/web.css, js/web.js   ← the browser version's layout (only web.html loads them)
 │   ├── js/api.js                ← every call from the web app to the server goes through here
 │   └── README.md                ← what each screen does and the tester console
 └── TimeOut - iOS App/           ← SwiftUI iOS prototype (open the .xcodeproj in Xcode)
@@ -172,7 +175,7 @@ All requests and responses are JSON. Errors look like `{ "error": { "code", "mes
   ```
 - **Never commit `server/.env`** or paste the database connection string into code, issues or chat. `.gitignore` already blocks `.env`.
 - If you change `schema.sql`, also update `seed.sql` and the ERD, and tell the team to run `npm run db:reset`.
-- After editing anything in `TimeOut - Web demo/css` or `js`, run `python3 build.py` in that folder if you want the single-file `dist/TimeOut.html` updated.
+- After editing anything in `TimeOut - Web demo/css` or `js`, run `python3 build.py` in that folder if you want the single-file `dist/TimeOut.html` and `dist/TimeOut-web.html` updated.
 
 ## What's Still Stored Only in the Browser
 

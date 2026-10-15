@@ -11,6 +11,15 @@
 <link rel="stylesheet" href="css/app.css">
 </head>
 <body>
+<!-- Demo bar: sits above the app and isn't part of TimeOut. Switches views and holds the demo controls. -->
+<header class="demo-bar" id="demo-bar">
+  <div class="db-left"><span class="db-tag">Demo</span><span class="db-title">TimeOut prototype</span></div>
+  <nav class="db-switch" aria-label="Switch view">
+    <a href="index.html" class="on" aria-current="page"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M11 18h2"/></svg>Phone</a>
+    <a href="web.html"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>Computer</a>
+  </nav>
+  <div class="db-right"><span class="db-hint">Demo controls are beside the phone</span></div>
+</header>
 <div class="stage">
   <div class="device-slot" id="device-slot">
     <div class="device" id="device">

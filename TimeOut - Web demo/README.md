@@ -10,6 +10,20 @@ For the backend, database and team setup, see the [main README](../README.md).
 - **Offline demo:** use the app with Supabase config removed. Accounts and state are then saved only in that browser.
 - On a laptop it shows as a phone with a **tester console** beside it. On a real phone it fills the screen, and the tester console moves to **Menu (☰) > Tester tools**.
 
+## Two versions, one app
+
+| | Phone version | Browser version |
+| --- | --- | --- |
+| Page | `index.html` (server: <http://localhost:3000>) | `web.html` (server: <http://localhost:3000/web>) |
+| Single file | `dist/TimeOut.html` | `dist/TimeOut-web.html` |
+| Layout | Phone frame, tab bar, menu drawer, bottom sheets | Sidebar, wide content grid, bet slip docked on the right, dialogs instead of sheets. Fits any window size: the sidebar shrinks to icons, then to a ☰ menu, and the slip becomes a dialog when there's no room to dock it. |
+| Demo controls (tester console) | Beside the phone | **Demo controls** dropdown in the demo bar |
+
+Both run the same JavaScript, so every feature works the same in each and your login carries over between them.
+The browser layout lives in `css/web.css` and `js/web.js`, which only `web.html` loads. To change how a feature
+works, edit the shared files in `js/`; to change only the desktop layout, edit those two. The **Phone / Computer** switch
+in the demo bar at the top of the page jumps between the two. The demo bar isn't part of TimeOut; it's hidden on a real phone.
+
 ## Logging in
 
 - **Try the demo account** on the welcome screen logs straight in. It comes with bet history, open bets, friends, a team, a pending friend request and a bet challenge.
@@ -23,17 +37,19 @@ For the backend, database and team setup, see the [main README](../README.md).
 
 | Spec item | Where to find it |
 | --- | --- |
-| Home: balance + open bets at top, live feed by sport, 3-tap betting | Home tab. Tap any price, then **Place bet** (2 taps). |
+| Home: balance + open bets at top, live feed by sport, 3-tap betting | Home tab. Tap any price, then **Place bet** (2 taps). A new price replaces the pick; closing the slip (✕) clears it. |
+| Parlays | In the slip, **Add another pick for a parlay** opens a page of open games. Pick up to 3, then **Review parlay**. |
 | Odds/scores refresh ≤ 30 s; odds change on an open slip needs re-confirm | Live odds refresh every 15 s. Slip shows old → new price and an **Accept new odds** button. |
 | 60 min daily balance, resets at midnight; bets use tomorrow's time | Wallet card on Home, Menu > Screen time. |
-| "Not enough screentime" + remaining balance | Bet slip, when the stake is higher than your balance. |
+| "Not enough screentime" + remaining balance | Bet slip. The stake can't go above today's balance; typing more snaps back to it and shows this message. |
+| No connection | Red banner, and betting, logging in and accepting challenges are blocked. Demo controls > **Simulate losing internet**. |
 | Balance 0 → betting locked with midnight countdown | Home wallet card and bet slip. |
 | Auto settlement, voids for postponed games | Bets settle seconds after a game ends. Postponed games void and refund. |
-| Game detail: live score, stats, odds, your bets, research | Tap a team or **Stats & all odds** on any game. |
+| Game detail: live score, stats, odds, your bets, research | Tap a team or **Stats & all odds** on any game. Tapping a price opens the slip; the floating **Make a bet** button jumps to the odds. |
 | My Bets: open bets with live score/stats, history, record, share, send to friend | My Bets tab. |
 | Bet sharing image + friend bets with a 100-character custom stake | **Share** and **Send to friend** on any bet, or **Friend bet** in the slip. |
-| Social: stats vs friends, username search, invite link, requests, challenges, teams with dates, privacy | Social tab. What friends see is in Menu > What friends can see. |
-| Screentime & settings: how it works, controls (confirmed), sports, account, notifications, emergency unlock | Menu (☰) at the top left. |
+| Social: stats vs friends, username search, invite link, requests, challenges, teams with dates, privacy | Social tab. What friends see is in Menu > What friends can see. Requests shows when each was sent or received; sent requests can be sent again once an hour. |
+| Screentime & settings: how it works, controls (confirmed), sports, account, notifications, emergency unlock | Menu (☰) at the top left. **Enforce app limits** can only be on while at least one app is locked. |
 | Record / performance | Top of My Bets. |
 | Sports simulations for days without sports | Sim League (turn on "no real games" in the tester console to see the empty state). |
 | Emergency override with a penalty | Menu > Screen time > Emergency unlock: +15 min now, −30 min tomorrow, 2 per day, resets streak. |
@@ -53,7 +69,8 @@ everything worth testing from the spec, which ticks itself off as you go.
 
 - All games are simulated with real team names. Each game is sped up to 12 minutes so testers can watch bets settle.
 - Odds are fair (no house cut), computed from the score and time left, the same model as the iOS prototype.
-- `python3 build.py` rebuilds `dist/TimeOut.html` after you edit anything in `css/` or `js/`.
+- `python3 build.py` rebuilds `dist/TimeOut.html` and `dist/TimeOut-web.html` after you edit anything in `css/` or `js/`.
+
 # Supabase accounts and saved bets
 
 The web demo uses Supabase Auth for email/password accounts, saves user preferences in `public.user_settings`, and stores sports bet tickets and legs in `public.bets` and `public.bet_legs`. Wallet balance changes go through Supabase RPC functions and the `wallets` / `wallet_transactions` tables.

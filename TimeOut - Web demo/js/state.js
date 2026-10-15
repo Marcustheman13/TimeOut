@@ -5,7 +5,7 @@
 (function (TO) {
   'use strict';
   const S = TO.sim;
-  const MIN = TO.MIN, DAY = TO.DAY;
+  const MIN = TO.MIN, HOUR = TO.HOUR, DAY = TO.DAY;
 
   const RULES = {
     daily: 60,
@@ -282,6 +282,7 @@
     for (const k of Object.keys(f)) if (d[k] === undefined) d[k] = f[k];
     for (const k of Object.keys(f.wallet)) if (d.wallet[k] === undefined) d.wallet[k] = f.wallet[k];
     for (const k of Object.keys(f.settings)) if (d.settings[k] === undefined) d.settings[k] = f.settings[k];
+    if (!d.settings.lockedApps.length) d.settings.enforce = false; // nothing to block, so limits can't be on
     return d;
   }
 
@@ -417,7 +418,10 @@
     const parts = path.split('.');
     let o = TO.data.settings;
     while (parts.length > 1) o = o[parts.shift()];
+    const hadLocks = TO.data.settings.lockedApps.length > 0;
     o[parts[0]] = value;
+    // App limits need something to block: they switch off with the last locked app and back on with the first.
+    if (path === 'lockedApps') TO.data.settings.enforce = value.length > 0 && (TO.data.settings.enforce || !hadLocks);
     if (path === 'lockedApps' || path === 'enforce') grantTierBonus();
     save();
   }
@@ -717,6 +721,21 @@
     save();
   }
 
+  /** Resending is allowed once an hour per request. Returns ms until it can be sent again (0 = now). */
+  const RESEND_WAIT = TO.HOUR;
+  const resendWait = (req, now = TO.now()) => Math.max(0, req.at + RESEND_WAIT - now);
+
+  function resendFriendRequest(username, now = TO.now()) {
+    const req = TO.data.requestsOut.find((r) => r.to === username);
+    if (!req) return false;
+    if (resendWait(req, now) > 0) throw new AppError('too_soon', `You can send @${username} another request in ${TO.fmtIn(resendWait(req, now))}.`);
+    req.at = now;
+    const acc = findAccountByUsername(username);
+    if (acc) mutateData(acc.id, (o) => { const r = o.requestsIn.find((x) => x.from === TO.account.username); if (r) r.at = now; });
+    save();
+    return true;
+  }
+
   function cancelFriendRequest(username) {
     TO.data.requestsOut = TO.data.requestsOut.filter((r) => r.to !== username);
     const acc = findAccountByUsername(username);
@@ -940,6 +959,8 @@
     d.settings.lockedApps = ['instagram', 'tiktok', 'youtube', 'cat-social'];
     d.friends = ['mike_t', 'jess.plays', 'coach_dan', 'lily_k', 'tbone22'];
     d.requestsIn = [{ id: TO.uid('fr'), from: 'priya_p', at: now - 20 * MIN }];
+    // Still waiting on these two: one can be resent, the other was sent too recently.
+    d.requestsOut = [{ id: TO.uid('fr'), to: 'sam_the_fan', at: now - 3 * HOUR }, { id: TO.uid('fr'), to: 'ava.r', at: now - 25 * MIN }];
     d.teams = [{ id: 'team_sunday', name: 'Sunday Squad', start: TO.addDays(day, -3), end: TO.addDays(day, 4), members: ['demo', 'mike_t', 'jess.plays', 'lily_k'], owner: 'mike_t', createdAt: now - 3 * DAY }];
 
     // Bet history from real (simulated) past games, graded with the same rules as live bets.
@@ -1068,7 +1089,7 @@
     save, wallet, rollover, grantTierBonus, addUsage, checkPhoneTime, useEmergencyUnlock, setSetting, limitFor, baseLimitFor, lockPoints, tier,
     placeBet, placeTodoParlay, completeTodo, settle, outcome, combine, legFromSelection,
     myStats, statsFor, person, sharedPicks, searchPeople, relation,
-    sendFriendRequest, acceptFriendRequest, declineFriendRequest, cancelFriendRequest, removeFriend,
+    sendFriendRequest, acceptFriendRequest, declineFriendRequest, cancelFriendRequest, resendFriendRequest, resendWait, removeFriend,
     incomingChallenge, acceptChallenge, declineChallenge, sendBetToFriends, socialTick,
     teamStatus, teamStandings, createTeam, leaveTeam, inviteToTeam, leaderboard,
     ensureDemoAccount, loginDemo, resetMyData, seedDemoData,

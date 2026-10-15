@@ -41,6 +41,7 @@
   --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
 
   --tabbar-h: 70px;
+  --demo-h: 52px;
   color-scheme: dark;
 }
 
@@ -67,7 +68,7 @@ button:disabled { cursor: not-allowed; }
 
 /* ---------- Stage & device ---------- */
 .stage {
-  min-height: 100%;
+  min-height: calc(100% - var(--demo-h));
   display: flex;
   align-items: flex-start;
   justify-content: center;
@@ -120,7 +121,9 @@ button:disabled { cursor: not-allowed; }
   .screen .app, .screen .layer, .screen .auth { top: 0; }
   .screen .toasts { top: 8px; }
   .tester { display: none !important; }
+  body:not(.web) .demo-bar { display: none; }
   html, body { overflow: hidden; }
+  .net-banner { top: 58px; }
   .stage, .device-slot { height: 100%; }
 }
 
@@ -670,6 +673,7 @@ label.list-row { cursor: pointer; }
   background: var(--bg);
   display: flex; flex-direction: column;
   animation: slidein 0.26s cubic-bezier(0.2, 0.9, 0.3, 1);
+  z-index: 0; /* keeps a page's floating button under sheets opened on top of it */
 }
 .page .page-top { display: grid; grid-template-columns: 44px 1fr 44px; align-items: center; height: 52px; padding: 0 8px; flex: none; }
 .page .page-top .t { text-align: center; font-weight: 800; font-size: 17px; }
@@ -692,6 +696,8 @@ label.list-row { cursor: pointer; }
 .drawer .dn .sub { margin-left: auto; font-size: 12px; color: var(--muted); font-weight: 700; }
 .drawer .dn.dn-tester { color: var(--warn); }
 .drawer .dn.dn-tester .ic { color: var(--warn); }
+/* The tester console sits beside the phone here, so the menu doesn't repeat it. On a real phone it's the only way in. */
+@media (min-width: 561px) { .drawer .dn.dn-tester { display: none; } }
 
 .dialog-wrap { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; }
 .dialog {
@@ -838,6 +844,59 @@ label.list-row { cursor: pointer; }
   width: calc(100% - 32px);
 }
 
+/* Floating button pinned to the bottom of a page (game detail, parlay builder) */
+.page-fab { position: sticky; bottom: 14px; z-index: 3; margin-top: auto; padding-top: 6px; }
+.page .page-scroll:has(.page-fab) { padding-bottom: 14px; } /* sticky offsets count the padding, so keep it small */
+.page-fab .btn { box-shadow: 0 14px 34px rgba(0, 0, 0, 0.55); }
+.page-fab .btn .count-pill { margin-right: 2px; }
+.flash { animation: flash 1.1s ease; }
+@keyframes flash { 0%, 60% { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); } 100% { box-shadow: none; } }
+.parlay-list .game-card { margin: 0; }
+.parlay-list .league-head { padding: 6px 0 0; }
+
+/* No connection */
+.net-banner {
+  position: absolute; left: 10px; right: 10px; top: 108px; z-index: 52;
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px; border-radius: 12px;
+  background: var(--loss); color: #fff;
+  font-size: 13px; font-weight: 600; line-height: 1.3;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
+  animation: drop 0.25s ease;
+}
+.net-banner[hidden] { display: none; }
+body.is-offline .toasts { margin-top: 56px; }
+
+/* ---------- Demo bar (above the app, not part of it) ---------- */
+.demo-bar {
+  position: relative; z-index: 100;
+  height: var(--demo-h);
+  display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 12px;
+  padding: 0 16px;
+  background: #07090c;
+  border-bottom: 1px dashed var(--console-line);
+  font-size: 13px;
+}
+.db-left { display: flex; align-items: center; gap: 9px; min-width: 0; color: var(--text-2); font-weight: 700; white-space: nowrap; }
+.db-tag { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--warn); border: 1px solid rgba(255, 201, 64, 0.4); border-radius: 6px; padding: 2px 6px; }
+.db-title { overflow: hidden; text-overflow: ellipsis; }
+.db-switch { display: flex; gap: 3px; padding: 3px; border-radius: 999px; background: var(--surface); border: 1px solid var(--stroke); }
+.db-switch a { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 15px; border-radius: 999px; color: var(--text-2); font-weight: 800; text-decoration: none; white-space: nowrap; }
+.db-switch a:hover { color: var(--text); }
+.db-switch a.on { background: var(--accent); color: var(--accent-ink); }
+.db-right { position: relative; display: flex; justify-content: flex-end; align-items: center; min-width: 0; }
+.db-hint { color: var(--muted); font-size: 12.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.db-btn { display: inline-flex; align-items: center; gap: 7px; height: 36px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--console-line); background: #121821; color: var(--warn); font-weight: 800; font-size: 13px; white-space: nowrap; }
+.db-btn:hover, .db-btn[aria-expanded="true"] { border-color: var(--warn); }
+.db-btn[aria-expanded="true"] svg:last-child { transform: rotate(180deg); }
+@media (max-width: 760px) { .db-title, .db-hint { display: none; } }
+@media (max-width: 600px) {
+  .demo-bar { grid-template-columns: auto minmax(0, 1fr); padding: 0 10px; }
+  .db-left { display: none; }
+  .db-switch a { padding: 0 11px; }
+}
+@media (max-width: 440px) { .db-btn-l { display: none; } .db-btn { padding: 0 9px; gap: 4px; } }
+
 /* ---------- Tester console ---------- */
 .tester {
   width: 344px;
@@ -886,6 +945,15 @@ a.btn { text-decoration: none; }
 </style>
 </head>
 <body>
+<!-- Demo bar: sits above the app and isn't part of TimeOut. Switches views and holds the demo controls. -->
+<header class="demo-bar" id="demo-bar">
+  <div class="db-left"><span class="db-tag">Demo</span><span class="db-title">TimeOut prototype</span></div>
+  <nav class="db-switch" aria-label="Switch view">
+    <a href="TimeOut.html" class="on" aria-current="page"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M11 18h2"/></svg>Phone</a>
+    <a href="TimeOut-web.html"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>Computer</a>
+  </nav>
+  <div class="db-right"><span class="db-hint">Demo controls are beside the phone</span></div>
+</header>
 <div class="stage">
   <div class="device-slot" id="device-slot">
     <div class="device" id="device">
@@ -1165,7 +1233,15 @@ window.TO = window.TO || {};
     grid: '<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/>',
     radio: '<circle cx="12" cy="12" r="2"/><path d="M8.5 8.5a5 5 0 0 0 0 7M15.5 8.5a5 5 0 0 1 0 7M5.6 5.6a9 9 0 0 0 0 12.8M18.4 5.6a9 9 0 0 1 0 12.8"/>',
     gift: '<rect x="3" y="8" width="18" height="4" rx="1"/><path d="M5 12v9h14v-9M12 8v13M12 8S10.5 3.5 8 4.5 9 8 12 8Zm0 0s1.5-4.5 4-3.5S15 8 12 8Z"/>',
+    wifiOff: '<path d="M3 3l18 18"/><path d="M8.5 16.4a5 5 0 0 1 7 0M5 12.9a10 10 0 0 1 4.2-2.5M14.8 10.4A10 10 0 0 1 19 12.9M2 9.3a15 15 0 0 1 4.3-2.8M11 5.1A15 15 0 0 1 22 9.3"/><circle cx="12" cy="20" r="1" fill="currentColor"/>',
   };
+  // ---------- Connection ----------
+  // Testers can fake a dropped connection from the demo controls; otherwise this follows the browser.
+  TO.net = {
+    simulatedOffline: false,
+    online: () => navigator.onLine !== false && !TO.net.simulatedOffline,
+  };
+
   TO.icon = (name, size = 20, extra = '') =>
     `<svg class="ic ${extra}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[name] || ''}</svg>`;
 })(window.TO);
@@ -1787,7 +1863,7 @@ window.TO = window.TO || {};
 (function (TO) {
   'use strict';
   const S = TO.sim;
-  const MIN = TO.MIN, DAY = TO.DAY;
+  const MIN = TO.MIN, HOUR = TO.HOUR, DAY = TO.DAY;
 
   const RULES = {
     daily: 60,
@@ -2064,6 +2140,7 @@ window.TO = window.TO || {};
     for (const k of Object.keys(f)) if (d[k] === undefined) d[k] = f[k];
     for (const k of Object.keys(f.wallet)) if (d.wallet[k] === undefined) d.wallet[k] = f.wallet[k];
     for (const k of Object.keys(f.settings)) if (d.settings[k] === undefined) d.settings[k] = f.settings[k];
+    if (!d.settings.lockedApps.length) d.settings.enforce = false; // nothing to block, so limits can't be on
     return d;
   }
 
@@ -2199,7 +2276,10 @@ window.TO = window.TO || {};
     const parts = path.split('.');
     let o = TO.data.settings;
     while (parts.length > 1) o = o[parts.shift()];
+    const hadLocks = TO.data.settings.lockedApps.length > 0;
     o[parts[0]] = value;
+    // App limits need something to block: they switch off with the last locked app and back on with the first.
+    if (path === 'lockedApps') TO.data.settings.enforce = value.length > 0 && (TO.data.settings.enforce || !hadLocks);
     if (path === 'lockedApps' || path === 'enforce') grantTierBonus();
     save();
   }
@@ -2499,6 +2579,21 @@ window.TO = window.TO || {};
     save();
   }
 
+  /** Resending is allowed once an hour per request. Returns ms until it can be sent again (0 = now). */
+  const RESEND_WAIT = TO.HOUR;
+  const resendWait = (req, now = TO.now()) => Math.max(0, req.at + RESEND_WAIT - now);
+
+  function resendFriendRequest(username, now = TO.now()) {
+    const req = TO.data.requestsOut.find((r) => r.to === username);
+    if (!req) return false;
+    if (resendWait(req, now) > 0) throw new AppError('too_soon', `You can send @${username} another request in ${TO.fmtIn(resendWait(req, now))}.`);
+    req.at = now;
+    const acc = findAccountByUsername(username);
+    if (acc) mutateData(acc.id, (o) => { const r = o.requestsIn.find((x) => x.from === TO.account.username); if (r) r.at = now; });
+    save();
+    return true;
+  }
+
   function cancelFriendRequest(username) {
     TO.data.requestsOut = TO.data.requestsOut.filter((r) => r.to !== username);
     const acc = findAccountByUsername(username);
@@ -2722,6 +2817,8 @@ window.TO = window.TO || {};
     d.settings.lockedApps = ['instagram', 'tiktok', 'youtube', 'cat-social'];
     d.friends = ['mike_t', 'jess.plays', 'coach_dan', 'lily_k', 'tbone22'];
     d.requestsIn = [{ id: TO.uid('fr'), from: 'priya_p', at: now - 20 * MIN }];
+    // Still waiting on these two: one can be resent, the other was sent too recently.
+    d.requestsOut = [{ id: TO.uid('fr'), to: 'sam_the_fan', at: now - 3 * HOUR }, { id: TO.uid('fr'), to: 'ava.r', at: now - 25 * MIN }];
     d.teams = [{ id: 'team_sunday', name: 'Sunday Squad', start: TO.addDays(day, -3), end: TO.addDays(day, 4), members: ['demo', 'mike_t', 'jess.plays', 'lily_k'], owner: 'mike_t', createdAt: now - 3 * DAY }];
 
     // Bet history from real (simulated) past games, graded with the same rules as live bets.
@@ -2850,7 +2947,7 @@ window.TO = window.TO || {};
     save, wallet, rollover, grantTierBonus, addUsage, checkPhoneTime, useEmergencyUnlock, setSetting, limitFor, baseLimitFor, lockPoints, tier,
     placeBet, placeTodoParlay, completeTodo, settle, outcome, combine, legFromSelection,
     myStats, statsFor, person, sharedPicks, searchPeople, relation,
-    sendFriendRequest, acceptFriendRequest, declineFriendRequest, cancelFriendRequest, removeFriend,
+    sendFriendRequest, acceptFriendRequest, declineFriendRequest, cancelFriendRequest, resendFriendRequest, resendWait, removeFriend,
     incomingChallenge, acceptChallenge, declineChallenge, sendBetToFriends, socialTick,
     teamStatus, teamStandings, createTeam, leaveTeam, inviteToTeam, leaderboard,
     ensureDemoAccount, loginDemo, resetMyData, seedDemoData,
@@ -3390,7 +3487,7 @@ window.TIMEOUT_SUPABASE = {
   api.register = async ({ username, email, password, photoUrl }) => {
     if (!/^[a-zA-Z0-9_.]{3,20}$/.test(username)) throw new TO.AppError('invalid', 'Use 3–20 letters, numbers, dots or underscores.', { fields: { username: 'Use 3–20 letters, numbers, dots or underscores.' } });
     const result = await authRequest('signup', { email: String(email || '').trim(), password, data: { username, display_name: username, avatar_url: photoUrl || null } });
-    if (!result.session?.access_token) throw new TO.AppError('email_confirmation', 'Supabase did not return a login session. To allow immediate access, turn off email confirmation in your Supabase Auth settings.');
+    if (!result.session?.access_token) throw new TO.AppError('email_confirmation', 'Check your email to confirm your account, then log in.');
     saveSession(result.session);
     lastSettingsSnapshot = '';
     supportsAppPreferences = true;
@@ -3667,7 +3764,9 @@ window.TIMEOUT_SUPABASE = {
     el.dataset.page = name;
     el._opts = opts;
     el.innerHTML = `<div class="page-top"><button class="icon-btn" data-act="close-page" data-name="${name}" aria-label="Back">${icon('chevL', 22)}</button><div class="t"></div><div class="pt-right"></div></div><div class="page-scroll"></div>`;
-    ui.layer().insertBefore(el, ui.layer().firstChild);
+    // Newer pages stack above older ones (a game opened from the parlay builder), but below sheets and dialogs.
+    const pages = ui.layer().querySelectorAll('[data-page]');
+    ui.layer().insertBefore(el, pages.length ? pages[pages.length - 1].nextSibling : ui.layer().firstChild);
     ui.refreshPage(name);
     return el;
   };
@@ -3724,6 +3823,13 @@ window.TIMEOUT_SUPABASE = {
   };
   TO.on('toast', (t) => ui.toast(t));
 
+  /** For actions that need a connection (placing bets). False, with a toast, when offline. */
+  TO.net.guard = () => {
+    if (TO.net.online()) return true;
+    ui.toast({ kind: 'loss', title: 'No internet connection', msg: 'Betting is paused until you\'re back online.' });
+    return false;
+  };
+
   // ---------- Images ----------
   /** Reads an uploaded photo and returns a square 256px JPEG data URL. */
   ui.readPhoto = (file) =>
@@ -3773,7 +3879,7 @@ window.TIMEOUT_SUPABASE = {
 
   const slip = (TO.slip = {
     legs: [],
-    parlayMode: false,
+    parlayMode: false, // picks stack up only in parlay mode; otherwise a new pick replaces the old one
     mode: 'minutes',
     stake: null,
     friends: [],
@@ -3781,16 +3887,18 @@ window.TIMEOUT_SUPABASE = {
     boost: false,
     insure: false,
     error: null,
+    capped: false,
     notifiedChange: '',
     has(id) { return this.legs.some((l) => l.selId === id); },
     clear() {
-      Object.assign(this, { legs: [], parlayMode: false, mode: 'minutes', stake: null, friends: [], terms: '', boost: false, insure: false, error: null, notifiedChange: '' });
+      Object.assign(this, { legs: [], parlayMode: false, mode: 'minutes', stake: null, friends: [], terms: '', boost: false, insure: false, error: null, capped: false, notifiedChange: '' });
     },
   });
 
   const refOf = (sel) => sel.gameId || sel.predId;
 
-  /** Tap an odds button: single-pick mode replaces the current pick; parlay mode adds legs. */
+  /** Tap on an odds button. Outside parlay mode the pick replaces whatever is on the slip and opens it;
+   *  in parlay mode (Build parlay on Home, or Add another pick) it's added, or swapped for a second pick on the same game. */
   slip.toggle = (selId) => {
     if (slip.has(selId)) {
       slip.legs = slip.legs.filter((l) => l.selId !== selId);
@@ -3803,10 +3911,9 @@ window.TIMEOUT_SUPABASE = {
     const sameGame = slip.legs.findIndex((l) => l.ref === refOf(sel));
     const leg = { selId: sel.id, price: sel.price, line: sel.line, ref: refOf(sel) };
     if (!slip.parlayMode) {
-      const wasEmpty = slip.legs.length === 0;
       slip.legs = [leg];
       slip.error = null;
-      if (ui.sheetOpen('slip') || wasEmpty) open();
+      open();
       afterChange();
       return;
     }
@@ -3830,15 +3937,22 @@ window.TIMEOUT_SUPABASE = {
     slip.parlayMode = entering;
     slip.legs = [];
     slip.error = null;
-    if (ui.sheetOpen('slip')) {
-      ui.closeSheet('slip');
-    }
+    ui.closeSheet('slip', true); // not discard(): that would also switch parlay mode back off
+    ui.closePage('parlay', true);
     TO.app.render();
   };
 
   function afterChange() {
-    if (!slip.legs.length) { ui.closeSheet('slip'); }
+    if (!slip.legs.length) { ui.closeSheet('slip'); ui.closePage('parlay', true); }
     else if (ui.sheetOpen('slip')) ui.refreshSheet('slip');
+    TO.app.renderChrome();
+    TO.app.refreshOddsButtons();
+  }
+
+  /** Closing the slip (X, tapping outside, Escape) throws the picks away, so nothing lingers on Home. */
+  function discard() {
+    slip.clear();
+    ui.closePage('parlay', true);
     TO.app.renderChrome();
     TO.app.refreshOddsButtons();
   }
@@ -3863,7 +3977,7 @@ window.TIMEOUT_SUPABASE = {
     if (slip.boost && wl.boostsLeft > 0) mult *= 1 + TO.RULES.boostPercent;
     const s = Number.isFinite(stake) ? stake : 0;
     const winnings = Math.round((Math.round(s * dec) - s) * mult);
-    return { wl, stake, dec, american: TO.odds.fromDecimal(dec), mult, winnings, valid: Number.isInteger(stake) && stake >= 1 && stake <= wl.balance };
+    return { wl, stake, dec, american: TO.odds.fromDecimal(dec), mult, winnings, valid: Number.isInteger(stake) && stake >= 1 && stake <= wl.balance && TO.net.online() };
   }
 
   // ---------- Rendering ----------
@@ -3913,7 +4027,8 @@ window.TIMEOUT_SUPABASE = {
     if (wl.lockedOut || wl.balance <= 0) return '';
     const stake = Number.isFinite(n.stake) ? n.stake : 0;
     let err = '';
-    if (Number.isFinite(n.stake) && n.stake > wl.balance) err = `<div class="note red">${icon('alert', 16)}<span><b>Not enough screentime.</b> You have ${wl.balance} min left to bet today.</span></div>`;
+    if (slip.capped) err = `<div class="note red">${icon('alert', 16)}<span><b>Not enough screentime.</b> You have ${wl.balance} min left to bet today, so that's the most you can stake.</span></div>`;
+    else if (Number.isFinite(n.stake) && n.stake > wl.balance) err = `<div class="note red">${icon('alert', 16)}<span><b>Not enough screentime.</b> You have ${wl.balance} min left to bet today.</span></div>`;
     else if (slip.stake !== null && slip.stake !== '' && (!Number.isFinite(n.stake) || n.stake < 1)) err = `<div class="note red">${icon('alert', 16)}<span>Enter a stake of at least 1 minute.</span></div>`;
     const after = Math.max(wl.balance - stake, 0);
     return `${err}
@@ -3928,7 +4043,8 @@ window.TIMEOUT_SUPABASE = {
 
   function footHtml() {
     const st = slip.status();
-    const more = slip.parlayMode && slip.legs.length < TO.RULES.maxLegs && !st.closed ? `<button class="btn quiet sm" data-act="slip-more">${icon('plus', 16)} Add another pick</button>` : '';
+    const more = slip.legs.length < TO.RULES.maxLegs && !st.closed ? `<button class="btn quiet sm" data-act="slip-more">${icon('plus', 16)} ${slip.parlayMode ? 'Add another pick' : 'Add another pick for a parlay'}</button>` : '';
+    if (!TO.net.online()) return `<div class="note red">${icon('wifiOff', 16)}<span><b>No internet connection.</b> Betting is paused until you're back online, because odds can't update.</span></div><button class="btn full" disabled>${icon('wifiOff', 18)} Waiting for connection</button>`;
     if (st.closed) return `<button class="btn primary full" disabled>Remove unavailable picks to continue</button>`;
     if (st.changed) return `<button class="btn warn full" data-act="slip-accept">Accept new odds</button>`;
     if (slip.mode === 'friend') {
@@ -4000,7 +4116,7 @@ window.TIMEOUT_SUPABASE = {
         body: bodyHtml(),
         foot: footHtml(),
       }),
-      onClose: () => TO.app.renderChrome(),
+      onClose: discard,
     });
     TO.app.renderChrome();
   }
@@ -4019,17 +4135,54 @@ window.TIMEOUT_SUPABASE = {
     wrap.querySelector('.sheet-head h2').textContent = slip.legs.length > 1 ? `Parlay · ${slip.legs.length} picks` : 'Bet Slip';
   };
 
+  // ---------- Parlay builder: a page of games to add picks from ----------
+  function parlayPage() {
+    const games = TO.views.home.boardGames().filter((g) => g.state === 'live' || g.state === 'scheduled');
+    const inSlip = new Set(slip.legs.map((l) => l.ref));
+    const groups = S.LEAGUE_ORDER.filter((l) => games.some((g) => g.league === l)).map((l) => {
+      const lg = games.filter((g) => g.league === l);
+      return `<div class="league-head"><h3>${esc(S.LEAGUES[l].title)}</h3><span class="cnt">${lg.length} games</span></div>${lg.map((g) => TO.views.home.gameCard(g)).join('')}`;
+    }).join('');
+    const n = slip.legs.length;
+    const dec = slip.legs.reduce((p, l) => p * TO.odds.decimal(l.price), 1);
+    const full = n >= TO.RULES.maxLegs;
+    return {
+      title: 'Build a parlay',
+      body: `<div class="note blue">${icon('info', 16)}<span>Pick up to ${TO.RULES.maxLegs} sides from <b>different games</b>. Every pick has to win for the parlay to pay. ${inSlip.size ? `Games already on your slip are highlighted.` : ''}</span></div>
+        ${full ? `<div class="note warn">${icon('alert', 16)}<span>Your parlay is full. Remove a pick on the slip to add a different one.</span></div>` : ''}
+        <div class="stack parlay-list">${groups || `<div class="empty">${icon('target', 36)}<h3>No games open for betting</h3><p>Check back when the next games start.</p></div>`}</div>
+        <div class="page-fab parlay-fab"><button class="btn primary full" data-act="parlay-review" ${n ? '' : 'disabled'}><span class="count-pill" style="background:var(--accent-ink);color:var(--accent)">${n}</span>${n > 1 ? `Review ${n}-pick parlay` : 'Review bet slip'}${n > 1 ? `<span class="display" style="margin-left:auto;font-size:19px">${TO.odds.fmt(TO.odds.fromDecimal(dec))}</span>` : ''}</button></div>`,
+    };
+  }
+  function openParlayPage() {
+    ui.openPage('parlay', {
+      render: parlayPage,
+      // Going back returns to the slip with the picks so far.
+      onClose: () => { if (slip.legs.length && !ui.sheetOpen('slip')) open(); },
+    });
+  }
+  /** True when the slip sits beside the content instead of over it (the browser version overrides this). */
+  slip.docked = () => false;
+
   // ---------- Actions ----------
   const A = TO.actions;
+  A['parlay-review'] = () => { ui.closePage('parlay'); TO.app.render(); };
   A.pick = (el) => slip.toggle(el.dataset.sel);
   A['slip-remove'] = (el) => { slip.legs = slip.legs.filter((l) => l.selId !== el.dataset.sel); afterChange(); };
-  A['slip-more'] = () => { ui.closeSheet('slip'); TO.ui.toast({ kind: 'info', title: 'Pick another game', msg: 'Tap any odds to add it. Your slip is at the bottom of the screen.', ms: 3000 }); };
+  A['slip-more'] = () => {
+    slip.parlayMode = true;
+    if (!slip.docked()) ui.closeSheet('slip', true); // hide it without discarding the picks
+    openParlayPage();
+    TO.app.renderChrome();
+  };
   A['open-slip'] = () => open();
   A['slip-mode'] = (el) => { slip.mode = el.dataset.m; slip.error = null; ui.refreshSheet('slip'); };
-  A['slip-quick'] = (el) => { slip.stake = el.dataset.v; slip.error = null; ui.refreshSheet('slip', ['body', 'foot']); };
+  A['slip-quick'] = (el) => { slip.stake = el.dataset.v; slip.error = null; slip.capped = false; ui.refreshSheet('slip', ['body', 'foot']); };
   A['slip-step'] = (el) => {
     const v = (parseInt(slip.stake, 10) || 0) + Number(el.dataset.d);
-    slip.stake = String(Math.max(1, v));
+    const max = TO.state.wallet().balance;
+    slip.capped = v > max;
+    slip.stake = String(Math.max(1, Math.min(v, max)));
     const input = document.getElementById('slip-stake');
     if (input) input.value = slip.stake;
     slip.error = null;
@@ -4057,6 +4210,7 @@ window.TIMEOUT_SUPABASE = {
     TO.tester.mark('odds');
   };
   A['slip-place'] = () => {
+    if (!TO.net.online()) { ui.refreshSheet('slip'); return; }
     const friend = slip.mode === 'friend' ? { with: slip.friends, terms: slip.terms } : null;
     const n = numbers();
     try {
@@ -4073,6 +4227,7 @@ window.TIMEOUT_SUPABASE = {
       }
       slip.clear();
       ui.closeSheet('slip');
+      ui.closePage('parlay', true);
       TO.app.render();
     } catch (e) {
       if (!(e instanceof TO.AppError)) throw e;
@@ -4083,12 +4238,15 @@ window.TIMEOUT_SUPABASE = {
     }
   };
 
+  // The stake can't go above today's betting balance: a bigger number snaps back to it.
   TO.inputs['slip-stake'] = (el) => {
+    const max = TO.state.wallet().balance;
+    const n = parseInt(el.value, 10);
+    slip.capped = Number.isFinite(n) && n > max;
+    if (slip.capped) { el.value = String(max); TO.tester.mark('overstake'); }
     slip.stake = el.value;
     slip.error = null;
-    const n = parseInt(el.value, 10);
-    el.classList.toggle('bad', Number.isFinite(n) && n > TO.state.wallet().balance);
-    if (Number.isFinite(n) && n > TO.state.wallet().balance) TO.tester.mark('overstake');
+    el.classList.remove('bad');
     document.querySelectorAll('.quick button').forEach((b) => b.classList.toggle('on', b.dataset.v === el.value && b.textContent !== 'Max'));
     slip.update();
   };
@@ -4193,7 +4351,7 @@ window.TIMEOUT_SUPABASE = {
 
   function openBetsStrip() {
     const open = TO.data.bets.filter((b) => b.status === 'open' && sportsOnly(b)).sort((a, b) => b.placedAt - a.placedAt);
-    return `<div class="stack-s">
+    return `<div class="stack-s open-bets">
       <div class="section-title"><div class="row-s"><h2>Open bets</h2><span class="count-pill ${open.length ? '' : 'off'}">${open.length}</span></div>${open.length ? `<button class="link-btn" data-act="tab" data-tab="bets">See all</button>` : ''}</div>
       ${open.length
         ? `<div class="hscroll mini-bets" data-hkey="minibets">${open.map(miniBet).join('')}</div>`
@@ -4333,12 +4491,12 @@ window.TIMEOUT_SUPABASE = {
     const lock = wl.appsLocked
       ? `<button class="app-lock" data-act="settings" data-section="screentime">${icon('phone', 22, 'red')}<span class="grow"><b class="red">Your locked apps are blocked</b><div class="small muted">You've used all ${wl.todayLimit} min of today's phone time. Emergency unlocks are in Settings.</div></span>${icon('chevR', 16)}</button>`
       : '';
-    return `<div class="stack" style="padding-top:2px">
+    return `<div class="stack home" style="padding-top:2px">
       ${walletCard(wl)}
       ${lock}
       ${statusStrip(wl)}
       ${openBetsStrip()}
-      <div class="stack" style="gap:12px">
+      <div class="stack feed" style="gap:12px">
         ${filterBar(games)}
         ${buildParlayControl()}
         ${feed(games)}
@@ -4376,7 +4534,7 @@ window.TIMEOUT_SUPABASE = {
     if (next.firstElementChild) syncNode(view.firstElementChild, next.firstElementChild);
   }
 
-  TO.views.home = { render, gameCard, refreshLive };
+  TO.views.home = { render, gameCard, refreshLive, boardGames };
 
   // ---------- Actions ----------
   const A = TO.actions;
@@ -4450,7 +4608,7 @@ window.TIMEOUT_SUPABASE = {
       o.total.length ? block(`Total ${Sp.unit} · both teams combined`, o.total, (s) => (s.side === 'over' ? 'Over' : 'Under')) : '',
     ].filter(Boolean);
     if (!available.length) return `<div class="card small muted">ESPN betting lines are not available for this game yet.</div>`;
-    return `<div class="card stack">
+    return `<div class="card stack" id="game-markets">
       <div class="spread"><h2 style="margin:0;font-size:17px">Pick a side</h2><span class="tiny faint bold">ESPN odds refresh every 25 seconds</span></div>
       ${available.join('')}
       <div class="tiny faint">ESPN lines and prices. Tap a price to add it to your bet slip.</div>
@@ -4475,12 +4633,20 @@ window.TIMEOUT_SUPABASE = {
     return `<div class="card stack"><h2 style="margin:0;font-size:17px">ESPN team information</h2>${teams.map((team) => `<div class="spread"><span class="row-s bold">${ui.teamBadge(team, 22)}${esc(team.name)}</span><span class="small muted">${[team.rank ? `#${team.rank}` : '', team.record || ''].filter(Boolean).map(esc).join(' · ')}</span></div>`).join('')}</div>`;
   }
 
+  /** Floating button: jumps to the odds, or back to the slip once there's a pick on it. */
+  function fab(g, o) {
+    if (g.state !== 'live' && g.state !== 'scheduled') return '';
+    const n = TO.slip.legs.length;
+    if (n) return `<div class="page-fab game-fab has-slip"><button class="btn primary full" data-act="open-slip">${icon('ticket', 18)} Open bet slip · ${n} pick${n === 1 ? '' : 's'}</button></div>`;
+    return `<div class="page-fab game-fab"><button class="btn primary full" data-act="game-bet" ${o.suspended ? 'disabled' : ''}>${icon(o.suspended ? 'lock' : 'ticket', 18)} ${o.suspended ? 'Betting is closed on this game' : 'Make a bet'}</button></div>`;
+  }
+
   function render() {
     const g = S.game(currentId);
     const o = S.odds(currentId);
     return {
       title: `${esc(g.away.abbr)} @ ${esc(g.home.abbr)}`,
-      body: `${scoreboard(g)}${banner(g, o)}${myBets(g)}${markets(g, o)}${statsCard(g)}${researchCard(g)}`,
+      body: `${scoreboard(g)}${banner(g, o)}${myBets(g)}${markets(g, o)}${statsCard(g)}${researchCard(g)}${fab(g, o)}`,
     };
   }
 
@@ -4494,6 +4660,15 @@ window.TIMEOUT_SUPABASE = {
 
   TO.views.game = { open, refresh: () => ui.refreshPage('game') };
   TO.actions['open-game'] = (el) => open(el.dataset.id);
+  TO.actions['game-bet'] = () => {
+    const m = document.getElementById('game-markets');
+    if (!m) return;
+    m.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    m.classList.remove('flash');
+    void m.offsetWidth; // restart the highlight
+    m.classList.add('flash');
+    ui.toast({ kind: 'info', title: 'Pick a price', msg: 'Tap any odds and your bet slip opens with it.', ms: 2600 });
+  };
 })(window.TO);
 
 </script>
@@ -4925,6 +5100,7 @@ window.TIMEOUT_SUPABASE = {
   TO.inputs['todo-stake'] = (el) => { todo.stake = el.value; };
   for (let i = 0; i < 3; i++) TO.inputs[`todo-${i}`] = (el) => { todo.tasks[i].text = el.value; };
   TO.actions['todo-place'] = () => {
+    if (!TO.net.guard()) return;
     try {
       TO.state.placeTodoParlay({ tasks: todo.tasks, stake: parseInt(todo.stake, 10) });
       ui.closeSheet('todo');
@@ -5035,13 +5211,17 @@ window.TIMEOUT_SUPABASE = {
     if (d.requestsIn.length) {
       parts.push(`<div class="eyebrow">Friend requests</div><div class="list">${d.requestsIn.map((r) => {
         const p = St.person(r.from);
-        return `<div class="person-row">${ui.avatar(p ? p.photo : TO.initialsAvatar(r.from))}<div class="grow"><b>@${esc(r.from)}</b><div class="tiny faint">${p && p.name && p.name !== r.from ? `${esc(p.name)} · ` : ''}${TO.ago(r.at)}</div></div><button class="btn xs ghost" data-act="decline-fr" data-id="${r.id}">Decline</button><button class="btn xs primary" data-act="accept-fr" data-id="${r.id}">Accept</button></div>`;
+        return `<div class="person-row">${ui.avatar(p ? p.photo : TO.initialsAvatar(r.from))}<div class="grow"><b>@${esc(r.from)}</b><div class="tiny faint">${p && p.name && p.name !== r.from ? `${esc(p.name)} · ` : ''}Received ${TO.ago(r.at)}</div></div><button class="btn xs ghost" data-act="decline-fr" data-id="${r.id}">Decline</button><button class="btn xs primary" data-act="accept-fr" data-id="${r.id}">Accept</button></div>`;
       }).join('')}</div>`);
     }
     if (d.requestsOut.length) {
       parts.push(`<div class="eyebrow">Sent requests</div><div class="list">${d.requestsOut.map((r) => {
         const p = St.person(r.to);
-        return `<div class="person-row">${ui.avatar(p ? p.photo : TO.initialsAvatar(r.to))}<div class="grow"><b>@${esc(r.to)}</b><div class="tiny faint">Waiting for them to accept</div></div><button class="btn xs ghost" data-act="cancel-request" data-u="${esc(r.to)}">Cancel</button></div>`;
+        const wait = St.resendWait(r);
+        const resend = wait
+          ? `<button class="btn xs ghost" disabled title="You can send it again in ${TO.fmtIn(wait)}">${icon('check', 13)} Sent</button>`
+          : `<button class="btn xs primary" data-act="resend-request" data-u="${esc(r.to)}">${icon('refresh', 13)} Send again</button>`;
+        return `<div class="person-row">${ui.avatar(p ? p.photo : TO.initialsAvatar(r.to))}<div class="grow" style="min-width:0"><b>@${esc(r.to)}</b><div class="tiny faint">Sent ${TO.ago(r.at)} · ${wait ? `send again in ${TO.fmtIn(wait)}` : 'waiting for them to accept'}</div></div><div class="row-s">${resend}<button class="btn xs quiet" data-act="cancel-request" data-u="${esc(r.to)}">Cancel</button></div></div>`;
       }).join('')}</div>`);
     }
     if (!parts.length) return `<div class="empty">${icon('bell', 36)}<h3>You're all caught up</h3><p>Friend requests and bet challenges from friends show up here.</p></div>`;
@@ -5077,11 +5257,15 @@ window.TIMEOUT_SUPABASE = {
     else if (view.tab === 'teams') body = teams();
     else body = leaderboard();
     return `<div class="page-head"><h1>Social</h1><p>Compete with friends: compare records, send bet challenges, and join teams.</p></div>
-      <div class="stack">
-        ${meCard()}
-        ${findCard()}
-        <div class="pad"><div class="seg">${tab('board', 'Friends')}${tab('requests', 'Requests', reqCount)}${tab('teams', 'Teams')}</div></div>
-        ${body}
+      <div class="stack social-cols">
+        <div class="stack social-side">
+          ${meCard()}
+          ${findCard()}
+        </div>
+        <div class="stack social-main">
+          <div class="pad"><div class="seg">${tab('board', 'Friends')}${tab('requests', 'Requests', reqCount)}${tab('teams', 'Teams')}</div></div>
+          ${body}
+        </div>
       </div>`;
   }
 
@@ -5175,6 +5359,16 @@ window.TIMEOUT_SUPABASE = {
     rerender();
   };
   A['cancel-request'] = (el) => { St.cancelFriendRequest(el.dataset.u); rerender(); };
+  A['resend-request'] = (el) => {
+    try {
+      St.resendFriendRequest(el.dataset.u);
+      ui.toast({ kind: 'win', title: `Request sent again to @${el.dataset.u}`, msg: 'You can send another one in an hour.' });
+    } catch (e) {
+      if (!(e instanceof TO.AppError)) throw e;
+      ui.toast({ kind: 'warn', title: 'Not yet', msg: e.message });
+    }
+    rerender();
+  };
   A['accept-fr'] = (el) => { const r = TO.data.requestsIn.find((x) => x.id === el.dataset.id); St.acceptFriendRequest(el.dataset.id); if (r) ui.toast({ kind: 'win', title: `You and @${r.from} are now friends` }); TO.app.render(); };
   A['decline-fr'] = (el) => { St.declineFriendRequest(el.dataset.id); TO.app.render(); };
   A['remove-friend'] = async (el) => {
@@ -5185,6 +5379,7 @@ window.TIMEOUT_SUPABASE = {
     TO.app.render();
   };
   A['accept-ch'] = (el) => {
+    if (!TO.net.guard()) return;
     try {
       const bet = St.acceptChallenge(el.dataset.id);
       ui.toast({ kind: 'win', title: 'Challenge accepted', msg: `${bet.legs[0].label} · "${bet.friend.terms}". It's in My Bets.` });
@@ -5344,7 +5539,7 @@ window.TIMEOUT_SUPABASE = {
       <div class="stack-s">
         <div class="eyebrow">Controls</div>
         <div class="list">
-          ${listRow('shield', 'Enforce app limits', 'Blocks your locked apps when today\'s phone time runs out', ui.switchEl('set-enforce', s.enforce, 'data-change="set-enforce"'), 'for="set-enforce"')}
+          ${listRow('shield', 'Enforce app limits', s.lockedApps.length ? 'Blocks your locked apps when today\'s phone time runs out' : '<span class="yellow">Lock at least one app or site below to turn this on</span>', ui.switchEl('set-enforce', s.enforce && s.lockedApps.length > 0, 'data-change="set-enforce"'), 'for="set-enforce"')}
           <button class="list-row" data-act="locked-apps"><span class="lr-icon">${icon('lock', 17)}</span><span class="lr-main"><div class="lr-title">Locked apps & sites</div><div class="lr-sub">${s.lockedApps.length} locked · ${St.lockPoints()} lock points</div></span>${icon('chevR', 18, 'chev')}</button>
           <div class="list-row" style="flex-wrap:wrap"><span class="lr-icon">${icon('clock', 17)}</span><span class="lr-main"><div class="lr-title">Minimum phone time per day</div><div class="lr-sub">Losses can't push your limit below this</div></span><div class="seg" style="width:100%;margin-top:4px">${[0, 15, 30].map((v) => `<button class="${s.minLimit === v ? 'on' : ''}" data-act="set-minlimit" data-v="${v}">${v ? `${v} min` : 'None'}</button>`).join('')}</div></div>
           <div class="list-row" style="flex-wrap:wrap"><span class="lr-icon">${icon('bell', 17)}</span><span class="lr-main"><div class="lr-title">Warn me when phone time is low</div><div class="lr-sub">Shows a heads-up before apps lock</div></span><div class="seg" style="width:100%;margin-top:4px">${[5, 10, 15].map((v) => `<button class="${s.lowWarn === v ? 'on' : ''}" data-act="set-lowwarn" data-v="${v}">${v} min left</button>`).join('')}</div></div>
@@ -5522,8 +5717,9 @@ window.TIMEOUT_SUPABASE = {
     const before = TO.data.settings.lockedApps;
     const removed = before.filter((x) => !lockDraft.includes(x));
     const oldTier = St.tier();
-    const newTier = St.tierForPoints(TO.data.settings.enforce ? lockDraft.reduce((s, id) => s + St.LOCKABLE.find((x) => x.id === id).pts, 0) : 0);
-    const body = `${lockDraft.length} apps, sites and categories will be locked when your phone time runs out.${newTier.id !== oldTier.id ? `<br><br>Your tier changes from <b>${esc(oldTier.title)}</b> to <b>${esc(newTier.title)}</b>.` : ''}${removed.length ? '<br><br>Unlocked apps stop counting right away.' : ''}`;
+    const willEnforce = lockDraft.length > 0 && (TO.data.settings.enforce || !before.length); // matches St.setSetting
+    const newTier = St.tierForPoints(willEnforce ? lockDraft.reduce((s, id) => s + St.LOCKABLE.find((x) => x.id === id).pts, 0) : 0);
+    const body = `${lockDraft.length} apps, sites and categories will be locked when your phone time runs out.${newTier.id !== oldTier.id ? `<br><br>Your tier changes from <b>${esc(oldTier.title)}</b> to <b>${esc(newTier.title)}</b>.` : ''}${removed.length ? '<br><br>Unlocked apps stop counting right away.' : ''}${!lockDraft.length && TO.data.settings.enforce ? '<br><br><b>App limits turn off</b> because nothing is locked.' : ''}${lockDraft.length && !before.length ? '<br><br>App limits turn on.' : ''}`;
     if (!(await ui.confirm({ title: 'Update locked apps?', body, confirm: 'Save' }))) return;
     St.setSetting('lockedApps', lockDraft.slice());
     ui.closeSheet('locked');
@@ -5605,6 +5801,11 @@ window.TIMEOUT_SUPABASE = {
   C['set-enforce'] = async (el) => {
     const want = el.checked;
     el.checked = !want;
+    if (want && !TO.data.settings.lockedApps.length) {
+      const pick = await ui.confirm({ title: 'Lock an app first', body: 'App limits need at least one locked app, site or category to block. Choose what TimeOut locks when your phone time runs out, and limits turn on with it.', confirm: 'Choose apps', cancel: 'Not now' });
+      if (pick) lockedAppsSheet();
+      return;
+    }
     const ok = await ui.confirm(want
       ? { title: 'Turn app limits on?', body: 'Your locked apps will close when today\'s phone time runs out.', confirm: 'Turn on' }
       : { title: 'Turn app limits off?', body: 'Your locked apps won\'t close anymore. Your tier drops to Rookie and today won\'t count as a clean day.', confirm: 'Turn off', danger: true });
@@ -5803,6 +6004,7 @@ window.TIMEOUT_SUPABASE = {
   async function submit(form) {
     collect(form);
     av.errors = {}; av.formError = '';
+    if (!TO.net.online()) { av.formError = 'No internet connection. Check your Wi-Fi or data and try again.'; render(); return; }
     const v = av.values;
     if (form.dataset.form === 'login') {
       try {
@@ -5855,6 +6057,7 @@ window.TIMEOUT_SUPABASE = {
   A['auth-go'] = (el) => show(el.dataset.s);
   A['auth-demo'] = async (el) => {
     if (TO.api.configured) return;
+    if (!TO.net.online()) { ui.toast({ kind: 'loss', title: 'No internet connection', msg: 'Check your Wi-Fi or data and try again.' }); return; }
     if (!TO.api.online) { St.loginDemo(); TO.tester.mark('login'); TO.app.boot(); return; }
     el.disabled = true;
     try {
@@ -5968,6 +6171,11 @@ window.TIMEOUT_SUPABASE = {
           ${b('t-zero', 'lock', 'Set betting balance to 0', 'wide')}
         </div>
       </div>
+      <div class="tgroup"><h3>Connection</h3>
+        <div class="tgrid">
+          <button class="tbtn wide ${TO.net.simulatedOffline ? 'on' : ''}" data-act="t-offline">${icon('wifiOff', 15)}<span>${TO.net.simulatedOffline ? 'No internet: ON (tap to reconnect)' : 'Simulate losing internet'}</span></button>
+        </div>
+      </div>
       <div class="tgroup"><h3>Friends</h3>
         <div class="tgrid">
           ${b('t-fr', 'userPlus', 'Get a friend request')}${b('t-ch', 'target', 'Get a bet challenge')}
@@ -6065,6 +6273,10 @@ window.TIMEOUT_SUPABASE = {
   };
   A['t-use'] = () => { TO.state.addUsage(10); after(); };
   A['t-use30'] = () => { TO.state.addUsage(30); after(); };
+  A['t-offline'] = () => {
+    TO.net.simulatedOffline = !TO.net.simulatedOffline;
+    TO.app.netChanged();
+  };
   A['t-zero'] = () => {
     const w = TO.data.wallet;
     w.balance = 0; w.lockedOut = true;
@@ -6129,7 +6341,8 @@ window.TIMEOUT_SUPABASE = {
     ['social', 'Social', 'users'],
   ];
 
-  const shellHtml = () => `<div class="app" id="shell">
+  /** The phone shell. The browser version (web.js) swaps in its own layout. */
+  app.shellHtml = () => `<div class="app" id="shell">
       <header class="topbar" id="topbar"></header>
       <main class="view" id="view" tabindex="-1"></main>
       <div id="slipbar-host"></div>
@@ -6153,7 +6366,7 @@ window.TIMEOUT_SUPABASE = {
       TO.tester.render();
       return;
     }
-    body.innerHTML = shellHtml();
+    body.innerHTML = app.shellHtml();
     app.tab = 'home';
     app.render();
     TO.live.refresh();
@@ -6212,6 +6425,7 @@ window.TIMEOUT_SUPABASE = {
   app.refreshOddsButtons = () => {
     app.renderView();
     if (ui.pageOpen('game')) TO.views.game.refresh();
+    if (ui.pageOpen('parlay')) ui.refreshPage('parlay');
   };
 
   app.go = (tab) => {
@@ -6305,6 +6519,7 @@ window.TIMEOUT_SUPABASE = {
       app.renderChrome();
       app.renderView();
       if (ui.pageOpen('game')) TO.views.game.refresh();
+      if (ui.pageOpen('parlay')) ui.refreshPage('parlay');
       const sp = document.querySelector('[data-page="settings"] .page-top .t');
       if (sp && ['Screen time', 'Tier & streak'].includes(sp.textContent)) ui.refreshPage('settings');
     } else {
@@ -6317,6 +6532,33 @@ window.TIMEOUT_SUPABASE = {
     const a = document.activeElement;
     return a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA') && a.type !== 'checkbox';
   }
+
+  // ---------- Connection ----------
+  /** Red banner while offline. The slip, to-do parlays and challenges refuse new bets until it clears. */
+  function renderNet() {
+    const root = ui.root();
+    if (!root) return;
+    let el = document.getElementById('net-banner');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'net-banner';
+      el.className = 'net-banner';
+      el.setAttribute('role', 'alert');
+      el.innerHTML = `${icon('wifiOff', 17)}<span><b>No internet connection.</b> Betting is paused until you're back online.</span>`;
+      root.appendChild(el);
+    }
+    const off = !TO.net.online();
+    el.hidden = !off;
+    document.body.classList.toggle('is-offline', off);
+  }
+  app.netChanged = () => {
+    renderNet();
+    if (ui.sheetOpen('slip')) ui.refreshSheet('slip', ['body', 'foot']);
+    if (TO.net.online()) ui.toast({ kind: 'win', title: 'Back online', msg: 'Odds are updating again.' });
+    TO.tester.render();
+  };
+  window.addEventListener('online', app.netChanged);
+  window.addEventListener('offline', app.netChanged);
 
   // ---------- Core actions ----------
   const A = TO.actions;
@@ -6388,7 +6630,8 @@ window.TIMEOUT_SUPABASE = {
       device.style.transform = '';
       return;
     }
-    const scale = Math.min(1, Math.max(0.6, (window.innerHeight - 48) / 852));
+    const bar = document.getElementById('demo-bar');
+    const scale = Math.min(1, Math.max(0.6, (window.innerHeight - 48 - (bar ? bar.offsetHeight : 0)) / 852));
     device.style.transform = `scale(${scale})`;
     slot.style.width = `${393 * scale}px`;
     slot.style.height = `${852 * scale}px`;
@@ -6413,6 +6656,7 @@ window.TIMEOUT_SUPABASE = {
 
   async function start() {
     fit();
+    renderNet();
     if (await TO.api.init()) await restoreServerSession();
     else St.ensureDemoAccount();
     app.boot();
