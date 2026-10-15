@@ -158,6 +158,7 @@
   async function submit(form) {
     collect(form);
     av.errors = {}; av.formError = '';
+    if (!TO.net.online()) { av.formError = 'No internet connection. Check your Wi-Fi or data and try again.'; render(); return; }
     const v = av.values;
     if (form.dataset.form === 'login') {
       try {
@@ -209,6 +210,7 @@
   const A = TO.actions;
   A['auth-go'] = (el) => show(el.dataset.s);
   A['auth-demo'] = async (el) => {
+    if (!TO.net.online()) { ui.toast({ kind: 'loss', title: 'No internet connection', msg: 'Check your Wi-Fi or data and try again.' }); return; }
     if (!TO.api.online) { St.loginDemo(); TO.tester.mark('login'); TO.app.boot(); return; }
     el.disabled = true;
     try {

@@ -14,16 +14,19 @@
     boost: false,
     insure: false,
     error: null,
+    capped: false,
+    parlay: false, // picks only stack up after "Add another pick for a parlay"; otherwise a new pick replaces the old one
     notifiedChange: '',
     has(id) { return this.legs.some((l) => l.selId === id); },
     clear() {
-      Object.assign(this, { legs: [], mode: 'minutes', stake: null, friends: [], terms: '', boost: false, insure: false, error: null, notifiedChange: '' });
+      Object.assign(this, { legs: [], mode: 'minutes', stake: null, friends: [], terms: '', boost: false, insure: false, error: null, capped: false, parlay: false, notifiedChange: '' });
     },
   });
 
   const refOf = (sel) => sel.gameId || sel.predId;
 
-  /** Tap on an odds button: add (or remove) the pick. The first pick opens the slip right away. */
+  /** Tap on an odds button. Outside a parlay the pick replaces whatever is on the slip and opens it;
+   *  while building a parlay it's added (or swapped, for a second pick on the same game). */
   slip.toggle = (selId) => {
     if (slip.has(selId)) {
       slip.legs = slip.legs.filter((l) => l.selId !== selId);
@@ -35,6 +38,13 @@
     const sel = cur.sel;
     const sameGame = slip.legs.findIndex((l) => l.ref === refOf(sel));
     const leg = { selId: sel.id, price: sel.price, line: sel.line, ref: refOf(sel) };
+    if (!slip.parlay) {
+      slip.legs = [leg];
+      slip.error = null;
+      open();
+      afterChange();
+      return;
+    }
     if (sameGame >= 0) {
       slip.legs[sameGame] = leg;
       ui.toast({ kind: 'info', title: 'Pick swapped', msg: 'A parlay can only have one pick per game.', ms: 2600 });
@@ -46,14 +56,20 @@
       slip.legs.push(leg);
     }
     slip.error = null;
-    const wasEmpty = slip.legs.length === 1 && sameGame < 0;
-    if (wasEmpty || ui.sheetOpen('slip')) open();
     afterChange();
   };
 
   function afterChange() {
-    if (!slip.legs.length) { ui.closeSheet('slip'); }
+    if (!slip.legs.length) { ui.closeSheet('slip'); ui.closePage('parlay', true); }
     else if (ui.sheetOpen('slip')) ui.refreshSheet('slip');
+    TO.app.renderChrome();
+    TO.app.refreshOddsButtons();
+  }
+
+  /** Closing the slip (X, tapping outside, Escape) throws the picks away, so nothing lingers on Home. */
+  function discard() {
+    slip.clear();
+    ui.closePage('parlay', true);
     TO.app.renderChrome();
     TO.app.refreshOddsButtons();
   }
@@ -78,7 +94,7 @@
     if (slip.boost && wl.boostsLeft > 0) mult *= 1 + TO.RULES.boostPercent;
     const s = Number.isFinite(stake) ? stake : 0;
     const winnings = Math.round((Math.round(s * dec) - s) * mult);
-    return { wl, stake, dec, american: TO.odds.fromDecimal(dec), mult, winnings, valid: Number.isInteger(stake) && stake >= 1 && stake <= wl.balance };
+    return { wl, stake, dec, american: TO.odds.fromDecimal(dec), mult, winnings, valid: Number.isInteger(stake) && stake >= 1 && stake <= wl.balance && TO.net.online() };
   }
 
   // ---------- Rendering ----------
@@ -128,7 +144,8 @@
     if (wl.lockedOut || wl.balance <= 0) return '';
     const stake = Number.isFinite(n.stake) ? n.stake : 0;
     let err = '';
-    if (Number.isFinite(n.stake) && n.stake > wl.balance) err = `<div class="note red">${icon('alert', 16)}<span><b>Not enough screentime.</b> You have ${wl.balance} min left to bet today.</span></div>`;
+    if (slip.capped) err = `<div class="note red">${icon('alert', 16)}<span><b>Not enough screentime.</b> You have ${wl.balance} min left to bet today, so that's the most you can stake.</span></div>`;
+    else if (Number.isFinite(n.stake) && n.stake > wl.balance) err = `<div class="note red">${icon('alert', 16)}<span><b>Not enough screentime.</b> You have ${wl.balance} min left to bet today.</span></div>`;
     else if (slip.stake !== null && slip.stake !== '' && (!Number.isFinite(n.stake) || n.stake < 1)) err = `<div class="note red">${icon('alert', 16)}<span>Enter a stake of at least 1 minute.</span></div>`;
     const after = Math.max(wl.balance - stake, 0);
     return `${err}
@@ -144,6 +161,7 @@
   function footHtml() {
     const st = slip.status();
     const more = slip.legs.length < TO.RULES.maxLegs && !st.closed ? `<button class="btn quiet sm" data-act="slip-more">${icon('plus', 16)} Add another pick for a parlay</button>` : '';
+    if (!TO.net.online()) return `<div class="note red">${icon('wifiOff', 16)}<span><b>No internet connection.</b> Betting is paused until you're back online, because odds can't update.</span></div><button class="btn full" disabled>${icon('wifiOff', 18)} Waiting for connection</button>`;
     if (st.closed) return `<button class="btn primary full" disabled>Remove unavailable picks to continue</button>`;
     if (st.changed) return `<button class="btn warn full" data-act="slip-accept">Accept new odds</button>`;
     if (slip.mode === 'friend') {
@@ -215,7 +233,7 @@
         body: bodyHtml(),
         foot: footHtml(),
       }),
-      onClose: () => TO.app.renderChrome(),
+      onClose: discard,
     });
     TO.app.renderChrome();
   }
@@ -234,17 +252,54 @@
     wrap.querySelector('.sheet-head h2').textContent = slip.legs.length > 1 ? `Parlay · ${slip.legs.length} picks` : 'Bet Slip';
   };
 
+  // ---------- Parlay builder: a page of games to add picks from ----------
+  function parlayPage() {
+    const games = TO.views.home.boardGames().filter((g) => g.state === 'live' || g.state === 'scheduled');
+    const inSlip = new Set(slip.legs.map((l) => l.ref));
+    const groups = S.LEAGUE_ORDER.filter((l) => games.some((g) => g.league === l)).map((l) => {
+      const lg = games.filter((g) => g.league === l);
+      return `<div class="league-head"><h3>${esc(S.LEAGUES[l].title)}</h3><span class="cnt">${lg.length} games</span></div>${lg.map((g) => TO.views.home.gameCard(g)).join('')}`;
+    }).join('');
+    const n = slip.legs.length;
+    const dec = slip.legs.reduce((p, l) => p * TO.odds.decimal(l.price), 1);
+    const full = n >= TO.RULES.maxLegs;
+    return {
+      title: 'Build a parlay',
+      body: `<div class="note blue">${icon('info', 16)}<span>Pick up to ${TO.RULES.maxLegs} sides from <b>different games</b>. Every pick has to win for the parlay to pay. ${inSlip.size ? `Games already on your slip are highlighted.` : ''}</span></div>
+        ${full ? `<div class="note warn">${icon('alert', 16)}<span>Your parlay is full. Remove a pick on the slip to add a different one.</span></div>` : ''}
+        <div class="stack parlay-list">${groups || `<div class="empty">${icon('target', 36)}<h3>No games open for betting</h3><p>Check back when the next games start.</p></div>`}</div>
+        <div class="page-fab parlay-fab"><button class="btn primary full" data-act="parlay-review" ${n ? '' : 'disabled'}><span class="count-pill" style="background:var(--accent-ink);color:var(--accent)">${n}</span>${n > 1 ? `Review ${n}-pick parlay` : 'Review bet slip'}${n > 1 ? `<span class="display" style="margin-left:auto;font-size:19px">${TO.odds.fmt(TO.odds.fromDecimal(dec))}</span>` : ''}</button></div>`,
+    };
+  }
+  function openParlayPage() {
+    ui.openPage('parlay', {
+      render: parlayPage,
+      // Going back returns to the slip with the picks so far.
+      onClose: () => { if (slip.legs.length && !ui.sheetOpen('slip')) open(); },
+    });
+  }
+  /** True when the slip sits beside the content instead of over it (the browser version overrides this). */
+  slip.docked = () => false;
+
   // ---------- Actions ----------
   const A = TO.actions;
+  A['parlay-review'] = () => { ui.closePage('parlay'); TO.app.render(); };
   A.pick = (el) => slip.toggle(el.dataset.sel);
   A['slip-remove'] = (el) => { slip.legs = slip.legs.filter((l) => l.selId !== el.dataset.sel); afterChange(); };
-  A['slip-more'] = () => { ui.closeSheet('slip'); TO.ui.toast({ kind: 'info', title: 'Pick another game', msg: 'Tap any odds to add it. Your slip is at the bottom of the screen.', ms: 3000 }); };
+  A['slip-more'] = () => {
+    slip.parlay = true;
+    if (!slip.docked()) ui.closeSheet('slip', true); // hide it without discarding the picks
+    openParlayPage();
+    TO.app.renderChrome();
+  };
   A['open-slip'] = () => open();
   A['slip-mode'] = (el) => { slip.mode = el.dataset.m; slip.error = null; ui.refreshSheet('slip'); };
-  A['slip-quick'] = (el) => { slip.stake = el.dataset.v; slip.error = null; ui.refreshSheet('slip', ['body', 'foot']); };
+  A['slip-quick'] = (el) => { slip.stake = el.dataset.v; slip.error = null; slip.capped = false; ui.refreshSheet('slip', ['body', 'foot']); };
   A['slip-step'] = (el) => {
     const v = (parseInt(slip.stake, 10) || 0) + Number(el.dataset.d);
-    slip.stake = String(Math.max(1, v));
+    const max = TO.state.wallet().balance;
+    slip.capped = v > max;
+    slip.stake = String(Math.max(1, Math.min(v, max)));
     const input = document.getElementById('slip-stake');
     if (input) input.value = slip.stake;
     slip.error = null;
@@ -272,6 +327,7 @@
     TO.tester.mark('odds');
   };
   A['slip-place'] = () => {
+    if (!TO.net.online()) { ui.refreshSheet('slip'); return; }
     const friend = slip.mode === 'friend' ? { with: slip.friends, terms: slip.terms } : null;
     const n = numbers();
     try {
@@ -288,6 +344,7 @@
       }
       slip.clear();
       ui.closeSheet('slip');
+      ui.closePage('parlay', true);
       TO.app.render();
     } catch (e) {
       if (!(e instanceof TO.AppError)) throw e;
@@ -298,12 +355,15 @@
     }
   };
 
+  // The stake can't go above today's betting balance: a bigger number snaps back to it.
   TO.inputs['slip-stake'] = (el) => {
+    const max = TO.state.wallet().balance;
+    const n = parseInt(el.value, 10);
+    slip.capped = Number.isFinite(n) && n > max;
+    if (slip.capped) { el.value = String(max); TO.tester.mark('overstake'); }
     slip.stake = el.value;
     slip.error = null;
-    const n = parseInt(el.value, 10);
-    el.classList.toggle('bad', Number.isFinite(n) && n > TO.state.wallet().balance);
-    if (Number.isFinite(n) && n > TO.state.wallet().balance) TO.tester.mark('overstake');
+    el.classList.remove('bad');
     document.querySelectorAll('.quick button').forEach((b) => b.classList.toggle('on', b.dataset.v === el.value && b.textContent !== 'Max'));
     slip.update();
   };

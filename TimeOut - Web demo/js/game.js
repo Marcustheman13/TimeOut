@@ -47,7 +47,7 @@
     const block = (title, sels, labelFn) => `<div class="market"><h4>${esc(title)}</h4><div class="opts">${sels.map((s) => ui.oddsBtn(s, { suspended: o.suspended, move: o.move[s.id], big: true, label: labelFn(s) })).join('')}</div></div>`;
     const age = Math.max(0, Math.round((TO.now() - o.updatedAt) / 1000));
     const every = g.state === 'live' ? 15 : 120;
-    return `<div class="card stack">
+    return `<div class="card stack" id="game-markets">
       <div class="spread"><h2 style="margin:0;font-size:17px">Pick a side</h2><span class="tiny faint bold">${g.state === 'live' ? `Odds refresh every 15 sec · ${Math.max(every - age, 0)}s` : 'Pre-game odds'}</span></div>
       ${block('Moneyline · who wins', o.moneyline, (s) => name(s.side))}
       ${o.spread.length ? block(`${Sp.spreadLabel} · win by more than the line`, o.spread, (s) => name(s.side)) : ''}
@@ -96,12 +96,20 @@
     </div>`;
   }
 
+  /** Floating button: jumps to the odds, or back to the slip once there's a pick on it. */
+  function fab(g, o) {
+    if (g.state !== 'live' && g.state !== 'scheduled') return '';
+    const n = TO.slip.legs.length;
+    if (n) return `<div class="page-fab game-fab has-slip"><button class="btn primary full" data-act="open-slip">${icon('ticket', 18)} Open bet slip · ${n} pick${n === 1 ? '' : 's'}</button></div>`;
+    return `<div class="page-fab game-fab"><button class="btn primary full" data-act="game-bet" ${o.suspended ? 'disabled' : ''}>${icon(o.suspended ? 'lock' : 'ticket', 18)} ${o.suspended ? 'Betting is closed on this game' : 'Make a bet'}</button></div>`;
+  }
+
   function render() {
     const g = S.game(currentId);
     const o = S.odds(currentId);
     return {
       title: `${esc(g.away.abbr)} @ ${esc(g.home.abbr)}`,
-      body: `${scoreboard(g)}${banner(g, o)}${myBets(g)}${markets(g, o)}${statsCard(g)}${playsCard(g)}${researchCard(g)}`,
+      body: `${scoreboard(g)}${banner(g, o)}${myBets(g)}${markets(g, o)}${statsCard(g)}${playsCard(g)}${researchCard(g)}${fab(g, o)}`,
     };
   }
 
@@ -112,4 +120,13 @@
 
   TO.views.game = { open, refresh: () => ui.refreshPage('game') };
   TO.actions['open-game'] = (el) => open(el.dataset.id);
+  TO.actions['game-bet'] = () => {
+    const m = document.getElementById('game-markets');
+    if (!m) return;
+    m.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    m.classList.remove('flash');
+    void m.offsetWidth; // restart the highlight
+    m.classList.add('flash');
+    ui.toast({ kind: 'info', title: 'Pick a price', msg: 'Tap any odds and your bet slip opens with it.', ms: 2600 });
+  };
 })(window.TO);

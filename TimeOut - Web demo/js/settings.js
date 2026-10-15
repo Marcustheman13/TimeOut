@@ -91,7 +91,7 @@
       <div class="stack-s">
         <div class="eyebrow">Controls</div>
         <div class="list">
-          ${listRow('shield', 'Enforce app limits', 'Blocks your locked apps when today\'s phone time runs out', ui.switchEl('set-enforce', s.enforce, 'data-change="set-enforce"'), 'for="set-enforce"')}
+          ${listRow('shield', 'Enforce app limits', s.lockedApps.length ? 'Blocks your locked apps when today\'s phone time runs out' : '<span class="yellow">Lock at least one app or site below to turn this on</span>', ui.switchEl('set-enforce', s.enforce && s.lockedApps.length > 0, 'data-change="set-enforce"'), 'for="set-enforce"')}
           <button class="list-row" data-act="locked-apps"><span class="lr-icon">${icon('lock', 17)}</span><span class="lr-main"><div class="lr-title">Locked apps & sites</div><div class="lr-sub">${s.lockedApps.length} locked · ${St.lockPoints()} lock points</div></span>${icon('chevR', 18, 'chev')}</button>
           <div class="list-row" style="flex-wrap:wrap"><span class="lr-icon">${icon('clock', 17)}</span><span class="lr-main"><div class="lr-title">Minimum phone time per day</div><div class="lr-sub">Losses can't push your limit below this</div></span><div class="seg" style="width:100%;margin-top:4px">${[0, 15, 30].map((v) => `<button class="${s.minLimit === v ? 'on' : ''}" data-act="set-minlimit" data-v="${v}">${v ? `${v} min` : 'None'}</button>`).join('')}</div></div>
           <div class="list-row" style="flex-wrap:wrap"><span class="lr-icon">${icon('bell', 17)}</span><span class="lr-main"><div class="lr-title">Warn me when phone time is low</div><div class="lr-sub">Shows a heads-up before apps lock</div></span><div class="seg" style="width:100%;margin-top:4px">${[5, 10, 15].map((v) => `<button class="${s.lowWarn === v ? 'on' : ''}" data-act="set-lowwarn" data-v="${v}">${v} min left</button>`).join('')}</div></div>
@@ -266,8 +266,9 @@
     const before = TO.data.settings.lockedApps;
     const removed = before.filter((x) => !lockDraft.includes(x));
     const oldTier = St.tier();
-    const newTier = St.tierForPoints(TO.data.settings.enforce ? lockDraft.reduce((s, id) => s + St.LOCKABLE.find((x) => x.id === id).pts, 0) : 0);
-    const body = `${lockDraft.length} apps, sites and categories will be locked when your phone time runs out.${newTier.id !== oldTier.id ? `<br><br>Your tier changes from <b>${esc(oldTier.title)}</b> to <b>${esc(newTier.title)}</b>.` : ''}${removed.length ? '<br><br>Unlocked apps stop counting right away.' : ''}`;
+    const willEnforce = lockDraft.length > 0 && (TO.data.settings.enforce || !before.length); // matches St.setSetting
+    const newTier = St.tierForPoints(willEnforce ? lockDraft.reduce((s, id) => s + St.LOCKABLE.find((x) => x.id === id).pts, 0) : 0);
+    const body = `${lockDraft.length} apps, sites and categories will be locked when your phone time runs out.${newTier.id !== oldTier.id ? `<br><br>Your tier changes from <b>${esc(oldTier.title)}</b> to <b>${esc(newTier.title)}</b>.` : ''}${removed.length ? '<br><br>Unlocked apps stop counting right away.' : ''}${!lockDraft.length && TO.data.settings.enforce ? '<br><br><b>App limits turn off</b> because nothing is locked.' : ''}${lockDraft.length && !before.length ? '<br><br>App limits turn on.' : ''}`;
     if (!(await ui.confirm({ title: 'Update locked apps?', body, confirm: 'Save' }))) return;
     St.setSetting('lockedApps', lockDraft.slice());
     ui.closeSheet('locked');
@@ -343,6 +344,11 @@
   C['set-enforce'] = async (el) => {
     const want = el.checked;
     el.checked = !want;
+    if (want && !TO.data.settings.lockedApps.length) {
+      const pick = await ui.confirm({ title: 'Lock an app first', body: 'App limits need at least one locked app, site or category to block. Choose what TimeOut locks when your phone time runs out, and limits turn on with it.', confirm: 'Choose apps', cancel: 'Not now' });
+      if (pick) lockedAppsSheet();
+      return;
+    }
     const ok = await ui.confirm(want
       ? { title: 'Turn app limits on?', body: 'Your locked apps will close when today\'s phone time runs out.', confirm: 'Turn on' }
       : { title: 'Turn app limits off?', body: 'Your locked apps won\'t close anymore. Your tier drops to Rookie and today won\'t count as a clean day.', confirm: 'Turn off', danger: true });

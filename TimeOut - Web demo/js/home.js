@@ -90,7 +90,7 @@
 
   function openBetsStrip() {
     const open = TO.data.bets.filter((b) => b.status === 'open').sort((a, b) => b.placedAt - a.placedAt);
-    return `<div class="stack-s">
+    return `<div class="stack-s open-bets">
       <div class="section-title"><div class="row-s"><h2>Open bets</h2><span class="count-pill ${open.length ? '' : 'off'}">${open.length}</span></div>${open.length ? `<button class="link-btn" data-act="tab" data-tab="bets">See all</button>` : ''}</div>
       ${open.length
         ? `<div class="hscroll mini-bets" data-hkey="minibets">${open.map(miniBet).join('')}</div>`
@@ -222,19 +222,19 @@
     const lock = wl.appsLocked
       ? `<button class="app-lock" data-act="settings" data-section="screentime">${icon('phone', 22, 'red')}<span class="grow"><b class="red">Your locked apps are blocked</b><div class="small muted">You've used all ${wl.todayLimit} min of today's phone time. Emergency unlocks are in Settings.</div></span>${icon('chevR', 16)}</button>`
       : '';
-    return `<div class="stack" style="padding-top:2px">
+    return `<div class="stack home" style="padding-top:2px">
       ${walletCard(wl)}
       ${lock}
       ${statusStrip(wl)}
       ${openBetsStrip()}
-      <div class="stack" style="gap:12px">
+      <div class="stack feed" style="gap:12px">
         ${filterBar(games)}
         ${feed(games)}
       </div>
     </div>`;
   }
 
-  TO.views.home = { render, gameCard, predCard };
+  TO.views.home = { render, gameCard, predCard, boardGames };
 
   // ---------- Actions ----------
   const A = TO.actions;

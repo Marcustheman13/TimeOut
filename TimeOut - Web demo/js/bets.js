@@ -419,6 +419,7 @@
   TO.inputs['todo-stake'] = (el) => { todo.stake = el.value; };
   for (let i = 0; i < 3; i++) TO.inputs[`todo-${i}`] = (el) => { todo.tasks[i].text = el.value; };
   TO.actions['todo-place'] = () => {
+    if (!TO.net.guard()) return;
     try {
       TO.state.placeTodoParlay({ tasks: todo.tasks, stake: parseInt(todo.stake, 10) });
       ui.closeSheet('todo');

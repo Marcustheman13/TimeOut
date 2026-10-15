@@ -20,6 +20,7 @@
     try {
       res = await fetch(`/api${path}`, { method, headers, body: body ? JSON.stringify(body) : undefined });
     } catch (e) {
+      if (!TO.net.online()) throw new TO.AppError('offline', 'No internet connection. Check your Wi-Fi or data and try again.');
       throw new TO.AppError('offline', 'Can\'t reach the TimeOut server. Make sure `npm start` is running.');
     }
     if (res.status === 204) return null;
