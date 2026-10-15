@@ -57,6 +57,8 @@ When we want everyone on one database, one person creates a free Supabase or Neo
 
 ## How to Get It Running
 
+**Just want to try it?** Open the live site, no setup needed: <https://marcustheman13.github.io/TimeOut/> (phone view) or <https://marcustheman13.github.io/TimeOut/web.html> (computer view). It's the real app with live odds and Supabase accounts, and it redeploys whenever the web demo changes on `main`. The steps below are for running and changing the code yourself.
+
 **You need:** [Node.js](https://nodejs.org) 20 or newer (`node -v` to check) and Git. Nothing else, not even PostgreSQL.
 
 1. **Get the code**

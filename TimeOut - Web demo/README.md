@@ -6,6 +6,7 @@ For the backend, database and team setup, see the [main README](../README.md).
 
 ## Open it
 
+- **Easiest: the live site.** <https://marcustheman13.github.io/TimeOut/> (phone view) and <https://marcustheman13.github.io/TimeOut/web.html> (computer view). It's the real app with live ESPN odds and Supabase accounts, and it updates by itself a minute or two after anything in this folder is pushed to `main` (see `.github/workflows/pages.yml`).
 - **With Supabase (normal):** serve the app over HTTP. Accounts use Supabase Auth; preferences, bets, and wallet transactions use the Supabase tables and RPCs.
 - **Offline demo:** use the app with Supabase config removed. Accounts and state are then saved only in that browser.
 - On a laptop it shows as a phone with a **tester console** beside it. On a real phone it fills the screen, and the tester console moves to **Menu (☰) > Tester tools**.
@@ -79,6 +80,7 @@ The web demo uses Supabase Auth for email/password accounts, saves user preferen
 1. The main schema and bet RPCs have been applied. Run [`../server/db/supabase-settings-migration.sql`](../server/db/supabase-settings-migration.sql) in **SQL Editor** to add the JSON settings field used for locked apps and other app preferences.
 2. Confirm **Email provider** is enabled under **Authentication → Providers**. Email confirmation is enabled, so new users must confirm their email before logging in.
    After **Create account**, the app shows a *Verify your email* page. It logs the new user in by itself as soon as the email is confirmed, and the link in the email also logs them straight in. For the link to come back to the app, add these under **Authentication → URL Configuration → Redirect URLs** (plus your real site's address once it's hosted):
+   - `https://marcustheman13.github.io/TimeOut/**` (the live site)
    - `http://localhost:3000/**`
    - `http://localhost:8765/**` (only if you preview with the static server)
 3. Serve this app over HTTP (`cd server && npm start`, then open `http://localhost:3000`). Supabase sign-in does not work from the serverless `file://` mode.
