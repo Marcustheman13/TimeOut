@@ -679,6 +679,8 @@ label.list-row { cursor: pointer; }
 .drawer .dn .sub { margin-left: auto; font-size: 12px; color: var(--muted); font-weight: 700; }
 .drawer .dn.dn-tester { color: var(--warn); }
 .drawer .dn.dn-tester .ic { color: var(--warn); }
+/* The tester console sits beside the phone here, so the menu doesn't repeat it. On a real phone it's the only way in. */
+@media (min-width: 561px) { .drawer .dn.dn-tester { display: none; } }
 
 .dialog-wrap { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; }
 .dialog {
