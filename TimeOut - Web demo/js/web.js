@@ -3,7 +3,7 @@
    tab bar and menu drawer, a wide content area, and the bet slip docked on the right. */
 (function (TO) {
   'use strict';
-  const { esc, icon } = TO;
+  const { esc, icon, brandMark } = TO;
   const ui = TO.ui;
   const St = TO.state;
   const app = TO.app;
@@ -61,7 +61,7 @@
       const on = section === title;
       return `<button class="sn ${cls} ${on ? 'on' : ''}" data-act="settings" data-section="${key}" title="${title}" aria-current="${on ? 'page' : 'false'}">${icon(ic, 19)}<span class="sn-l">${title}</span>${subs[key] ? `<span class="sn-sub">${subs[key]}</span>` : ''}${key === 'screentime' && wl.appsLocked ? '<span class="sn-dot"></span>' : ''}</button>`;
     };
-    return `<div class="side-brand"><div class="brand">${icon('hourglass', 22, 'brand-mark')}<span class="brand-word">Time<b>Out</b></span></div></div>
+    return `<div class="side-brand"><div class="brand">${brandMark(21, 'brand-mark')}<span class="brand-word">TIME<b>OUT</b></span></div></div>
       <nav class="side-nav">
         ${tabs}
         <div class="side-label eyebrow">Screen time & settings</div>
