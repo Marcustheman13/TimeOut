@@ -2542,26 +2542,35 @@ window.TO = window.TO || {};
     return picks;
   }
 
+  const sameUser = (a, b) => String(a || '').toLowerCase() === String(b || '').toLowerCase();
+
   function searchPeople(query) {
     const q = String(query || '').trim().toLowerCase().replace(/^@/, '');
     if (!q) return [];
     const me = TO.account.username.toLowerCase();
     const locals = Object.values(accounts()).filter((a) => a.username.toLowerCase() !== me).map((a) => ({ username: a.username, name: a.username, photo: a.photo, local: true }));
-    return [...PEOPLE, ...locals].filter((p) => p.username.toLowerCase().includes(q) || (p.name || '').toLowerCase().includes(q)).slice(0, 8);
+    return [...PEOPLE, ...locals].filter((p) => {
+      const username = p.username.toLowerCase();
+      return username !== me && (username.includes(q) || (p.name || '').toLowerCase().includes(q));
+    }).slice(0, 8);
   }
 
   const relation = (username) => {
     const d = TO.data;
-    if (d.friends.includes(username)) return 'friend';
-    if (d.requestsOut.some((r) => r.to === username)) return 'requested';
-    if (d.requestsIn.some((r) => r.from === username)) return 'incoming';
+    if (d.friends.some((f) => sameUser(f, username))) return 'friend';
+    if (d.requestsOut.some((r) => sameUser(r.to, username))) return 'requested';
+    if (d.requestsIn.some((r) => sameUser(r.from, username))) return 'incoming';
     return 'none';
   };
 
   function sendFriendRequest(username, now = TO.now()) {
     const rel = relation(username);
     if (rel === 'friend' || rel === 'requested') return;
-    if (rel === 'incoming') { acceptFriendRequest(TO.data.requestsIn.find((r) => r.from === username).id); return; }
+    if (rel === 'incoming') {
+      const incoming = TO.data.requestsIn.find((r) => sameUser(r.from, username));
+      if (incoming) acceptFriendRequest(incoming.id);
+      return;
+    }
     const p = person(username);
     const req = { id: TO.uid('fr'), to: username, at: now };
     if (p && p.fake) req.acceptAt = now + 6000; // fake people accept after a few seconds
@@ -2757,7 +2766,13 @@ window.TO = window.TO || {};
     const start = TO.dayStart(t.start), end = TO.dayStart(t.end) + DAY;
     const lastDay = TO.dayKey(Math.min(now, end - 1));
     return t.members.map((u) => {
-      const p = u === TO.account.username ? null : person(u);
+      const mine = sameUser(u, TO.account.username);
+      const p = mine ? null : person(u);
+      // A username from search that isn't a demo profile or an account on this device
+      // still belongs on the roster. Don't borrow the current user's record for them.
+      if (!mine && !p) {
+        return { username: u, me: false, net: 0, w: 0, l: 0, hidden: true, photo: TO.initialsAvatar(u), tier: 'rookie' };
+      }
       let net = 0, w = 0, l = 0, hidden = false;
       if (!p || p.local) {
         const bets = p ? migrate(TO.store.get(dataKey(p.accountId), null) || freshData(now)).bets : TO.data.bets;
@@ -2780,8 +2795,28 @@ window.TO = window.TO || {};
         }
         if (!p.share.minutes) hidden = true;
       }
-      return { username: u, me: !p, net, w, l, hidden, photo: p ? p.photo : TO.account.photo, tier: p ? p.tier : tier().id };
+      return { username: u, me: mine, net, w, l, hidden, photo: p ? p.photo : TO.account.photo, tier: p ? p.tier : tier().id };
     }).sort((a, b) => (a.hidden - b.hidden) || b.net - a.net);
+  }
+
+  /** Copies the team onto every member who has an account saved in this browser. */
+  function syncTeamCopies(team) {
+    const copy = JSON.parse(JSON.stringify(team));
+    for (const u of team.members) {
+      if (sameUser(u, TO.account.username)) continue;
+      const acc = findAccountByUsername(u);
+      if (!acc) continue;
+      mutateData(acc.id, (d) => {
+        const existing = d.teams.find((x) => x.id === team.id);
+        if (existing) {
+          existing.name = copy.name;
+          existing.start = copy.start;
+          existing.end = copy.end;
+          existing.owner = copy.owner;
+          existing.members = copy.members.slice();
+        } else d.teams.push(JSON.parse(JSON.stringify(copy)));
+      });
+    }
   }
 
   function createTeam({ name, start, end, members }) {
@@ -2791,27 +2826,51 @@ window.TO = window.TO || {};
     if (!start) errors.start = 'Pick a start date.';
     if (!end) errors.end = 'Pick an end date.';
     if (start && end && end < start) errors.end = 'End date must be on or after the start date.';
-    if (!members.length) errors.members = 'Invite at least one friend.';
     if (Object.keys(errors).length) throw new AppError('invalid', 'Fix the highlighted fields.', { fields: errors });
-    const team = { id: TO.uid('team'), name, start, end, members: [TO.account.username, ...members], owner: TO.account.username, createdAt: TO.now() };
-    TO.data.teams.push(team);
-    for (const u of members) {
-      const acc = findAccountByUsername(u);
-      if (acc) mutateData(acc.id, (d) => d.teams.push(JSON.parse(JSON.stringify(team))));
+    const invited = [];
+    const seen = new Set([TO.account.username.toLowerCase()]);
+    for (const raw of members || []) {
+      const u = String(raw || '').trim();
+      const key = u.toLowerCase();
+      if (!u || seen.has(key)) continue;
+      seen.add(key);
+      invited.push(u);
     }
+    const team = { id: TO.uid('team'), name, start, end, members: [TO.account.username, ...invited], owner: TO.account.username, createdAt: TO.now() };
+    TO.data.teams.push(team);
+    syncTeamCopies(team);
     save();
     return team;
   }
 
   function leaveTeam(id) {
-    TO.data.teams = TO.data.teams.filter((t) => t.id !== id);
+    const t = TO.data.teams.find((x) => x.id === id);
+    TO.data.teams = TO.data.teams.filter((x) => x.id !== id);
+    if (t) {
+      for (const u of t.members) {
+        if (sameUser(u, TO.account.username)) continue;
+        const acc = findAccountByUsername(u);
+        if (!acc) continue;
+        mutateData(acc.id, (d) => {
+          const existing = d.teams.find((x) => x.id === id);
+          if (!existing) return;
+          existing.members = existing.members.filter((m) => !sameUser(m, TO.account.username));
+          if (!existing.members.length) d.teams = d.teams.filter((x) => x.id !== id);
+        });
+      }
+    }
     save();
   }
 
   function inviteToTeam(id, members) {
     const t = TO.data.teams.find((x) => x.id === id);
     if (!t) return;
-    for (const u of members) if (!t.members.includes(u)) t.members.push(u);
+    for (const raw of members || []) {
+      const u = String(raw || '').trim();
+      if (!u || t.members.some((m) => sameUser(m, u))) continue;
+      t.members.push(u);
+    }
+    syncTeamCopies(t);
     save();
   }
 
@@ -3760,6 +3819,41 @@ window.TIMEOUT_SUPABASE = {
     }
     api.clearToken();
     lastSettingsSnapshot = '';
+  };
+
+  /** Usernames that match a query, from Supabase profiles (when signed in) and this app's API.
+   *  Either source can be missing — GitHub Pages has no API, and profiles may be hidden — so a failure is just no extra rows. */
+  api.searchUsers = async (query) => {
+    const safe = String(query || '').trim().replace(/^@/, '').slice(0, 20).replace(/[^a-zA-Z0-9_.]/g, '');
+    if (!safe) return [];
+    const me = String(TO.account?.username || '').toLowerCase();
+    const found = new Map();
+    const add = (username, name, photo) => {
+      const u = String(username || '').trim();
+      const key = u.toLowerCase();
+      if (!u || key === me || found.has(key) || !/^[a-zA-Z0-9_.]{1,20}$/.test(u)) return;
+      found.set(key, { username: u, name: name || u, photo: photo || null, remote: true });
+    };
+    const tasks = [];
+    if (api.configured && token()) {
+      tasks.push((async () => {
+        try {
+          const like = safe.replace(/[_\\*]/g, (ch) => `\\${ch}`);
+          const rows = await rest(`profiles?select=username,display_name,avatar_url&username=ilike.*${encodeURIComponent(like)}*&limit=8`, { signal: AbortSignal.timeout(4000) });
+          if (Array.isArray(rows)) for (const r of rows) add(r.username, r.display_name, r.avatar_url);
+        } catch (e) { /* RLS or a slow network: local results still show */ }
+      })());
+    }
+    tasks.push((async () => {
+      try {
+        const res = await fetch(`/api/users/search?q=${encodeURIComponent(safe)}`, { signal: AbortSignal.timeout(4000), headers: { accept: 'application/json' } });
+        if (!res.ok) return;
+        const json = await res.json().catch(() => ({}));
+        for (const r of json.users || []) add(r.username, r.username, r.photoUrl);
+      } catch (e) { /* opened as a static page, or the API is down */ }
+    })());
+    await Promise.all(tasks);
+    return [...found.values()].slice(0, 8);
   };
 })(window.TO);
 
@@ -5306,7 +5400,7 @@ window.TIMEOUT_SUPABASE = {
   const ui = TO.ui;
   const St = TO.state;
 
-  const view = { tab: 'board', query: '' };
+  const view = { tab: 'board', query: '', remote: [], searching: false, searchSeq: 0 };
   const inviteLink = () => `https://timeout.app/join/${TO.account.username}`;
 
   function meCard() {
@@ -5322,11 +5416,54 @@ window.TIMEOUT_SUPABASE = {
     </div>`;
   }
 
+  function peopleForQuery(q) {
+    const query = String(q || '').trim();
+    if (!query) return [];
+    const me = String(TO.account.username || '').toLowerCase();
+    const seen = new Set();
+    const out = [];
+    const push = (p) => {
+      const key = String(p.username || '').toLowerCase();
+      if (!key || key === me || seen.has(key)) return;
+      seen.add(key);
+      out.push(p);
+    };
+    // Demo profiles and accounts on this device already have names and photos.
+    // A server row for the same username should not replace them.
+    const local = St.searchPeople(query);
+    const localKeys = new Set(local.map((p) => String(p.username || '').toLowerCase()));
+    for (const p of view.remote) if (!localKeys.has(String(p.username || '').toLowerCase())) push(p);
+    for (const p of local) push(p);
+    return out.slice(0, 8);
+  }
+
+  /** A profile for someone search found on the server, or a friend who isn't a demo account on this device. */
+  function personFor(username) {
+    const known = St.person(username);
+    if (known) return known;
+    const key = String(username || '').toLowerCase();
+    const hit = view.remote.find((r) => String(r.username || '').toLowerCase() === key);
+    const listed = !!hit
+      || TO.data.friends.some((f) => String(f).toLowerCase() === key)
+      || TO.data.requestsOut.some((r) => String(r.to).toLowerCase() === key)
+      || TO.data.requestsIn.some((r) => String(r.from).toLowerCase() === key);
+    if (!listed) return null;
+    return {
+      username: hit ? hit.username : username,
+      name: (hit && hit.name) || username,
+      photo: (hit && hit.photo) || TO.initialsAvatar(username),
+      w: 0, l: 0, net: 0, tier: 'rookie', streak: 0,
+      share: { record: false, minutes: false, bets: false },
+      remote: true,
+    };
+  }
+
   function searchResults() {
     const q = view.query.trim();
     if (!q) return '';
-    const results = St.searchPeople(q);
+    const results = peopleForQuery(q);
     if (!results.length) {
+      if (view.searching) return `<div class="note">${icon('search', 16)}<div><b style="color:var(--text)">Searching usernames…</b></div></div>`;
       return `<div class="note">${icon('search', 16)}<div><b style="color:var(--text)">No one found with the username "${esc(q)}".</b><div style="margin-top:3px">They might not be on TimeOut yet. Send them your invite link instead.</div><button class="btn xs primary" style="margin-top:8px" data-act="copy-invite">${icon('link', 14)} Copy invite link</button></div></div>`;
     }
     return `<div class="list">${results.map((p) => {
@@ -5335,7 +5472,8 @@ window.TIMEOUT_SUPABASE = {
         : rel === 'requested' ? `<button class="btn xs ghost" data-act="cancel-request" data-u="${esc(p.username)}">Requested</button>`
         : rel === 'incoming' ? `<button class="btn xs primary" data-act="add-friend" data-u="${esc(p.username)}">Accept</button>`
         : `<button class="btn xs primary" data-act="add-friend" data-u="${esc(p.username)}">${icon('userPlus', 14)} Add</button>`;
-      return `<div class="person-row"><button class="row grow" style="text-align:left" data-act="profile" data-u="${esc(p.username)}">${ui.avatar(p.photo)}<span class="grow" style="min-width:0"><b class="ellipsis" style="display:block">@${esc(p.username)}</b><span class="small muted">${esc(p.name || '')}${p.local ? ' · on this device' : ''}</span></span></button>${btn}</div>`;
+      const where = p.local ? ' · on this device' : p.remote ? ' · TimeOut account' : '';
+      return `<div class="person-row"><button class="row grow" style="text-align:left" data-act="profile" data-u="${esc(p.username)}">${ui.avatar(p.photo || TO.initialsAvatar(p.username))}<span class="grow" style="min-width:0"><b class="ellipsis" style="display:block">@${esc(p.username)}</b><span class="small muted">${esc(p.name || '')}${where}</span></span></button>${btn}</div>`;
     }).join('')}</div>`;
   }
 
@@ -5403,12 +5541,15 @@ window.TIMEOUT_SUPABASE = {
     const cards = list.map((t) => {
       const status = St.teamStatus(t);
       const standings = St.teamStandings(t);
-      const myRank = standings.findIndex((s) => s.me) + 1;
+      const myPlace = standings.findIndex((s) => s.me);
       const statusTag = status === 'active' ? `<span class="tag green">Ends in ${TO.fmtIn(TO.dayStart(t.end) + TO.DAY - TO.now())}</span>` : status === 'upcoming' ? `<span class="tag blue">Starts ${TO.fmtDate(TO.dayStart(t.start))}</span>` : '<span class="tag">Ended</span>';
+      const rankLine = status !== 'upcoming' && standings.length && myPlace >= 0
+        ? `<div class="small">You're <b>${TO.ordinal(myPlace + 1)}</b> of ${standings.length} · leader <b>${standings[0].me ? 'you' : `@${esc(standings[0].username)}`}</b></div>`
+        : '';
       return `<button class="card team-card tappable" style="text-align:left" data-act="team" data-id="${t.id}">
         <div class="spread"><b style="font-size:16px">${esc(t.name)}</b>${statusTag}</div>
         <div class="spread small muted"><span>${TO.fmtDate(TO.dayStart(t.start))} – ${TO.fmtDate(TO.dayStart(t.end))} · ${t.members.length} members</span><span class="avatars">${standings.slice(0, 5).map((s) => `<img src="${esc(s.photo)}" alt="">`).join('')}</span></div>
-        ${status !== 'upcoming' ? `<div class="small">You're <b>${TO.ordinal(myRank)}</b> of ${standings.length} · leader <b>${standings[0].me ? 'you' : `@${esc(standings[0].username)}`}</b></div>` : ''}
+        ${rankLine}
       </button>`;
     }).join('');
     return `<div class="stack-s pad">
@@ -5446,7 +5587,7 @@ window.TIMEOUT_SUPABASE = {
     const isMe = username === TO.account.username;
     ui.sheet('profile', {
       render: () => {
-        const p = isMe ? null : St.person(username);
+        const p = isMe ? null : personFor(username);
         if (!isMe && !p) return { title: 'Profile', body: '<div class="muted">This person could not be found.</div>' };
         const rel = isMe ? 'me' : St.relation(username);
         const st = isMe ? St.myStats() : null;
@@ -5489,7 +5630,7 @@ window.TIMEOUT_SUPABASE = {
           body: `<div class="spread small muted"><span class="row-s">${icon('calendar', 14)} ${TO.fmtDate(TO.dayStart(t.start))} – ${TO.fmtDate(TO.dayStart(t.end))}</span><span>${status === 'active' ? `Ends in ${TO.fmtIn(TO.dayStart(t.end) + TO.DAY - TO.now())}` : status === 'upcoming' ? `Starts in ${TO.fmtIn(TO.dayStart(t.start) - TO.now())}` : 'Ended'}</span></div>
             <div class="list">${rows.map((r, i) => `<div class="lb-row ${r.me ? 'me' : ''}"><span class="rk">${r.hidden ? '–' : i + 1}</span>${ui.avatar(r.photo)}<span><span class="nm">${r.me ? 'You' : `@${esc(r.username)}`}</span><span class="sub">${r.w}-${r.l} during this team</span></span><span class="val">${r.hidden ? '<span class="faint" style="font-size:14px">Private</span>' : `<span class="${r.net > 0 ? 'green' : r.net < 0 ? 'red' : ''}">${TO.signed(r.net)}</span><small>min</small>`}</span></div>`).join('')}</div>
             <div class="tiny faint">Standings count screen-time bets placed between the start and end dates. Friend bets don't count.</div>
-            ${invitable.length ? `<div class="field"><span class="label">Invite more friends</span><div class="pick-friends">${invitable.map((u) => { const p = St.person(u); return `<button class="pick-friend" data-act="team-invite" data-id="${t.id}" data-u="${esc(u)}"><img src="${esc(p.photo)}" alt="">${icon('plus', 14)} ${esc(u)}</button>`; }).join('')}</div></div>` : ''}`,
+            ${invitable.length ? `<div class="field"><span class="label">Invite more friends</span><div class="pick-friends">${invitable.map((u) => { const p = personFor(u); return p ? `<button class="pick-friend" data-act="team-invite" data-id="${t.id}" data-u="${esc(u)}"><img src="${esc(p.photo)}" alt="">${icon('plus', 14)} ${esc(u)}</button>` : ''; }).join('')}</div></div>` : ''}`,
           foot: `<button class="btn quiet sm" data-act="team-leave" data-id="${t.id}">Leave team</button>`,
         };
       },
@@ -5505,7 +5646,7 @@ window.TIMEOUT_SUPABASE = {
         title: 'Create a team',
         body: `${ui.field({ id: 'team-name', label: 'Team name', value: draft.name, placeholder: 'Sunday Squad', err: draft.errors.name, attrs: 'maxlength="30"' })}
           <div class="row" style="align-items:flex-start">${`<div class="grow">${ui.field({ id: 'team-start', label: 'Start date', type: 'date', value: draft.start, err: draft.errors.start })}</div><div class="grow">${ui.field({ id: 'team-end', label: 'End date', type: 'date', value: draft.end, err: draft.errors.end })}</div>`}</div>
-          <div class="field"><span class="label">Invite friends</span>${TO.data.friends.length ? `<div class="pick-friends">${TO.data.friends.map((u) => { const p = St.person(u); return p ? `<button class="pick-friend ${draft.members.includes(u) ? 'on' : ''}" data-act="team-pick" data-u="${esc(u)}"><img src="${esc(p.photo)}" alt="">${esc(u)}</button>` : ''; }).join('')}</div>` : '<div class="note">Add friends first, then build a team.</div>'}${draft.errors.members ? `<div class="err">${esc(draft.errors.members)}</div>` : ''}</div>`,
+          <div class="field"><span class="label">Invite friends</span>${TO.data.friends.length ? `<div class="pick-friends">${TO.data.friends.map((u) => { const p = St.person(u); return p ? `<button class="pick-friend ${draft.members.includes(u) ? 'on' : ''}" data-act="team-pick" data-u="${esc(u)}"><img src="${esc(p.photo)}" alt="">${esc(u)}</button>` : ''; }).join('')}</div>` : '<div class="note">No friends yet. You can still create the team and invite people later.</div>'}${draft.errors.members ? `<div class="err">${esc(draft.errors.members)}</div>` : ''}</div>`,
         foot: `<button class="btn primary full" data-act="team-create">Create team</button>`,
       }),
     });
@@ -5577,13 +5718,18 @@ window.TIMEOUT_SUPABASE = {
     el.classList.toggle('on');
   };
   A['team-create'] = () => {
-    draft.name = document.getElementById('team-name').value;
-    draft.start = document.getElementById('team-start').value;
-    draft.end = document.getElementById('team-end').value;
+    const nameEl = document.getElementById('team-name');
+    const startEl = document.getElementById('team-start');
+    const endEl = document.getElementById('team-end');
+    if (!nameEl || !startEl || !endEl) return;
+    draft.name = nameEl.value;
+    draft.start = startEl.value;
+    draft.end = endEl.value;
     try {
       const t = St.createTeam(draft);
       ui.closeSheet('team-new');
-      ui.toast({ kind: 'win', title: `${t.name} created`, msg: `${t.members.length - 1} friend${t.members.length === 2 ? '' : 's'} invited.` });
+      const invited = t.members.length - 1;
+      ui.toast({ kind: 'win', title: `${t.name} created`, msg: invited ? `${invited} friend${invited === 1 ? '' : 's'} invited.` : 'You can invite friends from the team.' });
       TO.tester.mark('team');
       view.tab = 'teams';
       TO.app.render();
@@ -5608,9 +5754,37 @@ window.TIMEOUT_SUPABASE = {
 
   TO.inputs['social-search'] = (el) => {
     view.query = el.value;
-    const box = document.getElementById('search-results');
-    if (box) box.innerHTML = searchResults();
-    if (el.value.trim() && !St.searchPeople(el.value).length) TO.tester.mark('search');
+    view.remote = [];
+    const seq = ++view.searchSeq;
+    const q = el.value.trim();
+    view.searching = !!q && typeof TO.api.searchUsers === 'function';
+    const paint = () => {
+      if (seq !== view.searchSeq) return;
+      const box = document.getElementById('search-results');
+      if (box) box.innerHTML = searchResults();
+    };
+    paint();
+    if (!q || !view.searching) {
+      if (q && !peopleForQuery(q).length) TO.tester.mark('search');
+      return;
+    }
+    TO.api.searchUsers(q).then((rows) => {
+      if (seq !== view.searchSeq) return;
+      view.searching = false;
+      view.remote = (rows || []).map((r) => ({
+        username: r.username,
+        name: r.name || r.username,
+        photo: r.photo || TO.initialsAvatar(r.username),
+        remote: true,
+      }));
+      paint();
+      if (!peopleForQuery(q).length) TO.tester.mark('search');
+    }).catch(() => {
+      if (seq !== view.searchSeq) return;
+      view.searching = false;
+      paint();
+      if (!peopleForQuery(q).length) TO.tester.mark('search');
+    });
   };
 })(window.TO);
 

@@ -8,6 +8,7 @@ const fs = require('fs');
 const express = require('express');
 const db = require('./db');
 const auth = require('./auth');
+const users = require('./users');
 
 const PORT = Number(process.env.PORT) || 3000;
 const WEB_DIR = path.join(__dirname, '..', '..', 'TimeOut - Web demo');
@@ -23,6 +24,7 @@ app.get('/api/health', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 app.use('/api/auth', auth.router);
+app.use('/api/users', users.router);
 app.use('/api', (req, res) => res.status(404).json({ error: { code: 'not_found', message: `No API route for ${req.method} ${req.originalUrl}` } }));
 
 // Every error leaves as { error: { code, message, fields? } } so clients can show it next to the right input.

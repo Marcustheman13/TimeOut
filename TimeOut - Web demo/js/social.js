@@ -5,7 +5,7 @@
   const ui = TO.ui;
   const St = TO.state;
 
-  const view = { tab: 'board', query: '' };
+  const view = { tab: 'board', query: '', remote: [], searching: false, searchSeq: 0 };
   const inviteLink = () => `https://timeout.app/join/${TO.account.username}`;
 
   function meCard() {
@@ -21,11 +21,54 @@
     </div>`;
   }
 
+  function peopleForQuery(q) {
+    const query = String(q || '').trim();
+    if (!query) return [];
+    const me = String(TO.account.username || '').toLowerCase();
+    const seen = new Set();
+    const out = [];
+    const push = (p) => {
+      const key = String(p.username || '').toLowerCase();
+      if (!key || key === me || seen.has(key)) return;
+      seen.add(key);
+      out.push(p);
+    };
+    // Demo profiles and accounts on this device already have names and photos.
+    // A server row for the same username should not replace them.
+    const local = St.searchPeople(query);
+    const localKeys = new Set(local.map((p) => String(p.username || '').toLowerCase()));
+    for (const p of view.remote) if (!localKeys.has(String(p.username || '').toLowerCase())) push(p);
+    for (const p of local) push(p);
+    return out.slice(0, 8);
+  }
+
+  /** A profile for someone search found on the server, or a friend who isn't a demo account on this device. */
+  function personFor(username) {
+    const known = St.person(username);
+    if (known) return known;
+    const key = String(username || '').toLowerCase();
+    const hit = view.remote.find((r) => String(r.username || '').toLowerCase() === key);
+    const listed = !!hit
+      || TO.data.friends.some((f) => String(f).toLowerCase() === key)
+      || TO.data.requestsOut.some((r) => String(r.to).toLowerCase() === key)
+      || TO.data.requestsIn.some((r) => String(r.from).toLowerCase() === key);
+    if (!listed) return null;
+    return {
+      username: hit ? hit.username : username,
+      name: (hit && hit.name) || username,
+      photo: (hit && hit.photo) || TO.initialsAvatar(username),
+      w: 0, l: 0, net: 0, tier: 'rookie', streak: 0,
+      share: { record: false, minutes: false, bets: false },
+      remote: true,
+    };
+  }
+
   function searchResults() {
     const q = view.query.trim();
     if (!q) return '';
-    const results = St.searchPeople(q);
+    const results = peopleForQuery(q);
     if (!results.length) {
+      if (view.searching) return `<div class="note">${icon('search', 16)}<div><b style="color:var(--text)">Searching usernames…</b></div></div>`;
       return `<div class="note">${icon('search', 16)}<div><b style="color:var(--text)">No one found with the username "${esc(q)}".</b><div style="margin-top:3px">They might not be on TimeOut yet. Send them your invite link instead.</div><button class="btn xs primary" style="margin-top:8px" data-act="copy-invite">${icon('link', 14)} Copy invite link</button></div></div>`;
     }
     return `<div class="list">${results.map((p) => {
@@ -34,7 +77,8 @@
         : rel === 'requested' ? `<button class="btn xs ghost" data-act="cancel-request" data-u="${esc(p.username)}">Requested</button>`
         : rel === 'incoming' ? `<button class="btn xs primary" data-act="add-friend" data-u="${esc(p.username)}">Accept</button>`
         : `<button class="btn xs primary" data-act="add-friend" data-u="${esc(p.username)}">${icon('userPlus', 14)} Add</button>`;
-      return `<div class="person-row"><button class="row grow" style="text-align:left" data-act="profile" data-u="${esc(p.username)}">${ui.avatar(p.photo)}<span class="grow" style="min-width:0"><b class="ellipsis" style="display:block">@${esc(p.username)}</b><span class="small muted">${esc(p.name || '')}${p.local ? ' · on this device' : ''}</span></span></button>${btn}</div>`;
+      const where = p.local ? ' · on this device' : p.remote ? ' · TimeOut account' : '';
+      return `<div class="person-row"><button class="row grow" style="text-align:left" data-act="profile" data-u="${esc(p.username)}">${ui.avatar(p.photo || TO.initialsAvatar(p.username))}<span class="grow" style="min-width:0"><b class="ellipsis" style="display:block">@${esc(p.username)}</b><span class="small muted">${esc(p.name || '')}${where}</span></span></button>${btn}</div>`;
     }).join('')}</div>`;
   }
 
@@ -102,12 +146,15 @@
     const cards = list.map((t) => {
       const status = St.teamStatus(t);
       const standings = St.teamStandings(t);
-      const myRank = standings.findIndex((s) => s.me) + 1;
+      const myPlace = standings.findIndex((s) => s.me);
       const statusTag = status === 'active' ? `<span class="tag green">Ends in ${TO.fmtIn(TO.dayStart(t.end) + TO.DAY - TO.now())}</span>` : status === 'upcoming' ? `<span class="tag blue">Starts ${TO.fmtDate(TO.dayStart(t.start))}</span>` : '<span class="tag">Ended</span>';
+      const rankLine = status !== 'upcoming' && standings.length && myPlace >= 0
+        ? `<div class="small">You're <b>${TO.ordinal(myPlace + 1)}</b> of ${standings.length} · leader <b>${standings[0].me ? 'you' : `@${esc(standings[0].username)}`}</b></div>`
+        : '';
       return `<button class="card team-card tappable" style="text-align:left" data-act="team" data-id="${t.id}">
         <div class="spread"><b style="font-size:16px">${esc(t.name)}</b>${statusTag}</div>
         <div class="spread small muted"><span>${TO.fmtDate(TO.dayStart(t.start))} – ${TO.fmtDate(TO.dayStart(t.end))} · ${t.members.length} members</span><span class="avatars">${standings.slice(0, 5).map((s) => `<img src="${esc(s.photo)}" alt="">`).join('')}</span></div>
-        ${status !== 'upcoming' ? `<div class="small">You're <b>${TO.ordinal(myRank)}</b> of ${standings.length} · leader <b>${standings[0].me ? 'you' : `@${esc(standings[0].username)}`}</b></div>` : ''}
+        ${rankLine}
       </button>`;
     }).join('');
     return `<div class="stack-s pad">
@@ -145,7 +192,7 @@
     const isMe = username === TO.account.username;
     ui.sheet('profile', {
       render: () => {
-        const p = isMe ? null : St.person(username);
+        const p = isMe ? null : personFor(username);
         if (!isMe && !p) return { title: 'Profile', body: '<div class="muted">This person could not be found.</div>' };
         const rel = isMe ? 'me' : St.relation(username);
         const st = isMe ? St.myStats() : null;
@@ -188,7 +235,7 @@
           body: `<div class="spread small muted"><span class="row-s">${icon('calendar', 14)} ${TO.fmtDate(TO.dayStart(t.start))} – ${TO.fmtDate(TO.dayStart(t.end))}</span><span>${status === 'active' ? `Ends in ${TO.fmtIn(TO.dayStart(t.end) + TO.DAY - TO.now())}` : status === 'upcoming' ? `Starts in ${TO.fmtIn(TO.dayStart(t.start) - TO.now())}` : 'Ended'}</span></div>
             <div class="list">${rows.map((r, i) => `<div class="lb-row ${r.me ? 'me' : ''}"><span class="rk">${r.hidden ? '–' : i + 1}</span>${ui.avatar(r.photo)}<span><span class="nm">${r.me ? 'You' : `@${esc(r.username)}`}</span><span class="sub">${r.w}-${r.l} during this team</span></span><span class="val">${r.hidden ? '<span class="faint" style="font-size:14px">Private</span>' : `<span class="${r.net > 0 ? 'green' : r.net < 0 ? 'red' : ''}">${TO.signed(r.net)}</span><small>min</small>`}</span></div>`).join('')}</div>
             <div class="tiny faint">Standings count screen-time bets placed between the start and end dates. Friend bets don't count.</div>
-            ${invitable.length ? `<div class="field"><span class="label">Invite more friends</span><div class="pick-friends">${invitable.map((u) => { const p = St.person(u); return `<button class="pick-friend" data-act="team-invite" data-id="${t.id}" data-u="${esc(u)}"><img src="${esc(p.photo)}" alt="">${icon('plus', 14)} ${esc(u)}</button>`; }).join('')}</div></div>` : ''}`,
+            ${invitable.length ? `<div class="field"><span class="label">Invite more friends</span><div class="pick-friends">${invitable.map((u) => { const p = personFor(u); return p ? `<button class="pick-friend" data-act="team-invite" data-id="${t.id}" data-u="${esc(u)}"><img src="${esc(p.photo)}" alt="">${icon('plus', 14)} ${esc(u)}</button>` : ''; }).join('')}</div></div>` : ''}`,
           foot: `<button class="btn quiet sm" data-act="team-leave" data-id="${t.id}">Leave team</button>`,
         };
       },
@@ -204,7 +251,7 @@
         title: 'Create a team',
         body: `${ui.field({ id: 'team-name', label: 'Team name', value: draft.name, placeholder: 'Sunday Squad', err: draft.errors.name, attrs: 'maxlength="30"' })}
           <div class="row" style="align-items:flex-start">${`<div class="grow">${ui.field({ id: 'team-start', label: 'Start date', type: 'date', value: draft.start, err: draft.errors.start })}</div><div class="grow">${ui.field({ id: 'team-end', label: 'End date', type: 'date', value: draft.end, err: draft.errors.end })}</div>`}</div>
-          <div class="field"><span class="label">Invite friends</span>${TO.data.friends.length ? `<div class="pick-friends">${TO.data.friends.map((u) => { const p = St.person(u); return p ? `<button class="pick-friend ${draft.members.includes(u) ? 'on' : ''}" data-act="team-pick" data-u="${esc(u)}"><img src="${esc(p.photo)}" alt="">${esc(u)}</button>` : ''; }).join('')}</div>` : '<div class="note">Add friends first, then build a team.</div>'}${draft.errors.members ? `<div class="err">${esc(draft.errors.members)}</div>` : ''}</div>`,
+          <div class="field"><span class="label">Invite friends</span>${TO.data.friends.length ? `<div class="pick-friends">${TO.data.friends.map((u) => { const p = St.person(u); return p ? `<button class="pick-friend ${draft.members.includes(u) ? 'on' : ''}" data-act="team-pick" data-u="${esc(u)}"><img src="${esc(p.photo)}" alt="">${esc(u)}</button>` : ''; }).join('')}</div>` : '<div class="note">No friends yet. You can still create the team and invite people later.</div>'}${draft.errors.members ? `<div class="err">${esc(draft.errors.members)}</div>` : ''}</div>`,
         foot: `<button class="btn primary full" data-act="team-create">Create team</button>`,
       }),
     });
@@ -276,13 +323,18 @@
     el.classList.toggle('on');
   };
   A['team-create'] = () => {
-    draft.name = document.getElementById('team-name').value;
-    draft.start = document.getElementById('team-start').value;
-    draft.end = document.getElementById('team-end').value;
+    const nameEl = document.getElementById('team-name');
+    const startEl = document.getElementById('team-start');
+    const endEl = document.getElementById('team-end');
+    if (!nameEl || !startEl || !endEl) return;
+    draft.name = nameEl.value;
+    draft.start = startEl.value;
+    draft.end = endEl.value;
     try {
       const t = St.createTeam(draft);
       ui.closeSheet('team-new');
-      ui.toast({ kind: 'win', title: `${t.name} created`, msg: `${t.members.length - 1} friend${t.members.length === 2 ? '' : 's'} invited.` });
+      const invited = t.members.length - 1;
+      ui.toast({ kind: 'win', title: `${t.name} created`, msg: invited ? `${invited} friend${invited === 1 ? '' : 's'} invited.` : 'You can invite friends from the team.' });
       TO.tester.mark('team');
       view.tab = 'teams';
       TO.app.render();
@@ -307,8 +359,36 @@
 
   TO.inputs['social-search'] = (el) => {
     view.query = el.value;
-    const box = document.getElementById('search-results');
-    if (box) box.innerHTML = searchResults();
-    if (el.value.trim() && !St.searchPeople(el.value).length) TO.tester.mark('search');
+    view.remote = [];
+    const seq = ++view.searchSeq;
+    const q = el.value.trim();
+    view.searching = !!q && typeof TO.api.searchUsers === 'function';
+    const paint = () => {
+      if (seq !== view.searchSeq) return;
+      const box = document.getElementById('search-results');
+      if (box) box.innerHTML = searchResults();
+    };
+    paint();
+    if (!q || !view.searching) {
+      if (q && !peopleForQuery(q).length) TO.tester.mark('search');
+      return;
+    }
+    TO.api.searchUsers(q).then((rows) => {
+      if (seq !== view.searchSeq) return;
+      view.searching = false;
+      view.remote = (rows || []).map((r) => ({
+        username: r.username,
+        name: r.name || r.username,
+        photo: r.photo || TO.initialsAvatar(r.username),
+        remote: true,
+      }));
+      paint();
+      if (!peopleForQuery(q).length) TO.tester.mark('search');
+    }).catch(() => {
+      if (seq !== view.searchSeq) return;
+      view.searching = false;
+      paint();
+      if (!peopleForQuery(q).length) TO.tester.mark('search');
+    });
   };
 })(window.TO);

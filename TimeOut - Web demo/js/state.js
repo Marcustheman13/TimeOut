@@ -666,26 +666,35 @@
     return picks;
   }
 
+  const sameUser = (a, b) => String(a || '').toLowerCase() === String(b || '').toLowerCase();
+
   function searchPeople(query) {
     const q = String(query || '').trim().toLowerCase().replace(/^@/, '');
     if (!q) return [];
     const me = TO.account.username.toLowerCase();
     const locals = Object.values(accounts()).filter((a) => a.username.toLowerCase() !== me).map((a) => ({ username: a.username, name: a.username, photo: a.photo, local: true }));
-    return [...PEOPLE, ...locals].filter((p) => p.username.toLowerCase().includes(q) || (p.name || '').toLowerCase().includes(q)).slice(0, 8);
+    return [...PEOPLE, ...locals].filter((p) => {
+      const username = p.username.toLowerCase();
+      return username !== me && (username.includes(q) || (p.name || '').toLowerCase().includes(q));
+    }).slice(0, 8);
   }
 
   const relation = (username) => {
     const d = TO.data;
-    if (d.friends.includes(username)) return 'friend';
-    if (d.requestsOut.some((r) => r.to === username)) return 'requested';
-    if (d.requestsIn.some((r) => r.from === username)) return 'incoming';
+    if (d.friends.some((f) => sameUser(f, username))) return 'friend';
+    if (d.requestsOut.some((r) => sameUser(r.to, username))) return 'requested';
+    if (d.requestsIn.some((r) => sameUser(r.from, username))) return 'incoming';
     return 'none';
   };
 
   function sendFriendRequest(username, now = TO.now()) {
     const rel = relation(username);
     if (rel === 'friend' || rel === 'requested') return;
-    if (rel === 'incoming') { acceptFriendRequest(TO.data.requestsIn.find((r) => r.from === username).id); return; }
+    if (rel === 'incoming') {
+      const incoming = TO.data.requestsIn.find((r) => sameUser(r.from, username));
+      if (incoming) acceptFriendRequest(incoming.id);
+      return;
+    }
     const p = person(username);
     const req = { id: TO.uid('fr'), to: username, at: now };
     if (p && p.fake) req.acceptAt = now + 6000; // fake people accept after a few seconds
@@ -881,7 +890,13 @@
     const start = TO.dayStart(t.start), end = TO.dayStart(t.end) + DAY;
     const lastDay = TO.dayKey(Math.min(now, end - 1));
     return t.members.map((u) => {
-      const p = u === TO.account.username ? null : person(u);
+      const mine = sameUser(u, TO.account.username);
+      const p = mine ? null : person(u);
+      // A username from search that isn't a demo profile or an account on this device
+      // still belongs on the roster. Don't borrow the current user's record for them.
+      if (!mine && !p) {
+        return { username: u, me: false, net: 0, w: 0, l: 0, hidden: true, photo: TO.initialsAvatar(u), tier: 'rookie' };
+      }
       let net = 0, w = 0, l = 0, hidden = false;
       if (!p || p.local) {
         const bets = p ? migrate(TO.store.get(dataKey(p.accountId), null) || freshData(now)).bets : TO.data.bets;
@@ -904,8 +919,28 @@
         }
         if (!p.share.minutes) hidden = true;
       }
-      return { username: u, me: !p, net, w, l, hidden, photo: p ? p.photo : TO.account.photo, tier: p ? p.tier : tier().id };
+      return { username: u, me: mine, net, w, l, hidden, photo: p ? p.photo : TO.account.photo, tier: p ? p.tier : tier().id };
     }).sort((a, b) => (a.hidden - b.hidden) || b.net - a.net);
+  }
+
+  /** Copies the team onto every member who has an account saved in this browser. */
+  function syncTeamCopies(team) {
+    const copy = JSON.parse(JSON.stringify(team));
+    for (const u of team.members) {
+      if (sameUser(u, TO.account.username)) continue;
+      const acc = findAccountByUsername(u);
+      if (!acc) continue;
+      mutateData(acc.id, (d) => {
+        const existing = d.teams.find((x) => x.id === team.id);
+        if (existing) {
+          existing.name = copy.name;
+          existing.start = copy.start;
+          existing.end = copy.end;
+          existing.owner = copy.owner;
+          existing.members = copy.members.slice();
+        } else d.teams.push(JSON.parse(JSON.stringify(copy)));
+      });
+    }
   }
 
   function createTeam({ name, start, end, members }) {
@@ -915,27 +950,51 @@
     if (!start) errors.start = 'Pick a start date.';
     if (!end) errors.end = 'Pick an end date.';
     if (start && end && end < start) errors.end = 'End date must be on or after the start date.';
-    if (!members.length) errors.members = 'Invite at least one friend.';
     if (Object.keys(errors).length) throw new AppError('invalid', 'Fix the highlighted fields.', { fields: errors });
-    const team = { id: TO.uid('team'), name, start, end, members: [TO.account.username, ...members], owner: TO.account.username, createdAt: TO.now() };
-    TO.data.teams.push(team);
-    for (const u of members) {
-      const acc = findAccountByUsername(u);
-      if (acc) mutateData(acc.id, (d) => d.teams.push(JSON.parse(JSON.stringify(team))));
+    const invited = [];
+    const seen = new Set([TO.account.username.toLowerCase()]);
+    for (const raw of members || []) {
+      const u = String(raw || '').trim();
+      const key = u.toLowerCase();
+      if (!u || seen.has(key)) continue;
+      seen.add(key);
+      invited.push(u);
     }
+    const team = { id: TO.uid('team'), name, start, end, members: [TO.account.username, ...invited], owner: TO.account.username, createdAt: TO.now() };
+    TO.data.teams.push(team);
+    syncTeamCopies(team);
     save();
     return team;
   }
 
   function leaveTeam(id) {
-    TO.data.teams = TO.data.teams.filter((t) => t.id !== id);
+    const t = TO.data.teams.find((x) => x.id === id);
+    TO.data.teams = TO.data.teams.filter((x) => x.id !== id);
+    if (t) {
+      for (const u of t.members) {
+        if (sameUser(u, TO.account.username)) continue;
+        const acc = findAccountByUsername(u);
+        if (!acc) continue;
+        mutateData(acc.id, (d) => {
+          const existing = d.teams.find((x) => x.id === id);
+          if (!existing) return;
+          existing.members = existing.members.filter((m) => !sameUser(m, TO.account.username));
+          if (!existing.members.length) d.teams = d.teams.filter((x) => x.id !== id);
+        });
+      }
+    }
     save();
   }
 
   function inviteToTeam(id, members) {
     const t = TO.data.teams.find((x) => x.id === id);
     if (!t) return;
-    for (const u of members) if (!t.members.includes(u)) t.members.push(u);
+    for (const raw of members || []) {
+      const u = String(raw || '').trim();
+      if (!u || t.members.some((m) => sameUser(m, u))) continue;
+      t.members.push(u);
+    }
+    syncTeamCopies(t);
     save();
   }
 

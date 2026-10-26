@@ -259,4 +259,39 @@
     api.clearToken();
     lastSettingsSnapshot = '';
   };
+
+  /** Usernames that match a query, from Supabase profiles (when signed in) and this app's API.
+   *  Either source can be missing — GitHub Pages has no API, and profiles may be hidden — so a failure is just no extra rows. */
+  api.searchUsers = async (query) => {
+    const safe = String(query || '').trim().replace(/^@/, '').slice(0, 20).replace(/[^a-zA-Z0-9_.]/g, '');
+    if (!safe) return [];
+    const me = String(TO.account?.username || '').toLowerCase();
+    const found = new Map();
+    const add = (username, name, photo) => {
+      const u = String(username || '').trim();
+      const key = u.toLowerCase();
+      if (!u || key === me || found.has(key) || !/^[a-zA-Z0-9_.]{1,20}$/.test(u)) return;
+      found.set(key, { username: u, name: name || u, photo: photo || null, remote: true });
+    };
+    const tasks = [];
+    if (api.configured && token()) {
+      tasks.push((async () => {
+        try {
+          const like = safe.replace(/[_\\*]/g, (ch) => `\\${ch}`);
+          const rows = await rest(`profiles?select=username,display_name,avatar_url&username=ilike.*${encodeURIComponent(like)}*&limit=8`, { signal: AbortSignal.timeout(4000) });
+          if (Array.isArray(rows)) for (const r of rows) add(r.username, r.display_name, r.avatar_url);
+        } catch (e) { /* RLS or a slow network: local results still show */ }
+      })());
+    }
+    tasks.push((async () => {
+      try {
+        const res = await fetch(`/api/users/search?q=${encodeURIComponent(safe)}`, { signal: AbortSignal.timeout(4000), headers: { accept: 'application/json' } });
+        if (!res.ok) return;
+        const json = await res.json().catch(() => ({}));
+        for (const r of json.users || []) add(r.username, r.username, r.photoUrl);
+      } catch (e) { /* opened as a static page, or the API is down */ }
+    })());
+    await Promise.all(tasks);
+    return [...found.values()].slice(0, 8);
+  };
 })(window.TO);
