@@ -2799,6 +2799,41 @@ window.TO = window.TO || {};
     }).sort((a, b) => (a.hidden - b.hidden) || b.net - a.net);
   }
 
+  function saveQuiet() {
+    if (TO.account && TO.data) TO.store.set(dataKey(TO.account.id), TO.data);
+  }
+
+  function newShareKey() {
+    const bytes = new Uint8Array(16);
+    if (globalThis.crypto && globalThis.crypto.getRandomValues) globalThis.crypto.getRandomValues(bytes);
+    else for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
+    return [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
+  }
+
+  function touch(team) {
+    team.rev = (team.rev || 0) + 1;
+    return team.rev;
+  }
+
+  function applyRemote(local, remote) {
+    if (remote.name) local.name = remote.name;
+    if (remote.start) local.start = String(remote.start).slice(0, 10);
+    if (remote.end) local.end = String(remote.end).slice(0, 10);
+    if (remote.owner) local.owner = remote.owner;
+    if (Array.isArray(remote.members) && remote.members.length) local.members = remote.members.slice();
+    local.remote = true;
+  }
+
+  function publishTeam(team) {
+    if (!team.shareKey || !TO.api || !TO.api.publishTeam) return;
+    TO.api.publishTeam(team).then((remote) => {
+      const current = TO.data && TO.data.teams.find((t) => t.id === team.id);
+      if (!current || !remote) return;
+      current.remote = true;
+      saveQuiet();
+    }).catch(() => {});
+  }
+
   /** Copies the team onto every member who has an account saved in this browser. */
   function syncTeamCopies(team) {
     const copy = JSON.parse(JSON.stringify(team));
@@ -2836,42 +2871,141 @@ window.TO = window.TO || {};
       seen.add(key);
       invited.push(u);
     }
-    const team = { id: TO.uid('team'), name, start, end, members: [TO.account.username, ...invited], owner: TO.account.username, createdAt: TO.now() };
+    const team = { id: TO.uid('team'), name, start, end, members: [TO.account.username, ...invited], owner: TO.account.username, createdAt: TO.now(), shareKey: newShareKey(), remote: false, rev: 1 };
     TO.data.teams.push(team);
     syncTeamCopies(team);
     save();
+    publishTeam(team);
     return team;
   }
 
-  function leaveTeam(id) {
+  function leaveTeam(id, opts = {}) {
     const t = TO.data.teams.find((x) => x.id === id);
+    const shareKey = t && t.shareKey;
+    const username = TO.account.username;
     TO.data.teams = TO.data.teams.filter((x) => x.id !== id);
     if (t) {
       for (const u of t.members) {
-        if (sameUser(u, TO.account.username)) continue;
+        if (sameUser(u, username)) continue;
         const acc = findAccountByUsername(u);
         if (!acc) continue;
         mutateData(acc.id, (d) => {
           const existing = d.teams.find((x) => x.id === id);
           if (!existing) return;
-          existing.members = existing.members.filter((m) => !sameUser(m, TO.account.username));
+          existing.members = existing.members.filter((m) => !sameUser(m, username));
           if (!existing.members.length) d.teams = d.teams.filter((x) => x.id !== id);
         });
       }
     }
     save();
+    if (opts.remote !== false && shareKey && TO.api && TO.api.leaveTeamRemote) TO.api.leaveTeamRemote({ id, shareKey }, username).catch(() => {});
   }
 
   function inviteToTeam(id, members) {
     const t = TO.data.teams.find((x) => x.id === id);
     if (!t) return;
+    const added = [];
     for (const raw of members || []) {
       const u = String(raw || '').trim();
       if (!u || t.members.some((m) => sameUser(m, u))) continue;
       t.members.push(u);
+      added.push(u);
     }
+    if (!added.length) return;
+    touch(t);
     syncTeamCopies(t);
     save();
+    if (t.shareKey && TO.api && TO.api.addTeamMember) added.forEach((u) => { TO.api.addTeamMember(t, u).catch(() => {}); });
+  }
+
+  /** Join a team from its link. Adds you, and the server roster when the link has a key. */
+  function joinTeam(snapshot) {
+    const id = String(snapshot.id || '').trim();
+    const name = String(snapshot.name || '').trim();
+    const start = String(snapshot.start || '').slice(0, 10);
+    const end = String(snapshot.end || '').slice(0, 10);
+    if (!/^[A-Za-z0-9_-]{1,40}$/.test(id) || !name || !/^\d{4}-\d{2}-\d{2}$/.test(start) || !/^\d{4}-\d{2}-\d{2}$/.test(end) || end < start) {
+      throw new AppError('invalid', 'That team link is missing a name or its dates.');
+    }
+    let team = TO.data.teams.find((t) => t.id === id);
+    if (!team) {
+      team = { id, name, start, end, members: [], owner: snapshot.owner || TO.account.username, createdAt: TO.now(), shareKey: snapshot.shareKey || null, remote: false, rev: 0 };
+      TO.data.teams.push(team);
+    }
+    if (snapshot.shareKey) team.shareKey = snapshot.shareKey;
+    team.name = name;
+    team.start = start;
+    team.end = end;
+    if (snapshot.owner) team.owner = snapshot.owner;
+    const add = (u) => { if (u && !team.members.some((m) => sameUser(m, u))) team.members.push(u); };
+    add(snapshot.owner);
+    for (const raw of snapshot.members || []) add(String(raw || '').trim());
+    add(TO.account.username);
+    const rev = touch(team);
+    syncTeamCopies(team);
+    save();
+    if (team.shareKey && TO.api && TO.api.addTeamMember) {
+      const key = team.shareKey;
+      TO.api.addTeamMember(team, TO.account.username).then((remote) => {
+        const current = TO.data && TO.data.teams.find((t) => t.id === id);
+        if (!current || !remote || (current.rev || 0) !== rev) return;
+        applyRemote(current, remote);
+        current.shareKey = key;
+        syncTeamCopies(current);
+        saveQuiet();
+      }).catch(() => {});
+    }
+    return team;
+  }
+
+  /** Pull rosters that were saved on the server. A failed request leaves the local team alone. */
+  function refreshTeams() {
+    if (!TO.data || !TO.api || !TO.api.fetchTeam) return Promise.resolve(false);
+    const revs = new Map(TO.data.teams.map((t) => [t.id, t.rev || 0]));
+    let changed = false;
+    const pulls = TO.data.teams.filter((t) => t.shareKey && t.remote).map(async (team) => {
+      const remote = await TO.api.fetchTeam(team.id, team.shareKey);
+      const current = TO.data && TO.data.teams.find((t) => t.id === team.id);
+      if (!current || (current.rev || 0) !== revs.get(team.id) || remote === null) return;
+      if (remote === false || !(remote.members || []).some((m) => sameUser(m, TO.account.username))) {
+        leaveTeam(team.id, { remote: false });
+        changed = true;
+        return;
+      }
+      applyRemote(current, remote);
+      current.shareKey = team.shareKey;
+      syncTeamCopies(current);
+      changed = true;
+    });
+    const mine = TO.api.myTeams ? TO.api.myTeams() : Promise.resolve(null);
+    return Promise.all([mine, ...pulls]).then(([listed]) => {
+      if (Array.isArray(listed) && TO.data) {
+        const seen = new Set();
+        for (const remote of listed) {
+          if (!remote || !remote.id) continue;
+          seen.add(remote.id);
+          let local = TO.data.teams.find((t) => t.id === remote.id);
+          if (!local) {
+            local = { id: remote.id, name: remote.name, start: String(remote.start).slice(0, 10), end: String(remote.end).slice(0, 10), members: remote.members || [TO.account.username], owner: remote.owner || TO.account.username, createdAt: TO.now(), remote: true, rev: 1 };
+            TO.data.teams.push(local);
+            changed = true;
+          } else if ((local.rev || 0) === revs.get(local.id)) {
+            const key = local.shareKey;
+            applyRemote(local, remote);
+            if (key) local.shareKey = key;
+            changed = true;
+          }
+        }
+        const kept = TO.data.teams.filter((t) => t.shareKey || !t.remote || seen.has(t.id));
+        if (kept.length !== TO.data.teams.length) { TO.data.teams = kept; changed = true; }
+      }
+      if (changed) {
+        saveQuiet();
+        if (TO.app) TO.app.render();
+        if (TO.ui && TO.ui.sheetOpen && TO.ui.sheetOpen('team')) TO.ui.refreshSheet('team');
+      }
+      return changed;
+    }).catch(() => false);
   }
 
   // ---------- Leaderboard ----------
@@ -3026,7 +3160,7 @@ window.TO = window.TO || {};
     myStats, statsFor, person, sharedPicks, searchPeople, relation,
     sendFriendRequest, acceptFriendRequest, declineFriendRequest, cancelFriendRequest, resendFriendRequest, resendWait, removeFriend,
     incomingChallenge, acceptChallenge, declineChallenge, sendBetToFriends, socialTick,
-    teamStatus, teamStandings, createTeam, leaveTeam, inviteToTeam, leaderboard,
+    teamStatus, teamStandings, createTeam, leaveTeam, inviteToTeam, joinTeam, refreshTeams, sameUser, leaderboard,
     ensureDemoAccount, loginDemo, resetMyData, seedDemoData,
   };
 })(window.TO);
@@ -3854,6 +3988,86 @@ window.TIMEOUT_SUPABASE = {
     })());
     await Promise.all(tasks);
     return [...found.values()].slice(0, 8);
+  };
+
+  let expressReady = null;
+  async function expressUp() {
+    if (expressReady != null) return expressReady;
+    try {
+      const res = await fetch('/api/health', { signal: AbortSignal.timeout(1500), headers: { accept: 'application/json' } });
+      const json = await res.json().catch(() => null);
+      expressReady = !!(res.ok && json && json.ok);
+    } catch (e) { expressReady = false; }
+    return expressReady;
+  }
+
+  const teamBody = (team, extra) => JSON.stringify({ ...extra, key: team.shareKey });
+
+  async function expressTeam(path, options) {
+    const res = await fetch(path, { ...options, signal: AbortSignal.timeout(4000), headers: { 'content-type': 'application/json', accept: 'application/json', ...(options.headers || {}) } });
+    if (res.status === 404) return false;
+    if (!res.ok) return null;
+    const json = await res.json().catch(() => null);
+    return json && Object.prototype.hasOwnProperty.call(json, 'team') ? json.team : null;
+  }
+
+  /** Save one new team. A repeat with the same link returns the roster and does not add people again. */
+  api.publishTeam = async (team) => {
+    if (!team?.shareKey) return null;
+    try {
+      if (await expressUp()) {
+        return await expressTeam('/api/teams', { method: 'POST', body: JSON.stringify({ id: team.id, name: team.name, start: team.start, end: team.end, owner: team.owner, key: team.shareKey, members: team.members }) });
+      }
+      if (!(api.configured && token())) return null;
+      return await rest('rpc/timeout_save_team', { method: 'POST', signal: AbortSignal.timeout(4000), body: JSON.stringify({ p_id: team.id, p_name: team.name, p_start: team.start, p_end: team.end, p_key: team.shareKey, p_members: team.members }) });
+    } catch (e) { return null; }
+  };
+
+  api.addTeamMember = async (team, username) => {
+    if (!team?.shareKey || !username) return null;
+    const send = async () => {
+      if (await expressUp()) return expressTeam(`/api/teams/${encodeURIComponent(team.id)}/members`, { method: 'POST', body: teamBody(team, { username }) });
+      if (!(api.configured && token())) return null;
+      return rest('rpc/timeout_add_team_member', { method: 'POST', signal: AbortSignal.timeout(4000), body: JSON.stringify({ p_id: team.id, p_key: team.shareKey, p_username: username }) });
+    };
+    try {
+      let result = await send();
+      if (result === false) {
+        await api.publishTeam(team);
+        result = await send();
+      }
+      return result === false ? null : result;
+    } catch (e) { return null; }
+  };
+
+  api.leaveTeamRemote = async (team, username) => {
+    if (!team?.shareKey || !username) return null;
+    try {
+      if (await expressUp()) return expressTeam(`/api/teams/${encodeURIComponent(team.id)}/leave`, { method: 'POST', body: teamBody(team, { username }) });
+      if (!(api.configured && token())) return null;
+      return await rest('rpc/timeout_leave_team', { method: 'POST', signal: AbortSignal.timeout(4000), body: JSON.stringify({ p_id: team.id, p_key: team.shareKey, p_username: username }) });
+    } catch (e) { return null; }
+  };
+
+  /** The roster, false when the link is wrong or the team is gone, null when the server can't be reached. */
+  api.fetchTeam = async (id, key) => {
+    if (!id || !key) return null;
+    try {
+      if (await expressUp()) return expressTeam(`/api/teams/${encodeURIComponent(id)}?key=${encodeURIComponent(key)}`, { method: 'GET', headers: { accept: 'application/json' } });
+      if (!(api.configured && token())) return null;
+      const row = await rest('rpc/timeout_get_team', { method: 'POST', signal: AbortSignal.timeout(4000), body: JSON.stringify({ p_id: id, p_key: key }) });
+      return row && row.id ? row : false;
+    } catch (e) { return null; }
+  };
+
+  /** Teams this signed-in Supabase profile is on. Null means "don't change the local list". */
+  api.myTeams = async () => {
+    if (await expressUp()) return null;
+    if (!(api.configured && token())) return null;
+    try {
+      const rows = await rest('rpc/timeout_my_teams', { method: 'POST', signal: AbortSignal.timeout(4000), body: '{}' });
+      return Array.isArray(rows) ? rows : null;
+    } catch (e) { return null; }
   };
 })(window.TO);
 
@@ -5624,10 +5838,12 @@ window.TIMEOUT_SUPABASE = {
         if (!t) return { title: 'Team', body: '' };
         const status = St.teamStatus(t);
         const rows = St.teamStandings(t);
-        const invitable = TO.data.friends.filter((f) => !t.members.includes(f));
+        const invitable = TO.data.friends.filter((f) => !t.members.some((m) => St.sameUser(m, f)));
+        const owner = St.sameUser(t.owner, TO.account.username) ? 'You own this team' : `Owned by @${esc(t.owner)}`;
         return {
           title: esc(t.name),
           body: `<div class="spread small muted"><span class="row-s">${icon('calendar', 14)} ${TO.fmtDate(TO.dayStart(t.start))} – ${TO.fmtDate(TO.dayStart(t.end))}</span><span>${status === 'active' ? `Ends in ${TO.fmtIn(TO.dayStart(t.end) + TO.DAY - TO.now())}` : status === 'upcoming' ? `Starts in ${TO.fmtIn(TO.dayStart(t.start) - TO.now())}` : 'Ended'}</span></div>
+            <div class="small muted">${owner} · ${t.members.length} on the roster</div>
             <div class="list">${rows.map((r, i) => `<div class="lb-row ${r.me ? 'me' : ''}"><span class="rk">${r.hidden ? '–' : i + 1}</span>${ui.avatar(r.photo)}<span><span class="nm">${r.me ? 'You' : `@${esc(r.username)}`}</span><span class="sub">${r.w}-${r.l} during this team</span></span><span class="val">${r.hidden ? '<span class="faint" style="font-size:14px">Private</span>' : `<span class="${r.net > 0 ? 'green' : r.net < 0 ? 'red' : ''}">${TO.signed(r.net)}</span><small>min</small>`}</span></div>`).join('')}</div>
             <div class="tiny faint">Standings count screen-time bets placed between the start and end dates. Friend bets don't count.</div>
             ${invitable.length ? `<div class="field"><span class="label">Invite more friends</span><div class="pick-friends">${invitable.map((u) => { const p = personFor(u); return p ? `<button class="pick-friend" data-act="team-invite" data-id="${t.id}" data-u="${esc(u)}"><img src="${esc(p.photo)}" alt="">${icon('plus', 14)} ${esc(u)}</button>` : ''; }).join('')}</div></div>` : ''}`,
@@ -5654,7 +5870,7 @@ window.TIMEOUT_SUPABASE = {
 
   // ---------- Actions ----------
   const A = TO.actions;
-  A['social-tab'] = (el) => { view.tab = el.dataset.t; TO.app.render(); };
+  A['social-tab'] = (el) => { view.tab = el.dataset.t; TO.app.render(); if (view.tab === 'teams') St.refreshTeams(); };
   A.profile = (el) => profile(el.dataset.u);
   A['copy-invite'] = async () => {
     const ok = await ui.copy(inviteLink());
@@ -5710,7 +5926,7 @@ window.TIMEOUT_SUPABASE = {
     ui.toast({ kind: 'info', title: `Pick a game to challenge @${u}`, msg: 'Tap any odds. The slip opens as a friend bet with them already selected.', ms: 5000 });
   };
   A['goto-social'] = () => { ui.closeAllSheets(); ui.closeAllPages(); TO.app.go('social'); };
-  A.team = (el) => teamSheet(el.dataset.id);
+  A.team = (el) => { teamSheet(el.dataset.id); St.refreshTeams(); };
   A['team-new'] = () => newTeamSheet();
   A['team-pick'] = (el) => {
     const u = el.dataset.u;
@@ -6815,6 +7031,7 @@ window.TIMEOUT_SUPABASE = {
     app.tab = 'home';
     app.render();
     TO.live.refresh();
+    if (St.refreshTeams) St.refreshTeams();
     TO.tester.render();
   };
 

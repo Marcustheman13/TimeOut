@@ -229,10 +229,12 @@
         if (!t) return { title: 'Team', body: '' };
         const status = St.teamStatus(t);
         const rows = St.teamStandings(t);
-        const invitable = TO.data.friends.filter((f) => !t.members.includes(f));
+        const invitable = TO.data.friends.filter((f) => !t.members.some((m) => St.sameUser(m, f)));
+        const owner = St.sameUser(t.owner, TO.account.username) ? 'You own this team' : `Owned by @${esc(t.owner)}`;
         return {
           title: esc(t.name),
           body: `<div class="spread small muted"><span class="row-s">${icon('calendar', 14)} ${TO.fmtDate(TO.dayStart(t.start))} – ${TO.fmtDate(TO.dayStart(t.end))}</span><span>${status === 'active' ? `Ends in ${TO.fmtIn(TO.dayStart(t.end) + TO.DAY - TO.now())}` : status === 'upcoming' ? `Starts in ${TO.fmtIn(TO.dayStart(t.start) - TO.now())}` : 'Ended'}</span></div>
+            <div class="small muted">${owner} · ${t.members.length} on the roster</div>
             <div class="list">${rows.map((r, i) => `<div class="lb-row ${r.me ? 'me' : ''}"><span class="rk">${r.hidden ? '–' : i + 1}</span>${ui.avatar(r.photo)}<span><span class="nm">${r.me ? 'You' : `@${esc(r.username)}`}</span><span class="sub">${r.w}-${r.l} during this team</span></span><span class="val">${r.hidden ? '<span class="faint" style="font-size:14px">Private</span>' : `<span class="${r.net > 0 ? 'green' : r.net < 0 ? 'red' : ''}">${TO.signed(r.net)}</span><small>min</small>`}</span></div>`).join('')}</div>
             <div class="tiny faint">Standings count screen-time bets placed between the start and end dates. Friend bets don't count.</div>
             ${invitable.length ? `<div class="field"><span class="label">Invite more friends</span><div class="pick-friends">${invitable.map((u) => { const p = personFor(u); return p ? `<button class="pick-friend" data-act="team-invite" data-id="${t.id}" data-u="${esc(u)}"><img src="${esc(p.photo)}" alt="">${icon('plus', 14)} ${esc(u)}</button>` : ''; }).join('')}</div></div>` : ''}`,
@@ -259,7 +261,7 @@
 
   // ---------- Actions ----------
   const A = TO.actions;
-  A['social-tab'] = (el) => { view.tab = el.dataset.t; TO.app.render(); };
+  A['social-tab'] = (el) => { view.tab = el.dataset.t; TO.app.render(); if (view.tab === 'teams') St.refreshTeams(); };
   A.profile = (el) => profile(el.dataset.u);
   A['copy-invite'] = async () => {
     const ok = await ui.copy(inviteLink());
@@ -315,7 +317,7 @@
     ui.toast({ kind: 'info', title: `Pick a game to challenge @${u}`, msg: 'Tap any odds. The slip opens as a friend bet with them already selected.', ms: 5000 });
   };
   A['goto-social'] = () => { ui.closeAllSheets(); ui.closeAllPages(); TO.app.go('social'); };
-  A.team = (el) => teamSheet(el.dataset.id);
+  A.team = (el) => { teamSheet(el.dataset.id); St.refreshTeams(); };
   A['team-new'] = () => newTeamSheet();
   A['team-pick'] = (el) => {
     const u = el.dataset.u;

@@ -41,6 +41,7 @@
     app.tab = 'home';
     app.render();
     TO.live.refresh();
+    if (St.refreshTeams) St.refreshTeams();
     TO.tester.render();
   };
 
