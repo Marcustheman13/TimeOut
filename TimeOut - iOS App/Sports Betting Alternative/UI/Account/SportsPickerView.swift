@@ -79,13 +79,7 @@ struct SportsPickerView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 6) {
-                Image(systemName: "hourglass.bottomhalf.filled")
-                    .foregroundStyle(Theme.accent)
-                Text(Theme.brand)
-                    .font(.display(28, weight: .black))
-                    .italic()
-            }
+            BrandLogo(size: 28)
             Text("Pick your sports")
                 .font(.display(38, weight: .black))
             Text("Bet screen time, not money. You get \(BetBook.dailyAllowance) minutes a day. Wins add to tomorrow's phone time and losses take it away.")

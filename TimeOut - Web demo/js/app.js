@@ -1,7 +1,7 @@
 /* TimeOut web demo — app shell, navigation, live refresh loop and event wiring. */
 (function (TO) {
   'use strict';
-  const { esc, icon } = TO;
+  const { esc, icon, brandMark } = TO;
   const ui = TO.ui;
   const St = TO.state;
 
@@ -53,7 +53,7 @@
     const socialBadge = TO.views.social.badge();
     document.getElementById('topbar').innerHTML = `
       <button class="icon-btn" data-act="menu" aria-label="Menu and settings">${icon('menu', 22)}${wl.appsLocked ? '<span class="dotbadge"></span>' : ''}</button>
-      <div class="brand">${icon('hourglass', 20, 'brand-mark')}<span class="brand-word">Time<b>Out</b></span></div>
+      <div class="brand">${brandMark(18, 'brand-mark')}<span class="brand-word">TIME<b>OUT</b></span></div>
       <button class="bal-pill ${locked ? 'locked' : ''}" data-act="settings" data-section="screentime" aria-label="${locked ? 'Betting locked until midnight' : `${wl.balance} minutes available to bet`}">${icon(locked ? 'lock' : 'hourglass', 15)}${locked ? 'Locked' : `${wl.balance} min`}</button>`;
     const open = TO.data.bets.filter((b) => b.status === 'open' && b.kind === 'sports' && b.legs.length && b.legs.every((leg) => leg.kind === 'game' || (leg.kind === 'sports' && leg.gameId))).length;
     document.getElementById('tabbar').innerHTML = TABS.map(([k, label, ic]) => {

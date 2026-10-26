@@ -333,6 +333,7 @@ button.wt-stat:hover { border-color: #3a4558; }
 .web .auth:has(.welcome-hero) { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(400px, 0.9fr); align-items: center; }
 .web .welcome-hero { height: 100%; padding: 48px 64px 72px; gap: 20px; background: none; border-right: 1px solid var(--stroke); }
 .web .welcome-hero .wordmark { font-size: clamp(84px, 9vw, 150px); }
+.web .welcome-hero .brand-icon { width: clamp(72px, 6.5vw, 108px); height: auto; }
 .web .welcome-hero .tagline { font-size: clamp(30px, 3vw, 46px); max-width: 16ch; }
 .web .welcome-points { gap: 14px; margin-top: 14px; }
 .web .welcome-points div { font-size: 17px; max-width: 46ch; }
