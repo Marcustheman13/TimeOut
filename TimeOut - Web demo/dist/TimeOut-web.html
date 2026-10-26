@@ -6177,7 +6177,7 @@ window.TIMEOUT_SUPABASE = {
     }).join('');
     return `<div class="stack-s pad">
       <div class="small muted">Teams compete over the dates you pick. Whoever wins the most minutes in that stretch tops the team.</div>
-      <button class="btn primary sm" data-act="team-new">${icon('plus', 16)} Create a team</button>
+      <div class="row-s" style="flex-wrap:wrap"><button class="btn primary sm" data-act="team-new">${icon('plus', 16)} Create a team</button><button class="btn ghost sm" data-act="team-how">${icon('info', 16)} How teams work</button></div>
       ${cards || `<div class="empty">${icon('trophy', 36)}<h3>No teams yet</h3><p>Start one with a few friends and pick a start and end date.</p></div>`}
     </div>`;
   }
@@ -6262,6 +6262,21 @@ window.TIMEOUT_SUPABASE = {
     });
   }
 
+  function teamHow() {
+    ui.sheet('team-how', {
+      render: () => ({
+        title: 'How teams work',
+        body: `<p class="sub" style="margin-top:0">Teams are how friends compete here without betting money. TimeOut puts screen time on the line instead of cash, and a team is the stretch of days you compare.</p>
+          <div class="how-card"><span class="n">1</span><div><h3>Pick a name and the dates</h3><p>Create a team for a week or a season. You can start it on your own and invite people later.</p></div></div>
+          <div class="how-card"><span class="n">2</span><div><h3>Minutes decide the standings</h3><p>Between the start and end dates, screen-time bets count. Whoever comes out ahead on minutes leads. A side bet with a friend does not count.</p></div></div>
+          <div class="how-card"><span class="n">3</span><div><h3>Invite friends onto the roster</h3><p>Open the team and add a friend. They show up with you, and their record for those dates is what you compare.</p></div></div>
+          <div class="how-card"><span class="n">4</span><div><h3>Leave whenever you want</h3><p>Leaving takes you off the standings. The team stays for everyone else.</p></div></div>
+          <div class="tiny faint">The team is saved in this browser. When this page can reach the TimeOut server, the roster is saved there too, one member at a time, so it is still here the next time you open the app.</div>`,
+        foot: `<button class="btn primary full" data-act="close-sheet" data-name="team-how">Got it</button>`,
+      }),
+    });
+  }
+
   const draft = { name: '', start: '', end: '', members: [], errors: {} };
   function newTeamSheet() {
     Object.assign(draft, { name: '', start: TO.dayKey(), end: TO.addDays(TO.dayKey(), 7), members: [], errors: {} });
@@ -6337,6 +6352,7 @@ window.TIMEOUT_SUPABASE = {
   A['goto-social'] = () => { ui.closeAllSheets(); ui.closeAllPages(); TO.app.go('social'); };
   A.team = (el) => { teamSheet(el.dataset.id); St.refreshTeams(); };
   A['team-new'] = () => newTeamSheet();
+  A['team-how'] = () => teamHow();
   A['team-pick'] = (el) => {
     const u = el.dataset.u;
     draft.members = draft.members.includes(u) ? draft.members.filter((x) => x !== u) : [...draft.members, u];
