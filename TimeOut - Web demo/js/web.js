@@ -1,5 +1,5 @@
-/* TimeOut web demo — browser layout. Loaded only by web.html, after app.js.
-   Same app, data and actions as the phone version, laid out for a desktop browser: a sidebar instead of the
+/* TimeOut web app — browser layout. Loaded only by web.html, after app.js.
+   Same app, data and actions as the app version, laid out for a desktop browser: a sidebar instead of the
    tab bar and menu drawer, a wide content area, and the bet slip docked on the right. */
 (function (TO) {
   'use strict';
@@ -9,7 +9,7 @@
   const app = TO.app;
   const A = TO.actions;
 
-  /** Wide enough to dock the bet slip on the right. Below this the slip opens as a dialog, like a sheet on the phone. */
+  /** Wide enough to dock the bet slip on the right. Below this the slip opens as a dialog. */
   const wide = window.matchMedia('(min-width: 900px)');
   const isWeb = () => !!document.getElementById('side') && !!TO.data;
 
@@ -153,33 +153,17 @@
   }, true);
   window.matchMedia('(max-width: 720px)').addEventListener('change', () => setSide(false));
 
-  const phoneBoot = app.boot;
-  app.boot = () => { ui.closeSheet('slip', true); TO.slip.clear(); setSide(false); phoneBoot(); };
+  const appBoot = app.boot;
+  app.boot = () => { ui.closeSheet('slip', true); TO.slip.clear(); setSide(false); appBoot(); };
   TO.slip.docked = () => wide.matches && isWeb();
 
   // The sidebar is always on screen, so a settings section can be opened over a game page. Replace it instead.
-  const phoneSettings = A.settings;
-  A.settings = (el) => { ui.closeAllPages(); phoneSettings(el); app.renderChrome(); };
+  const appSettings = A.settings;
+  A.settings = (el) => { ui.closeAllPages(); appSettings(el); app.renderChrome(); };
 
-  // ---------- Demo controls dropdown (in the demo bar above the app, not part of TimeOut) ----------
-  const dropBtn = document.getElementById('db-toggle');
-  const drop = document.getElementById('db-drop');
-  const dropOpen = () => drop.classList.contains('open');
-  function setDrop(open) {
-    drop.classList.toggle('open', open);
-    dropBtn.setAttribute('aria-expanded', String(open));
-    if (open) TO.tester.render();
-  }
-  dropBtn.addEventListener('click', () => setDrop(!dropOpen()));
-  // Capture phase: tester buttons re-render the panel, so check where the click landed before that happens.
-  window.addEventListener('click', (e) => {
-    if (dropOpen() && !drop.contains(e.target) && !dropBtn.contains(e.target)) setDrop(false);
-  }, true);
-
-  // Escape closes the dropdown first, then dialogs and pages, but never the docked slip.
+  // Escape closes the sidebar or a dialog, but never the docked slip.
   window.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
-    if (dropOpen()) { setDrop(false); dropBtn.focus(); e.stopImmediatePropagation(); return; }
     if (document.body.classList.contains('side-open')) { setSide(false); e.stopImmediatePropagation(); return; }
     if (!wide.matches) return;
     const last = ui.layer().lastElementChild;

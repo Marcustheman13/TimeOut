@@ -23,16 +23,7 @@ window.TO = window.TO || {};
     },
   };
 
-  // ---------- Demo clock ----------
-  // Testers can move time forward (to see games end, midnight resets, etc). Everything reads TO.now().
-  let clockOffset = TO.store.get('timeout.clockOffset', 0);
-  TO.now = () => Date.now() + clockOffset;
-  TO.clock = {
-    get offset() { return clockOffset; },
-    add(ms) { clockOffset += ms; TO.store.set('timeout.clockOffset', clockOffset); },
-    set(ts) { clockOffset = ts - Date.now(); TO.store.set('timeout.clockOffset', clockOffset); },
-    reset() { clockOffset = 0; TO.store.set('timeout.clockOffset', 0); },
-  };
+  TO.now = () => Date.now();
 
   const MIN = 60 * 1000;
   const HOUR = 60 * MIN;
@@ -251,7 +242,7 @@ window.TO = window.TO || {};
     wifiOff: '<path d="M3 3l18 18"/><path d="M8.5 16.4a5 5 0 0 1 7 0M5 12.9a10 10 0 0 1 4.2-2.5M14.8 10.4A10 10 0 0 1 19 12.9M2 9.3a15 15 0 0 1 4.3-2.8M11 5.1A15 15 0 0 1 22 9.3"/><circle cx="12" cy="20" r="1" fill="currentColor"/>',
   };
   // ---------- Connection ----------
-  // Testers can fake a dropped connection from the demo controls; otherwise this follows the browser.
+  // Connectivity follows the browser; the app can still report offline state to its views.
   TO.net = {
     simulatedOffline: false,
     online: () => navigator.onLine !== false && !TO.net.simulatedOffline,

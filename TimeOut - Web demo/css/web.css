@@ -1,5 +1,5 @@
-/* TimeOut in a desktop browser. Loaded after app.css by web.html only, so the phone version is untouched.
-   Same components as the phone, laid out for a wide screen: sidebar navigation on the left, content in a
+/* TimeOut in a desktop browser. Loaded after app.css by web.html only.
+   Shared components are laid out for a wide screen: sidebar navigation on the left, content in a
    centered grid, and the bet slip docked on the right. */
 .web {
   --side-w: 256px;
@@ -10,20 +10,7 @@
   --panel: #0c1016;
   overflow: hidden;
 }
-.web #screen { position: fixed; inset: 0; top: var(--demo-h); background: var(--bg); isolation: isolate; }
-
-/* Demo controls drop down from the demo bar, so the app keeps the whole window */
-.web .db-drop {
-  display: none !important;
-  position: absolute; top: calc(100% + 10px); right: 0;
-  width: min(380px, calc(100vw - 24px)); max-height: calc(100vh - var(--demo-h) - 24px);
-  border-style: solid;
-  box-shadow: 0 30px 70px rgba(0, 0, 0, 0.6);
-  animation: pop 0.16s ease;
-  transform-origin: top right;
-}
-.web .db-drop.open { display: flex !important; }
-.web .db-drop .tester-body { overflow-y: auto; }
+.web #screen { position: fixed; inset: 0; background: var(--bg); isolation: isolate; }
 .web .app, .web .layer, .web .auth { top: 0; }
 
 .web :is(.view, .page-scroll, .sheet-body, .rail, .side) { scrollbar-width: thin; scrollbar-color: #2a3342 transparent; }
@@ -70,7 +57,6 @@
 .sn.primary { height: 48px; font-size: 16px; font-weight: 800; color: var(--text); }
 .sn.primary .ic { color: var(--text-2); }
 .sn.primary.on .ic { color: var(--accent); }
-.sn.sn-tester, .sn.sn-tester .ic { color: var(--warn); }
 .sn-l { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sn-sub { font-size: 12px; font-weight: 700; color: var(--muted); white-space: nowrap; }
 .sn-n {

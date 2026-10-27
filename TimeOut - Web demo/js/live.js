@@ -232,9 +232,9 @@
   }
 
   function selectedGroup() { return cfbGroup; }
-  async function fetchLeague(league, group = '80', now = TO.now(), days = scoreboardDays(now)) {
+  async function fetchLeague(league, group = '80', now = TO.now(), dates = scoreboardDays(now)) {
     const [path] = LEAGUES[league];
-    const responses = await Promise.all(days.map(async (date) => {
+    const results = await Promise.allSettled(dates.map(async (date) => {
       const params = new URLSearchParams({ dates: date });
       if (league === 'ncaaf') {
         if (group !== 'all') params.set('groups', group);
@@ -244,9 +244,43 @@
       if (!response.ok) throw new Error(`ESPN returned ${response.status}`);
       return response.json();
     }));
+    const payloads = results.filter((result) => result.status === 'fulfilled').map((result) => result.value);
+    if (!payloads.length) throw new Error(`All ESPN scoreboard requests failed for ${league}.`);
     const events = new Map();
-    responses.forEach((payload) => (payload.events || []).forEach((event) => events.set(event.id, event)));
+    payloads.forEach((payload) => (payload.events || []).forEach((event) => events.set(event.id, event)));
     return [...events.values()].map((event) => gameFrom(event, league, LEAGUES[league][1])).filter(Boolean);
+  }
+
+  // Keep old unresolved tickets gradeable after their games fall out of the current scoreboard cache.
+  async function loadOldBetGames(now) {
+    const wantedByGroup = new Map();
+    for (const bet of TO.data?.bets || []) {
+      if (bet.status !== 'open') continue;
+      for (const leg of bet.legs || []) {
+        if (leg.result !== 'pending' || !leg.gameId || !LEAGUES[leg.league] || byId(leg.gameId)) continue;
+        const day = TO.dayKey(bet.placedAt);
+        const key = `${leg.league}|${day}`;
+        if (!wantedByGroup.has(key)) wantedByGroup.set(key, { league: leg.league, day, ids: new Set() });
+        wantedByGroup.get(key).ids.add(String(leg.gameId));
+      }
+    }
+    const jobs = [...wantedByGroup.values()];
+    let loaded = false;
+    const results = await Promise.allSettled(jobs.map(({ league, day, ids }) =>
+      fetchLeague(league, cfbGroup, TO.dayStart(day) + 12 * TO.HOUR).then((games) => games.filter((game) =>
+        ids.has(String(game.id)) || ids.has(String(game.eventID)) || [...ids].some((id) => id.endsWith(`-${game.eventID}`))))));
+    results.forEach((result) => {
+      if (result.status !== 'fulfilled') return;
+      for (const game of result.value) {
+        game.odds = { moneyline: [], spread: [], total: [], all: [], suspended: true };
+        const games = cache.get(game.league) || [];
+        if (!games.some((item) => item.id === game.id)) {
+          cache.set(game.league, [...games, game]);
+          loaded = true;
+        }
+      }
+    });
+    return loaded;
   }
 
   async function resolveOddsItem(item) {
@@ -345,17 +379,19 @@
     });
   }
 
-  async function refresh(now = TO.now()) {
+  async function refresh(now = TO.now(), force = false) {
     const requestedDay = localDayKey(now);
     if (loading) {
-      if (requestedDay !== loadingDayKey) refreshQueued = true;
+      if (force || requestedDay !== loadingDayKey) refreshQueued = true;
       return;
     }
-    if (requestedDay === updatedDayKey && now - updatedAt < 25000) return;
+    if (!force && requestedDay === updatedDayKey && now - updatedAt < 25000) return;
     loading = true;
     loadingDayKey = requestedDay;
     loadError = false;
-    const leagues = TO.data?.settings?.sports?.filter((key) => LEAGUES[key]) || Object.keys(LEAGUES);
+    TO.emit('live:updated');
+    const selectedLeagues = TO.data?.settings?.sports?.filter((key) => LEAGUES[key]) || [];
+    const leagues = selectedLeagues.length ? selectedLeagues : Object.keys(LEAGUES);
     const results = await Promise.allSettled(leagues.map((league) => fetchLeague(league, cfbGroup, now)));
     const completedAt = TO.now();
     if (localDayKey(completedAt) !== requestedDay) {
@@ -376,8 +412,13 @@
       const fetched = league === 'ncaaf' && cfbGroup === '80'
         ? relevantGames.filter((game) => game.home.rank || game.away.rank)
         : relevantGames;
-      const keepRecentFinals = (cache.get(league) || []).filter((game) => game.state === 'final' && game.start >= dayStart - TO.DAY);
+      const previousGames = cache.get(league) || [];
+      const fetchedIds = new Set(fetched.map((game) => game.id));
+      const keepCurrentGames = previousGames.filter((game) => game.start >= dayStart && game.start < dayEnd
+        && ['scheduled', 'live'].includes(game.state) && !fetchedIds.has(game.id));
+      const keepRecentFinals = previousGames.filter((game) => game.state === 'final' && game.start >= dayStart - TO.DAY);
       const gamesById = new Map(keepRecentFinals.map((game) => [game.id, game]));
+      keepCurrentGames.forEach((game) => gamesById.set(game.id, game));
       fetched.forEach((game) => gamesById.set(game.id, game));
       const games = [...gamesById.values()];
       games.forEach((game) => { game.odds = makeOdds(game, now); });
@@ -390,7 +431,10 @@
     loading = false;
     loadingDayKey = '';
     TO.emit('live:updated');
-    const todaysGames = [...cache.values()].flat();
+    loadOldBetGames(completedAt).then((loaded) => {
+      if (loaded) TO.emit('live:updated');
+    }).catch((error) => console.warn('Could not load scores for an old open bet:', error));
+    const todaysGames = [...cache.values()].flat().filter((game) => game.start >= dayStart - TO.DAY);
     loadOdds(todaysGames, completedAt);
     if (refreshQueued) {
       refreshQueued = false;

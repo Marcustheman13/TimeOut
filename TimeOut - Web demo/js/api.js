@@ -8,9 +8,50 @@
   let lastSaveAt = 0;
   let lastSettingsSnapshot = '';
   let supportsAppPreferences = true;
+  let supportsTierBonusColumns = null;
+  let supportsTierPerkColumns = null;
   let lastSyncAlertAt = 0;
+  let lastOutOfMinutesAlertAt = 0;
+  let lastTierBonusMigrationAlertAt = 0;
+  let lastTierPerkMigrationAlertAt = 0;
   const placing = new Set();
   const settling = new Set();
+  const isPersistableGameLeg = (leg) => leg?.kind === 'game' || (leg?.kind === 'sports' && !!leg.gameId);
+
+  function isOutOfBettingMinutes(error) {
+    return /insufficient|not enough|out of (betting )?(minutes|balance)|betting minutes/i.test(String(error?.message || ''));
+  }
+  function isTierSystemRpcUnavailable(error) {
+    const message = String(error?.message || '');
+    return /timeout_place_bet_with_tiers/i.test(message) && /schema cache|function.*(not found|does not exist|could not find)/i.test(message);
+  }
+  function isTierPerkRpcUnavailable(error) {
+    const message = String(error?.message || '');
+    return /timeout_place_bet_with_perks/i.test(message) && /schema cache|function.*(not found|does not exist|could not find)/i.test(message);
+  }
+  function isTierPerkLimitError(error) {
+    return /no odds boosts left|no parlay insurance left/i.test(String(error?.message || ''));
+  }
+  function notifyOutOfBettingMinutes() {
+    if (Date.now() - lastOutOfMinutesAlertAt < 15000 || !TO.ui?.toast) return;
+    lastOutOfMinutesAlertAt = Date.now();
+    TO.ui.toast({ kind: 'loss', title: 'Out of betting minutes', msg: 'Betting reopens at midnight.' });
+  }
+  function notifyTierBonusMigrationRequired() {
+    if (Date.now() - lastTierBonusMigrationAlertAt < 15000 || !TO.ui?.toast) return;
+    lastTierBonusMigrationAlertAt = Date.now();
+    TO.ui.toast({ kind: 'loss', title: 'Tier setup needed in Supabase', msg: 'This parlay was not saved. Run the tier system migration in Supabase SQL Editor, then reload the app.' });
+  }
+  function notifyTierPerkMigrationRequired() {
+    if (Date.now() - lastTierPerkMigrationAlertAt < 15000 || !TO.ui?.toast) return;
+    lastTierPerkMigrationAlertAt = Date.now();
+    TO.ui.toast({ kind: 'loss', title: 'Tier perks need Supabase setup', msg: 'This bet was not saved with its boost or insurance. Run the updated tier system migration, then reload the app.' });
+  }
+  function notifyTierPerkAlreadyUsed() {
+    if (Date.now() - lastTierPerkMigrationAlertAt < 15000 || !TO.ui?.toast) return;
+    lastTierPerkMigrationAlertAt = Date.now();
+    TO.ui.toast({ kind: 'warn', title: 'Tier perk already used', msg: 'This boost or insurance was already used on another device.' });
+  }
 
   const config = window.TIMEOUT_SUPABASE || {};
   api.configured = !!(config.url && config.publishableKey);
@@ -74,7 +115,7 @@
     return api.configured;
   };
 
-  /** Where the confirmation email sends people back to: the page they signed up on (phone or computer view).
+  /** Where the confirmation email sends people back to: the app or browser page they signed up on.
    *  Supabase only allows it if it matches a Redirect URL in Authentication > URL Configuration. */
   const returnUrl = () => `${location.origin}${location.pathname}`;
 
@@ -137,10 +178,25 @@
     const id = tokenUserId();
     if (!id) return null;
     const safeId = encodeURIComponent(id);
+    let hasTierBonusColumns = true;
+    let hasTierPerkColumns = true;
+    const baseWalletFields = `balance_minutes,current_day,is_locked,streak`;
+    const bonusWalletFields = `${baseWalletFields},tier_bonus_day,tier_bonus_minutes`;
+    const walletRequest = rest(`wallets?select=${bonusWalletFields},tier_boosts_by_day,tier_insurance_by_week&user_id=eq.${safeId}&limit=1`).catch((error) => {
+      if (!/tier_boosts_by_day|tier_insurance_by_week|column .*does not exist/i.test(error.message || '')) throw error;
+      hasTierPerkColumns = false;
+      return rest(`wallets?select=${bonusWalletFields}&user_id=eq.${safeId}&limit=1`).catch((bonusError) => {
+        if (!/tier_bonus_day|tier_bonus_minutes|column .*does not exist/i.test(bonusError.message || '')) throw bonusError;
+        hasTierBonusColumns = false;
+        return rest(`wallets?select=${baseWalletFields}&user_id=eq.${safeId}&limit=1`);
+      });
+    });
     const [betRows, walletRows] = await Promise.all([
       rest(`bets?select=*,bet_legs(*)&user_id=eq.${safeId}&order=placed_at.desc`),
-      rest(`wallets?select=balance_minutes,current_day,is_locked,streak&user_id=eq.${safeId}&limit=1`),
+      walletRequest,
     ]);
+    supportsTierBonusColumns = hasTierBonusColumns;
+    supportsTierPerkColumns = hasTierPerkColumns;
     let settingsRows;
     try {
       settingsRows = await rest(`user_settings?select=followed_sports,timezone,notifications_enabled,app_preferences&user_id=eq.${safeId}&limit=1`);
@@ -159,17 +215,35 @@
         marketLabel: leg.market, matchup: leg.matchup, result: result[leg.result] || 'pending', final: null,
       }));
       const decimal = Number(row.combined_odds);
-      return { id: `supabase-${row.id}`, supabaseId: row.id, kind: 'sports', placedAt: Date.parse(row.placed_at), dayKey: row.placed_at.slice(0, 10),
-        stake: Number(row.stake_minutes), legs, decimal, american: TO.odds.fromDecimal(decimal), friend: null, boosted: false, insured: false,
-        multiplier: 1, status: status[row.status] || 'open', payout: Number(row.actual_payout_minutes || 0), potentialPayout: Number(row.potential_payout_minutes || 0),
+      const placedAt = Date.parse(row.placed_at);
+      return { id: `supabase-${row.id}`, supabaseId: row.id, kind: 'sports', placedAt, dayKey: TO.dayKey(placedAt),
+        stake: Number(row.stake_minutes), legs, decimal, american: TO.odds.fromDecimal(decimal), boosted: !!row.boosted, insured: !!row.insured,
+        multiplier: Number(row.multiplier || 1), status: status[row.status] || 'open', payout: Number(row.actual_payout_minutes || 0), potentialPayout: Number(row.potential_payout_minutes || 0),
         settledAt: row.settled_at ? Date.parse(row.settled_at) : null, supabaseSynced: row.status !== 'pending' };
     });
     const wallet = walletRows[0];
     const settings = settingsRows[0];
+    const walletState = wallet ? { balance: Number(wallet.balance_minutes), dayKey: wallet.current_day, lockedOut: !!wallet.is_locked, streakDays: Number(wallet.streak || 0) } : null;
+    if (walletState && hasTierBonusColumns) {
+      walletState.bonusDay = wallet.tier_bonus_day;
+      walletState.bonusGranted = Number(wallet.tier_bonus_minutes || 0);
+    }
+    if (walletState && hasTierPerkColumns) {
+      walletState.boostsByDay = wallet.tier_boosts_by_day || {};
+      walletState.insuranceByWeek = wallet.tier_insurance_by_week || {};
+    }
+    const appPreferences = settings?.app_preferences || {};
+    const storedSports = [
+      ...(Array.isArray(settings?.followed_sports) ? settings.followed_sports : []),
+      ...(Array.isArray(appPreferences.sports) ? appPreferences.sports : []),
+    ];
+    const followedSports = [...new Set(storedSports.filter((league) => TO.sim.REAL_LEAGUES.includes(league)))];
+    const remotePreferences = { ...appPreferences };
+    if (followedSports.length) remotePreferences.sports = followedSports;
     return {
       bets,
-      ...(wallet ? { wallet: { balance: Number(wallet.balance_minutes), dayKey: wallet.current_day, lockedOut: !!wallet.is_locked, streakDays: Number(wallet.streak || 0) } } : {}),
-      ...(settings ? { settings: { ...(settings.app_preferences || {}), sports: settings.followed_sports || [] }, appPreferencesReady: supportsAppPreferences } : {}),
+      ...(walletState ? { wallet: walletState } : {}),
+      ...(settings ? { settings: remotePreferences, appPreferencesReady: supportsAppPreferences } : {}),
     };
   };
   api.queueStateSave = (data) => {
@@ -178,6 +252,10 @@
     if (!saveTimer) saveTimer = setTimeout(() => {
       saveTimer = null;
       api.flushState().catch((e) => {
+        if (e.outOfBettingMinutes || isOutOfBettingMinutes(e)) {
+          notifyOutOfBettingMinutes();
+          return;
+        }
         console.warn('Could not sync TimeOut data to Supabase:', e.message);
         if (Date.now() - lastSyncAlertAt > 15000 && TO.ui?.toast) {
           lastSyncAlertAt = Date.now();
@@ -202,16 +280,70 @@
         lastSettingsSnapshot = settingsSnapshot;
       }
       for (const bet of data.bets || []) {
-        if (bet.kind !== 'sports' || bet.friend || !Number(bet.stake) || !bet.legs?.length || bet.legs.some((leg) => leg.kind !== 'game' || !leg.gameId)) continue;
+        if (bet.kind !== 'sports' || !Number(bet.stake) || !bet.legs?.length || bet.legs.some((leg) => !isPersistableGameLeg(leg) || !leg.gameId)) continue;
         if (!bet.supabaseId && !placing.has(bet.id)) {
           placing.add(bet.id);
           try {
-            const payout = Number(bet.payout) > 0 ? Number(bet.payout) : Math.max(0, Math.round(Number(bet.stake) * Number(bet.decimal) * Number(bet.multiplier || 1)));
-            const saved = await rest('rpc/timeout_place_bet', { method: 'POST', body: JSON.stringify({
+            const payout = Number(bet.payout) > 0 ? Number(bet.payout) : Math.max(0,
+              Number(bet.stake) + Math.round((Math.round(Number(bet.stake) * Number(bet.decimal)) - Number(bet.stake)) * Number(bet.multiplier || 1)));
+            const bonusToday = data.wallet?.bonusDay === (data.wallet?.dayKey || bet.dayKey) ? Number(data.wallet?.bonusGranted || 0) : 0;
+            const betArgs = {
               p_stake_minutes: Number(bet.stake), p_combined_odds: Number(bet.decimal), p_potential_payout: payout,
               p_current_day: data.wallet?.dayKey || bet.dayKey,
+              p_use_boost: !!bet.boosted, p_use_insurance: !!bet.insured,
+              p_multiplier: Number(bet.multiplier || 1),
               p_legs: bet.legs.map((leg) => ({ espn_event_id: String(leg.gameId), league: leg.league || 'unknown', matchup: leg.matchup || '', market: leg.market || 'moneyline', side: leg.side || '', line: leg.line, accepted_odds: Number(leg.price) })),
-            }) });
+            };
+            const legacyBetArgs = {
+              p_stake_minutes: betArgs.p_stake_minutes, p_combined_odds: betArgs.p_combined_odds,
+              p_potential_payout: betArgs.p_potential_payout, p_current_day: betArgs.p_current_day, p_legs: betArgs.p_legs,
+            };
+            let saved;
+            try {
+              if ((bet.boosted || bet.insured) && supportsTierPerkColumns === false) {
+                const migrationError = new Error('The tier perk migration is not installed.');
+                migrationError.tierPerkMigrationMissing = true;
+                migrationError.failedBetId = bet.id;
+                throw migrationError;
+              }
+              saved = await rest('rpc/timeout_place_bet_with_perks', { method: 'POST', body: JSON.stringify(betArgs) });
+            } catch (error) {
+              if (error.tierPerkMigrationMissing) throw error;
+              if (isTierPerkRpcUnavailable(error)) {
+                if (bet.boosted || bet.insured) {
+                  error.tierPerkMigrationMissing = true;
+                  error.failedBetId = bet.id;
+                  throw error;
+                }
+                const fallbackRpc = bonusToday > 0 ? 'timeout_place_bet_with_tiers' : 'timeout_place_bet';
+                try {
+                  saved = await rest(`rpc/${fallbackRpc}`, { method: 'POST', body: JSON.stringify(legacyBetArgs) });
+                } catch (fallbackError) {
+                  if (isOutOfBettingMinutes(fallbackError)) {
+                    fallbackError.outOfBettingMinutes = true;
+                    if (supportsTierBonusColumns === false && bonusToday > 0) fallbackError.tierBonusMigrationMissing = true;
+                  }
+                  fallbackError.failedBetId = bet.id;
+                  throw fallbackError;
+                }
+              } else if (isTierSystemRpcUnavailable(error) && !(bet.boosted || bet.insured)) {
+                const fallbackRpc = 'timeout_place_bet';
+                try {
+                  saved = await rest(`rpc/${fallbackRpc}`, { method: 'POST', body: JSON.stringify(legacyBetArgs) });
+                } catch (fallbackError) {
+                  if (isOutOfBettingMinutes(fallbackError)) fallbackError.outOfBettingMinutes = true;
+                  if (isOutOfBettingMinutes(fallbackError) && supportsTierBonusColumns === false && bonusToday > 0) fallbackError.tierBonusMigrationMissing = true;
+                  fallbackError.failedBetId = bet.id;
+                  throw fallbackError;
+                }
+              } else {
+                if (isOutOfBettingMinutes(error)) error.outOfBettingMinutes = true;
+                if (isOutOfBettingMinutes(error) && supportsTierBonusColumns === false && bonusToday > 0) error.tierBonusMigrationMissing = true;
+                if (isTierPerkLimitError(error)) error.tierPerkExhausted = true;
+                error.failedBetId = bet.id;
+                throw error;
+              }
+            }
             const betId = typeof saved === 'string' ? saved : saved.id;
             if (!betId) throw new Error('Supabase did not return the saved bet ID.');
             bet.supabaseId = betId;
@@ -236,7 +368,34 @@
       }
       lastSaveAt = Date.now();
       api.syncError = null;
-    } catch (e) { pendingState = data; throw e; }
+    } catch (e) {
+      if (e.outOfBettingMinutes || e.tierBonusMigrationMissing || e.tierPerkMigrationMissing || e.tierPerkExhausted) {
+        const rejectedId = e.failedBetId;
+        const rejected = (data.bets || []).find((bet) => bet.id === rejectedId);
+        pendingState = null;
+        data.bets = (data.bets || []).filter((bet) => bet.id !== rejectedId);
+        if (rejected && data.wallet) {
+          data.wallet.balance = Math.max(0, Number(data.wallet.balance || 0) + Number(rejected.stake || 0));
+          data.wallet.lockedOut = data.wallet.balance <= 0;
+        }
+        if (TO.data) {
+          TO.data.bets = TO.data.bets.filter((bet) => bet.id !== rejectedId);
+          if (rejected && TO.data.wallet) {
+            TO.data.wallet.balance = Math.max(0, Number(TO.data.wallet.balance || 0) + Number(rejected.stake || 0));
+            TO.data.wallet.lockedOut = TO.data.wallet.balance <= 0;
+          }
+          if (TO.account) TO.store.set(`timeout.data.${TO.account.id}`, TO.data);
+        }
+        if (e.tierPerkMigrationMissing) notifyTierPerkMigrationRequired();
+        else if (e.tierPerkExhausted) notifyTierPerkAlreadyUsed();
+        else if (e.tierBonusMigrationMissing) notifyTierBonusMigrationRequired();
+        else notifyOutOfBettingMinutes();
+        TO.app?.render?.();
+        return;
+      }
+      pendingState = data;
+      throw e;
+    }
   };
   api.updateProfile = async (patch) => {
     await ensureFreshSession();

@@ -76,14 +76,6 @@
     return Array.from({ length: 5 }, (_, i) => (TO.u01(`form-${league}-${team.abbr}-${i}`) < 0.5 + 0.3 * s ? 'W' : 'L'));
   }
 
-  // ---------- Overrides set by the tester panel ----------
-  const overrides = () => TO.store.get('timeout.gameOverrides', {});
-  const setOverride = (id, patch) => {
-    const all = overrides();
-    all[id] = Object.assign({}, all[id], patch);
-    TO.store.set('timeout.gameOverrides', all);
-  };
-
   // ---------- Scoring timeline ----------
   const timelines = new Map();
 
@@ -210,16 +202,15 @@
     const home = L.teams[order[idx * 2]];
     const away = L.teams[order[idx * 2 + 1]];
     const start = slot * SLOT + L.offset + idx * L.stagger;
-    const ov = overrides()[id] || {};
     const S = SPORTS[L.sport];
     const g = {
       id, league, sport: L.sport, slot, idx, start, end: start + DURATION, home, away,
       state: 'scheduled', homeScore: 0, awayScore: 0, progress: 0, statusText: '', clock: '', ot: null,
       simulated: !!L.simulated,
     };
-    const elapsed = now - start + (ov.warp || 0);
+    const elapsed = now - start;
     const naturalPpd = !L.simulated && TO.hash(`ppd-${id}`) % 29 === 0;
-    if ((naturalPpd && now >= start - 8 * MIN) || ov.state === 'postponed') {
+    if (naturalPpd && now >= start - 8 * MIN) {
       g.state = 'postponed';
       g.statusText = 'Postponed';
       return g;
@@ -236,7 +227,7 @@
       g.awayScore = tl.finalAway;
       g.ot = tl.extra;
       g.statusText = tl.extra ? `Final/${tl.extra.label}` : 'Final';
-      g.endedAt = start + DURATION - (ov.warp || 0);
+      g.endedAt = start + DURATION;
       return g;
     }
     const steps = Math.floor(elapsed / STEP);
@@ -376,8 +367,6 @@
     const d = strength(g.league, g.home) - strength(g.league, g.away);
     let mu = S.perTeam * 0.12 * d + S.homeEdge;
     if (g.state === 'scheduled') mu += 0.05 * S.marginSigma * TO.unit(`drift-${g.id}-${Math.floor(now / ODDS_BUCKET_PRE)}`);
-    const ov = overrides()[g.id];
-    if (ov && ov.nudge) mu += ov.nudge * S.marginSigma;
     return mu;
   }
 
@@ -429,8 +418,7 @@
     if (!g) return null;
     const bucketLen = g.state === 'live' ? ODDS_BUCKET_LIVE : ODDS_BUCKET_PRE;
     const bucket = Math.floor(now / bucketLen) * bucketLen;
-    const nudge = (overrides()[id] || {}).nudge || 0;
-    const key = `${id}|${bucket}|${nudge}|${g.state}`;
+    const key = `${id}|${bucket}|${g.state}`;
     if (!oddsCache.has(key)) {
       const gb = g.state === 'live' ? game(id, Math.max(bucket, g.start)) : g;
       const o = computeOdds(gb.state === 'live' || gb.state === 'scheduled' ? gb : g, bucket);
@@ -500,6 +488,7 @@
   /** Current version of a selection (same pick, latest line and price). */
   function currentSelection(selId, now = TO.now()) {
     const [ref, market, side] = selId.split('|');
+    if (market === 'race') return TO.races ? TO.races.currentSelection(selId, now) : null;
     if (market === 'pred') {
       const p = prediction(ref, now);
       if (!p) return null;
@@ -515,6 +504,7 @@
 
   /** e.g. "Chiefs −3.5", "Over 44.5", "Lakers ML", "Draw", "Yes". */
   function selectionLabel(sel, g) {
+    if (sel.market === 'race') return TO.races ? TO.races.selectionLabel(sel) : '';
     if (sel.market === 'pred') return sel.side === 'yes' ? 'Yes' : 'No';
     const team = g ? teamOf(g, sel.side) : null;
     switch (sel.market) {
@@ -526,6 +516,7 @@
   }
 
   function marketLabel(sel, g) {
+    if (sel.market === 'race') return 'Race winner';
     if (sel.market === 'pred') return 'Prediction';
     if (sel.market === 'ml') return 'Moneyline';
     if (sel.market === 'spread') return g ? SPORTS[g.sport].spreadLabel : 'Spread';
@@ -534,6 +525,7 @@
 
   /** Grades a pick against a game or prediction. Returns pending | won | lost | push | void. */
   function grade(sel, now = TO.now()) {
+    if (sel.market === 'race') return TO.races ? TO.races.grade(sel, now) : 'pending';
     if (sel.market === 'pred') {
       const p = prediction(sel.predId || sel.id.split('|')[0], now);
       if (!p || p.state !== 'resolved') return 'pending';
@@ -587,19 +579,9 @@
     return r === 'won' ? 'winning' : 'losing';
   }
 
-  /** The other side of a pick, used when accepting a friend's challenge. */
-  function oppositeSelection(sel) {
-    const flip = { home: 'away', away: 'home', over: 'under', under: 'over', yes: 'no', no: 'yes' };
-    const side = flip[sel.side];
-    const [ref, market] = sel.id.split('|');
-    const line = sel.market === 'spread' ? -sel.line : sel.line;
-    return Object.assign({}, sel, { id: `${ref}|${market}|${side}`, side, line });
-  }
-
   TO.sim = {
     SLOT, DURATION, STEP, SPORTS, LEAGUES, REAL_LEAGUES, LEAGUE_ORDER, PREDICTIONS,
     game, board, odds, stats, research, record, form, strength,
-    prediction, predictions, currentSelection, selectionLabel, marketLabel, grade, gradeScore, liveStanding, oppositeSelection, teamOf,
-    overrides, setOverride,
+    prediction, predictions, currentSelection, selectionLabel, marketLabel, grade, gradeScore, liveStanding, teamOf,
   };
 })(window.TO);

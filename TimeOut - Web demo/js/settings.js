@@ -8,12 +8,12 @@
 
   const SECTIONS = {
     screentime: { title: 'Screen time', icon: 'hourglass' },
+    races: { title: 'Virtual Racing', icon: 'target' },
     status: { title: 'Tier & streak', icon: 'trophy' },
     sports: { title: 'Sports on Home', icon: 'grid' },
     notifications: { title: 'Notifications', icon: 'bell' },
     privacy: { title: 'What friends can see', icon: 'eye' },
     account: { title: 'Account', icon: 'user' },
-    tester: { title: 'Tester tools', icon: 'flask' },
   };
 
   // ---------- Drawer ----------
@@ -23,19 +23,18 @@
     const wrap = document.createElement('div');
     wrap.dataset.drawer = '1';
     wrap.style.cssText = 'position:absolute;inset:0';
-    const item = (key, sub) => `<button class="dn ${key === 'tester' ? 'dn-tester' : ''}" data-act="settings" data-section="${key}">${icon(SECTIONS[key].icon, 20)}${SECTIONS[key].title}${sub ? `<span class="sub">${sub}</span>` : ''}</button>`;
+    const item = (key, sub) => `<button class="dn" data-act="settings" data-section="${key}">${icon(SECTIONS[key].icon, 20)}${SECTIONS[key].title}${sub ? `<span class="sub">${sub}</span>` : ''}</button>`;
     wrap.innerHTML = `<div class="scrim" data-act="close-drawer"></div><aside class="drawer" aria-label="Menu">
       <div class="drawer-head">${ui.avatar(TO.account.photo, 'lg')}<div class="grow" style="min-width:0"><b class="ellipsis" style="display:block;font-size:17px">@${esc(TO.account.username)}</b><div class="small muted ellipsis">${esc(TO.account.email)}</div>${TO.account.server ? `<div class="tiny faint ellipsis">Login #${TO.account.server.loginCount} · from the database</div>` : ''}<div style="margin-top:6px">${ui.tierBadge(wl.tier.id, true)}</div></div></div>
       <nav>
         ${item('screentime', `${wl.phoneLeft} min left`)}
+        ${item('races')}
         ${item('status', wl.streak ? `${wl.streak}-day streak` : '')}
         ${item('sports')}
         ${item('notifications')}
         ${item('privacy')}
         ${item('account')}
         <button class="dn" data-act="how">${icon('help', 20)}How TimeOut works</button>
-        <div class="divider" style="margin:8px 12px"></div>
-        ${item('tester')}
         <button class="dn" data-act="logout">${icon('logout', 20)}Log out</button>
       </nav></aside>`;
     ui.layer().appendChild(wrap);
@@ -136,9 +135,7 @@
     const row = (k, t, sub, ic) => listRow(ic, t, sub, ui.switchEl(`nt-${k}`, n[k], `data-change="set-notify" data-k="${k}"`), `for="nt-${k}"`);
     return `<div class="small muted">In the demo these show as banners at the top of the screen.</div><div class="list">
       ${row('settled', 'Bet results', 'When a bet wins, loses or is voided', 'ticket')}
-      ${row('odds', 'Odds changes', 'When odds move on a pick in your bet slip', 'trend')}
       ${row('friends', 'Friend requests', 'When someone adds or accepts you', 'userPlus')}
-      ${row('challenges', 'Bet challenges', 'When a friend challenges or accepts a bet', 'target')}
       ${row('lowTime', 'Low phone time', 'Before your locked apps close', 'phone')}
     </div>`;
   }
@@ -204,15 +201,14 @@
   }
 
   function render(section) {
-    const map = { screentime, status, sports, notifications, privacy, account, tester: () => TO.tester.panelHtml(true) };
+    const map = { screentime, races: () => TO.views.races.render(), status, sports, notifications, privacy, account };
     return { title: SECTIONS[section].title, body: map[section]() };
   }
 
   function openSection(section) {
     closeDrawer();
     acctErr = {};
-    ui.openPage('settings', { render: () => render(section) });
-    if (section === 'status') TO.tester.mark('tier');
+    ui.openPage('settings', { render: () => render(section), after: section === 'races' ? (el) => TO.races.mount(el) : undefined });
   }
 
   // ---------- How it works ----------
@@ -224,7 +220,7 @@
           <div class="how-card"><span class="n">2</span><div><h3>Winning buys you phone time</h3><p>Win a bet and the minutes you win are added to tomorrow's phone time. Lose and they come off it.</p></div></div>
           <div class="how-card"><span class="n">3</span><div><h3>Bets settle on their own</h3><p>When a game ends, your bet pays out within minutes. Postponed games are voided and you get your stake back.</p></div></div>
           <div class="how-card"><span class="n">4</span><div><h3>Out of minutes? Wait for midnight</h3><p>At 0 minutes, betting locks until the reset. Emergency unlocks exist, but they cost you tomorrow.</p></div></div>
-          <div class="how-card"><span class="n">5</span><div><h3>Play friends for anything</h3><p>Send a bet to a friend and put something else on the line, like "loser does the dishes".</p></div></div>`,
+          `,
         foot: `<button class="btn primary full" data-act="close-sheet" data-name="how">Got it</button>`,
       }),
     });
@@ -290,7 +286,6 @@
     try {
       St.useEmergencyUnlock();
       ui.toast({ kind: 'warn', title: `+${TO.RULES.overrideMinutes} min unlocked`, msg: `Tomorrow's limit dropped by ${TO.RULES.overridePenalty} min.` });
-      TO.tester.mark('emergency');
     } catch (e) {
       if (!(e instanceof TO.AppError)) throw e;
       ui.toast({ kind: 'loss', title: 'No unlocks left', msg: e.message });
@@ -369,8 +364,7 @@
     const id = el.dataset.id;
     const cur = TO.data.settings.sports;
     St.setSetting('sports', el.checked ? S.LEAGUE_ORDER.filter((l) => l !== 'sim' && (cur.includes(l) || l === id)) : cur.filter((l) => l !== id && l !== 'sim'));
-    if (!el.checked && TO.data.feedFilter === id) TO.data.feedFilter = 'all';
-    TO.tester.mark('sports');
+    TO.data.feedFilter = 'all';
     TO.app.render();
   };
   C['set-notify'] = (el) => St.setSetting(`notify.${el.dataset.k}`, el.checked);

@@ -75,7 +75,6 @@ declare
   v_result jsonb;
   v_leg_result public.leg_result;
   v_bet_status public.bet_status;
-  v_tx_type public.transaction_type;
 begin
   if v_user_id is null then raise exception 'Sign in required'; end if;
   if p_status not in ('won', 'lost', 'pushed', 'voided', 'cancelled') or p_actual_payout < 0 then raise exception 'Invalid settlement'; end if;
@@ -98,13 +97,13 @@ begin
       and line is not distinct from nullif(v_result->>'line', '')::numeric;
   end loop;
 
-  if p_actual_payout > 0 then
+  -- Only voids and pushes return the stake to today’s betting balance. Wins affect the next phone-time limit through the settled bet result.
+  if p_actual_payout > 0 and p_status in ('pushed', 'voided', 'cancelled') then
     select id into v_wallet_id from public.wallets where user_id = v_user_id for update;
     update public.wallets set balance_minutes = balance_minutes + p_actual_payout, is_locked = false, updated_at = now()
     where id = v_wallet_id;
-    v_tx_type := case when p_status in ('pushed', 'voided', 'cancelled') then 'void'::public.transaction_type else 'payout'::public.transaction_type end;
     insert into public.wallet_transactions (wallet_id, bet_id, amount_minutes, type, description)
-    values (v_wallet_id, p_bet_id, p_actual_payout, v_tx_type, 'Sports bet settled');
+    values (v_wallet_id, p_bet_id, p_actual_payout, 'void'::public.transaction_type, 'Sports bet refunded');
   end if;
   return true;
 end;
