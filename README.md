@@ -44,7 +44,7 @@ users → sessions is one-to-many (one user can be logged in on several devices)
 | Layer | What we use | Where it lives |
 | --- | --- | --- |
 | Frontend (now) | Plain HTML, CSS and JavaScript, no framework | [`TimeOut - Web demo/`](TimeOut%20-%20Web%20demo) |
-| Frontend (later) | Native iOS app in SwiftUI (Screen Time / FamilyControls APIs) | [`TimeOut - iOS App/`](TimeOut%20-%20iOS%20App) |
+| Frontend (iOS) | Native SwiftUI app with the same screens and features as the web demo, plus real Screen Time blocking (FamilyControls) | [`TimeOut - iOS App/`](TimeOut%20-%20iOS%20App) |
 | Backend | Node.js + Express 5 REST API | [`server/src/`](server/src) |
 | Database | PostgreSQL | [`server/db/`](server/db) |
 | Auth | bcrypt password hashes + random session tokens sent as `Authorization: Bearer <token>` | [`server/src/auth.js`](server/src/auth.js) |
@@ -151,7 +151,7 @@ TimeOut/
 │   ├── css/web.css, js/web.js   ← the browser version's layout (only web.html loads them)
 │   ├── js/api.js                ← every call from the web app to the server goes through here
 │   └── README.md                ← what each screen does and the tester console
-└── TimeOut - iOS App/           ← SwiftUI iOS prototype (open the .xcodeproj in Xcode)
+└── TimeOut - iOS App/           ← SwiftUI iOS app (open TimeOut.xcodeproj in Xcode)
 ```
 
 ## API
