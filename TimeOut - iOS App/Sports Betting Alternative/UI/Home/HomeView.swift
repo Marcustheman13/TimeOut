@@ -56,14 +56,8 @@ struct HomeView: View {
             .refreshable { await model.tick() }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "hourglass.bottomhalf.filled")
-                            .foregroundStyle(Theme.accent)
-                        Text(Theme.brand)
-                            .font(.display(22, weight: .black))
-                            .italic()
-                    }
-                    .fixedSize()
+                    BrandLogo(size: 22)
+                        .fixedSize()
                 }
                 .sharedBackgroundVisibility(.hidden)
                 ToolbarItem(placement: .topBarTrailing) {

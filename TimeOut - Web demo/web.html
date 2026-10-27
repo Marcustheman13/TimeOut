@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>TimeOut</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 100 100%27%3E%3Crect width=%27100%27 height=%27100%27 rx=%2722.5%27 fill=%27%2322D66E%27/%3E%3Cg transform=%27translate(48 50) skewX(-10) translate(-50 -50)%27 fill=%27%2303140A%27%3E%3Crect x=%2719%27 y=%2723%27 width=%2762%27 height=%2716%27 rx=%278%27/%3E%3Crect x=%2742%27 y=%2744%27 width=%2716%27 height=%2733%27 rx=%278%27/%3E%3C/g%3E%3C/svg%3E">
+<link rel="apple-touch-icon" href="img/apple-touch-icon.png">
+<meta name="description" content="TimeOut in the browser: the sportsbook where you bet screen time instead of money.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800&family=Barlow+Condensed:ital,wght@0,600;0,700;0,800;0,900;1,800;1,900&family=JetBrains+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="css/app.css">
+<link rel="stylesheet" href="css/web.css">
+</head>
+<body class="web">
+<!-- Browser version: same app as index.html (the phone version), laid out for a desktop window. -->
+<!-- Demo bar: sits above the app and isn't part of TimeOut. Switches views and holds the demo controls. -->
+<header class="demo-bar" id="demo-bar">
+  <div class="db-left"><span class="db-tag">Demo</span><span class="db-title">TimeOut prototype</span></div>
+  <nav class="db-switch" aria-label="Switch view">
+    <a href="index.html"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M11 18h2"/></svg>Phone</a>
+    <a href="web.html" class="on" aria-current="page"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>Computer</a>
+  </nav>
+  <div class="db-right">
+    <button class="db-btn" id="db-toggle" aria-expanded="false" aria-controls="db-drop" aria-label="Demo controls"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3h6M10 3v6L4 19a1.5 1.5 0 0 0 1.3 2h13.4A1.5 1.5 0 0 0 20 19l-6-10V3"/><path d="M7 15h10"/></svg><span class="db-btn-l">Demo controls</span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+    <div class="tester db-drop" id="db-drop" aria-label="Demo controls">
+      <div class="tester-head">
+        <div class="k">Tester console</div>
+        <h2>Demo controls</h2>
+        <p>Not part of the app. Use these to trigger situations from the spec without waiting.</p>
+      </div>
+      <div class="tester-body" id="tester-body"></div>
+    </div>
+  </div>
+</header>
+<div id="screen">
+  <div id="app-body"></div>
+  <div class="layer" id="layer"></div>
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+</div>
+<script src="js/core.js"></script>
+<script src="js/sim.js"></script>
+<script src="js/state.js"></script>
+<script src="js/live.js"></script>
+<script src="js/supabase-config.js"></script>
+<script src="js/api.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/slip.js"></script>
+<script src="js/home.js"></script>
+<script src="js/game.js"></script>
+<script src="js/bets.js"></script>
+<script src="js/social.js"></script>
+<script src="js/settings.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/tester.js"></script>
+<script src="js/app.js"></script>
+<script src="js/web.js"></script>
+</body>
+</html>

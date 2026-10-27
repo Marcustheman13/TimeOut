@@ -19,7 +19,27 @@ enum Theme {
     static let chartGain = Color(hex: "1AA590")
     static let chartLoss = Color(hex: "E26A3B")
 
-    static let brand = "StakeTime"
+    static let brand = "TimeOut"
+}
+
+/// The TimeOut lockup: the referee "T" mark beside the italic TIMEOUT wordmark, with OUT in green.
+struct BrandLogo: View {
+    var size: CGFloat = 22
+
+    var body: some View {
+        HStack(spacing: size * 0.28) {
+            Image("BrandMark")
+                .resizable()
+                .scaledToFit()
+                .frame(height: size * 0.82)
+            Text("\(Text("TIME"))\(Text("OUT").foregroundStyle(Theme.accent))")
+                .font(.display(size, weight: .black))
+                .italic()
+                .kerning(size * 0.02)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Theme.brand)
+    }
 }
 
 extension Font {

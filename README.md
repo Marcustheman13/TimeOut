@@ -3,6 +3,9 @@
 **The sportsbook where you bet screen time instead of money.**
 Group 9, Section 1: Owen Smith, Easton Putnam, Will Fairholm, Marcus Williams.
 
+> **▶ Try the app:** [Phone view](https://marcustheman13.github.io/TimeOut/) · [Computer view](https://marcustheman13.github.io/TimeOut/web.html)
+> Live ESPN odds and real accounts, nothing to install. It updates by itself when the web demo changes on `main`.
+
 ---
 
 ## App Summary
@@ -18,23 +21,21 @@ Full requirements: [docs/PRD - Prioritization & Design Sprint.pdf](docs/PRD%20-%
 
 ---
 
-## ERD
+ORIGINAL ERD
 
-> **TODO (team):** Draw the ERD from our screens (at least 4 entities, attributes on each, every relationship labeled
-> one-to-one / one-to-many / many-to-many). Export it as `docs/erd.png` and delete the `<!--` `-->` around the image line below.
-> Then add the matching tables to [`server/db/schema.sql`](server/db/schema.sql) and sample rows to [`server/db/seed.sql`](server/db/seed.sql).
+<img width="1706" height="1040" alt="Sports Betting ERD" src="https://github.com/user-attachments/assets/1183be55-ab84-49b5-9a56-1c6e293e26a4" />
 
-<!-- ![TimeOut ERD](docs/erd.png) -->
+DATABASE INTEGRATED ERD
+
+<img width="2000" height="1280" alt="RccS2" src="https://github.com/user-attachments/assets/c625aedc-bc51-438a-9ccc-78b673b4d61d" />
 
 
 Tables that already exist (used by the login vertical slice):
 
-| Table | Purpose | Key columns |
-| --- | --- | --- |
-| `users` | One row per account | `user_id` PK, `username` (unique), `email` (unique), `password_hash`, `photo_url`, `created_at`, `last_login_at`, `login_count` |
-| `sessions` | One row per logged-in device | `session_id` PK, `user_id` FK → users, `token_hash`, `device_label`, `created_at`, `expires_at` |
-
-`users` → `sessions` is **one-to-many** (one user can be logged in on several devices).
+Table	Purpose	Key columns
+users	One row per account	user_id PK, username (unique), email (unique), password_hash, photo_url, created_at, last_login_at, login_count
+sessions	One row per logged-in device	session_id PK, user_id FK → users, token_hash, device_label, created_at, expires_at
+users → sessions is one-to-many (one user can be logged in on several devices).
 
 ---
 
@@ -58,6 +59,8 @@ When we want everyone on one database, one person creates a free Supabase or Neo
 ---
 
 ## How to Get It Running
+
+**Just want to try it?** Open the live site, no setup needed: <https://marcustheman13.github.io/TimeOut/> (phone view) or <https://marcustheman13.github.io/TimeOut/web.html> (computer view). It's the real app with live odds and Supabase accounts, and it redeploys whenever the web demo changes on `main`. The steps below are for running and changing the code yourself.
 
 **You need:** [Node.js](https://nodejs.org) 20 or newer (`node -v` to check) and Git. Nothing else, not even PostgreSQL.
 
@@ -83,6 +86,7 @@ When we want everyone on one database, one person creates a free Supabase or Neo
    ```
    You should see `TimeOut is running at http://localhost:3000`. The first run creates the tables and sample data automatically.
 5. **Open the app:** <http://localhost:3000>. On a laptop it shows a phone with a tester console beside it.
+   For the full-window browser version, open <http://localhost:3000/web>.
 
 **Test accounts** (from `server/db/seed.sql`, all use the password `timeout123`): `demo`, `mike_t`, `jess.plays`, `lily_k`.
 Or press **Create account** to make your own.
@@ -102,7 +106,7 @@ On a shared Supabase or Neon database you can run them while the server is up, o
 **Shared database setup (one person, once):** create a free project at [supabase.com](https://supabase.com) or [neon.tech](https://neon.tech), copy its Postgres connection string
 (Supabase: *Connect > Session pooler > URI*), put it in your `server/.env` as `DATABASE_URL=...`, run `npm run db:reset`, then send the string to teammates privately.
 
-**No server?** You can still double-click `TimeOut - Web demo/index.html` (or `dist/TimeOut.html`). It runs in offline demo mode with accounts saved only in that browser.
+**No server?** You can still double-click `TimeOut - Web demo/index.html` or `web.html` (or `dist/TimeOut.html` / `dist/TimeOut-web.html`). It runs in offline demo mode with accounts saved only in that browser.
 
 ---
 
@@ -143,6 +147,8 @@ TimeOut/
 │   ├── scripts/                 ← db:reset and db:query
 │   └── .env.example             ← copy to .env (which git ignores)
 ├── TimeOut - Web demo/          ← the clickable web app (HTML/CSS/JS)
+│   ├── index.html / web.html     ← phone version / browser version of the same app
+│   ├── css/web.css, js/web.js   ← the browser version's layout (only web.html loads them)
 │   ├── js/api.js                ← every call from the web app to the server goes through here
 │   └── README.md                ← what each screen does and the tester console
 └── TimeOut - iOS App/           ← SwiftUI iOS prototype (open the .xcodeproj in Xcode)
@@ -174,7 +180,7 @@ All requests and responses are JSON. Errors look like `{ "error": { "code", "mes
   ```
 - **Never commit `server/.env`** or paste the database connection string into code, issues or chat. `.gitignore` already blocks `.env`.
 - If you change `schema.sql`, also update `seed.sql` and the ERD, and tell the team to run `npm run db:reset`.
-- After editing anything in `TimeOut - Web demo/css` or `js`, run `python3 build.py` in that folder if you want the single-file `dist/TimeOut.html` updated.
+- After editing anything in `TimeOut - Web demo/css` or `js`, run `python3 build.py` in that folder if you want the single-file `dist/TimeOut.html` and `dist/TimeOut-web.html` updated.
 
 ## What's Still Stored Only in the Browser
 

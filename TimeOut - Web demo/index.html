@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>TimeOut</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 100 100%27%3E%3Crect width=%27100%27 height=%27100%27 rx=%2722.5%27 fill=%27%2322D66E%27/%3E%3Cg transform=%27translate(48 50) skewX(-10) translate(-50 -50)%27 fill=%27%2303140A%27%3E%3Crect x=%2719%27 y=%2723%27 width=%2762%27 height=%2716%27 rx=%278%27/%3E%3Crect x=%2742%27 y=%2744%27 width=%2716%27 height=%2733%27 rx=%278%27/%3E%3C/g%3E%3C/svg%3E">
+<link rel="apple-touch-icon" href="img/apple-touch-icon.png">
 <meta name="description" content="Clickable demo of TimeOut, a sportsbook where you bet screen time instead of money.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -11,6 +13,15 @@
 <link rel="stylesheet" href="css/app.css">
 </head>
 <body>
+<!-- Demo bar: sits above the app and isn't part of TimeOut. Switches views and holds the demo controls. -->
+<header class="demo-bar" id="demo-bar">
+  <div class="db-left"><span class="db-tag">Demo</span><span class="db-title">TimeOut prototype</span></div>
+  <nav class="db-switch" aria-label="Switch view">
+    <a href="index.html" class="on" aria-current="page"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M11 18h2"/></svg>Phone</a>
+    <a href="web.html"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>Computer</a>
+  </nav>
+  <div class="db-right"><span class="db-hint">Demo controls are beside the phone</span></div>
+</header>
 <div class="stage">
   <div class="device-slot" id="device-slot">
     <div class="device" id="device">

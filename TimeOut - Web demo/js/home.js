@@ -12,8 +12,32 @@
   const activeFilter = () => ['pred', 'todo', 'sim'].includes(TO.data.feedFilter) ? 'all' : (TO.data.feedFilter || 'all');
   const sportsOnly = (bet) => bet.kind === 'sports' && bet.legs.every((leg) => leg.gameId && S.game(leg.gameId)?.league !== 'sim');
 
-  function boardGames() {
-    return S.board(TO.now(), { offDay: offDay(), leagues: S.LEAGUE_ORDER.filter((l) => l !== 'sim' && followed().includes(l)) }).filter((g) => !g.simulated && g.league !== 'sim');
+  // Which day the board shows: 0 = today, 1 = tomorrow. Live games are always today.
+  let feedDay = 0;
+  const activeDay = () => (activeFilter() === 'live' ? 0 : feedDay);
+
+  function boardGames(day = activeDay(), peek = false) {
+    return S.board(TO.now(), { offDay: offDay(), day, peek, leagues: S.LEAGUE_ORDER.filter((l) => l !== 'sim' && followed().includes(l)) }).filter((g) => !g.simulated && g.league !== 'sim');
+  }
+
+  function dayLabel(offset) {
+    if (offset === 0) return 'Today';
+    if (offset === 1) return 'Tomorrow';
+    const d = new Date(TO.now() + offset * TO.DAY);
+    return `${d.toLocaleDateString([], { weekday: 'short' })} ${d.getMonth() + 1}/${d.getDate()}`;
+  }
+
+  /** Today and tomorrow. Counts are games still to be played that day, in the sports being shown. */
+  function dayBar() {
+    if (activeFilter() === 'live' || TO.live.offline) return '';
+    const f = activeFilter();
+    const chips = [];
+    for (let i = 0; i <= TO.live.days; i++) {
+      const games = boardGames(i, true).filter((g) => g.state !== 'final' && (f === 'all' || g.league === f));
+      const n = games.length;
+      chips.push(`<button class="chip sm day-chip ${feedDay === i ? 'on' : ''}" data-act="feed-day" data-day="${i}" aria-pressed="${feedDay === i}">${esc(dayLabel(i))}${n ? `<span class="n">${n}</span>` : ''}</button>`);
+    }
+    return `<div class="hscroll day-bar" data-hkey="days" aria-label="Pick a day">${chips.join('')}</div>`;
   }
 
   function myOpenBetOn(ref) {
@@ -92,7 +116,7 @@
 
   function openBetsStrip() {
     const open = TO.data.bets.filter((b) => b.status === 'open' && sportsOnly(b)).sort((a, b) => b.placedAt - a.placedAt);
-    return `<div class="stack-s">
+    return `<div class="stack-s open-bets">
       <div class="section-title"><div class="row-s"><h2>Open bets</h2><span class="count-pill ${open.length ? '' : 'off'}">${open.length}</span></div>${open.length ? `<button class="link-btn" data-act="tab" data-tab="bets">See all</button>` : ''}</div>
       ${open.length
         ? `<div class="hscroll mini-bets" data-hkey="minibets">${open.map(miniBet).join('')}</div>`
@@ -112,8 +136,8 @@
       chips.push(chip(l, l === 'ncaaf' ? 'College Football' : S.LEAGUES[l].short === 'SIM' ? 'Sim League' : S.LEAGUES[l].short, n));
     }
     chips.push(`<button class="chip dashed" data-act="settings" data-section="sports">${icon('sliders', 14)}Edit</button>`);
-    const cfb = f === 'ncaaf' || f === 'all' ? `<label class="cfb-select-label" for="cfb-group">College Football</label><select id="cfb-group" class="cfb-select" aria-label="College football conference">${TO.live.groups.map(([id, name]) => `<option value="${id}" ${TO.live.selectedGroup() === id ? 'selected' : ''}>${esc(name)}</option>`).join('')}</select>` : '';
-    return `<div class="filterbar"><div class="hscroll" data-hkey="filters">${chips.join('')}</div>${cfb}</div>`;
+    const cfb = (f === 'ncaaf' || f === 'all') && !TO.live.offline ? `<label class="cfb-select-label" for="cfb-group">College Football</label><select id="cfb-group" class="cfb-select" aria-label="College football conference">${TO.live.groups.map(([id, name]) => `<option value="${id}" ${TO.live.selectedGroup() === id ? 'selected' : ''}>${esc(name)}</option>`).join('')}</select>` : '';
+    return `<div class="filterbar"><div class="hscroll" data-hkey="filters">${chips.join('')}</div>${dayBar()}${cfb}</div>`;
   }
 
   // ---------- Game card ----------
@@ -196,11 +220,16 @@
   }
 
   function emptyBoard(f) {
-    const title = f === 'live' ? 'No live games right now' : 'Sorry, no games are happening for this sport today.';
+    const day = activeDay();
+    const when = day === 0 ? 'today' : day === 1 ? 'tomorrow' : `on ${dayLabel(day)}`;
+    const loading = day > 0 && TO.live.upcomingLoading;
+    const title = f === 'live' ? 'No live games right now' : loading ? 'Loading the schedule…' : `Sorry, no games are happening for this sport ${when}.`;
+    const next = f !== 'live' && !loading ? Array.from({ length: TO.live.days + 1 }, (_, i) => i).find((i) => i !== day && boardGames(i, true).some((g) => f === 'all' || g.league === f)) : null;
     return `<div class="empty">
-      ${icon('target', 40)}
+      ${icon(loading ? 'clock' : 'target', 40)}
       <h3>${title}</h3>
       ${f === 'live' ? '<p>Check back when a game is underway.</p>' : ''}
+      ${next != null ? `<button class="btn primary" data-act="feed-day" data-day="${next}">See games ${next === 1 ? 'tomorrow' : `on ${esc(dayLabel(next))}`}</button>` : ''}
     </div>`;
   }
 
@@ -232,14 +261,15 @@
     const lock = wl.appsLocked
       ? `<button class="app-lock" data-act="settings" data-section="screentime">${icon('phone', 22, 'red')}<span class="grow"><b class="red">Your locked apps are blocked</b><div class="small muted">You've used all ${wl.todayLimit} min of today's phone time. Emergency unlocks are in Settings.</div></span>${icon('chevR', 16)}</button>`
       : '';
-    return `<div class="stack" style="padding-top:2px">
+    return `<div class="stack home" style="padding-top:2px">
       ${walletCard(wl)}
       ${lock}
       ${statusStrip(wl)}
       ${openBetsStrip()}
-      <div class="stack" style="gap:12px">
+      <div class="stack feed" style="gap:12px">
         ${filterBar(games)}
         ${buildParlayControl()}
+        ${TO.live.offline ? `<div class="note blue simulated-note">${icon('info', 16)}<span>Live ESPN odds can't be reached here, so these are simulated games with real team names. Everything else works the same.</span></div>` : ''}
         ${feed(games)}
       </div>
     </div>`;
@@ -275,10 +305,18 @@
     if (next.firstElementChild) syncNode(view.firstElementChild, next.firstElementChild);
   }
 
-  TO.views.home = { render, gameCard, refreshLive };
+  TO.views.home = { render, gameCard, refreshLive, boardGames, dayBar };
 
   // ---------- Actions ----------
   const A = TO.actions;
+  A['feed-day'] = (el) => {
+    feedDay = Number(el.dataset.day) || 0;
+    TO.app.render();
+    if (TO.ui.pageOpen('parlay')) TO.ui.refreshPage('parlay');
+    const v = document.getElementById('view');
+    const fb = v && v.querySelector('.filterbar');
+    if (fb && v.scrollTop > fb.offsetTop) v.scrollTop = fb.offsetTop;
+  };
   A.filter = (el) => { TO.data.feedFilter = el.dataset.f; TO.state.save(); TO.app.render(); const v = document.getElementById('view'); const fb = v.querySelector('.filterbar'); if (fb && v.scrollTop > fb.offsetTop) v.scrollTop = fb.offsetTop; };
   A['go-sim'] = () => {
     if (!followed().includes('sim')) TO.state.setSetting('sports', [...followed(), 'sim']);

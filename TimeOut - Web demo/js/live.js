@@ -23,6 +23,7 @@
   let loadingDayKey = '';
   let refreshQueued = false;
   let loadError = false;
+  let unreachable = false; // ESPN couldn't be reached at all (no network, or a page that can't call other sites)
   let cfbGroup = 'all';
 
   function todayBounds(now) {
@@ -416,6 +417,7 @@
       cache.set(league, games);
     });
     loadError = failed && !results.some((r) => r.status === 'fulfilled');
+    unreachable = loadError;
     updatedAt = completedAt;
     updatedDayKey = requestedDay;
     loading = false;
@@ -433,8 +435,58 @@
     }
   }
 
+  // ---------- Tomorrow's games (Home's Today / Tomorrow picker) ----------
+  // Fetched in the background and refreshed every 10 minutes. Raise UPCOMING_DAYS to offer more days ahead
+  // (ESPN's scoreboard takes one day per request). Odds for a future day load when someone opens that day.
+  const UPCOMING_DAYS = 1;
+  const UPCOMING_TTL = 10 * TO.MIN;
+  const upcoming = new Map(); // league -> scheduled games after today, up to UPCOMING_DAYS ahead
+  let upcomingAt = 0;
+  let upcomingDayKey = '';
+  let upcomingLoading = false;
+
+  /** 0 = today, 1 = tomorrow, ... in the viewer's own time zone. */
+  function dayOffset(start, now) {
+    const [today] = todayBounds(now);
+    const d = new Date(start);
+    return Math.round((new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime() - today) / TO.DAY);
+  }
+
+  const followedLeagues = () => TO.data?.settings?.sports?.filter((key) => LEAGUES[key]) || Object.keys(LEAGUES);
+
+  async function refreshUpcoming(now = TO.now()) {
+    const leagues = followedLeagues();
+    const fresh = localDayKey(now) === upcomingDayKey && now - upcomingAt < UPCOMING_TTL && leagues.every((l) => upcoming.has(l));
+    if (upcomingLoading || fresh) return;
+    upcomingLoading = true;
+    const [, todayEnd] = todayBounds(now);
+    const weekEnd = todayEnd + UPCOMING_DAYS * TO.DAY;
+    const first = espnDayKey(todayEnd);
+    const days = Array.from({ length: UPCOMING_DAYS + 1 }, (_, i) => shiftDayKey(first, i));
+    const results = await Promise.allSettled(leagues.map((league) => fetchLeague(league, cfbGroup, now, days)));
+    results.forEach((result, index) => {
+      const league = leagues[index];
+      // A failed league keeps what it had (or nothing) until the next scheduled refresh, so a dead network
+      // can't turn into a tight retry loop.
+      if (result.status !== 'fulfilled') { if (!upcoming.has(league)) upcoming.set(league, []); return; }
+      let games = result.value.filter((game) => game.start >= todayEnd && game.start < weekEnd && game.state !== 'final');
+      if (league === 'ncaaf' && cfbGroup === '80') games = games.filter((game) => game.home.rank || game.away.rank);
+      const before = new Map((upcoming.get(league) || []).map((game) => [game.id, game]));
+      games.forEach((game) => {
+        const old = before.get(game.id);
+        if (old) { game._oddsBooks = old._oddsBooks; game._oddsRequested = old._oddsRequested; }
+        game.odds = makeOdds(game, now);
+      });
+      upcoming.set(league, games);
+    });
+    upcomingAt = TO.now();
+    upcomingDayKey = localDayKey(now);
+    upcomingLoading = false;
+    if (results.some((r) => r.status === 'fulfilled')) TO.emit('live:updated');
+  }
+
   function byId(id) {
-    for (const games of cache.values()) {
+    for (const games of [...cache.values(), ...upcoming.values()]) {
       const game = games.find((item) => item.id === id || item.eventID === id);
       if (game) return game;
     }
@@ -444,9 +496,23 @@
   // Keep the existing selection, slip and settlement code, but supply ESPN game data and prices.
   const simGame = S.game, simBoard = S.board, simOdds = S.odds, simCurrent = S.currentSelection, simGrade = S.grade;
   S.game = (id, now) => byId(id) || simGame(id, now);
+  /** options.day: 0 = today (live and today's games), 1 = tomorrow (up to UPCOMING_DAYS).
+   *  options.peek: just look (for counts), don't start loading odds. */
   S.board = (now = TO.now(), options = {}) => {
     if (localDayKey(now) !== updatedDayKey || now - updatedAt > 25000) refresh(now);
+    refreshUpcoming(now);
+    // Without ESPN, fall back to the simulated games so the demo still works (today only).
+    if (unreachable) return options.day ? [] : simBoard(now, options);
     const leagues = options.leagues || S.LEAGUE_ORDER;
+    const day = options.day || 0;
+    if (day > 0) {
+      const games = leagues.flatMap((league) => upcoming.get(league) || [])
+        .filter((game) => dayOffset(game.start, now) === day)
+        .sort((a, b) => a.start - b.start);
+      const needOdds = options.peek ? [] : games.filter((game) => !game._oddsRequested);
+      if (needOdds.length) { needOdds.forEach((game) => { game._oddsRequested = true; }); loadOdds(needOdds, now); }
+      return games;
+    }
     const [start, end] = todayBounds(now);
     return leagues.flatMap((league) => {
       const games = [...(cache.get(league) || [])];
@@ -475,9 +541,11 @@
     refresh, loadDetails, stats: realStats, selectedGroup, setGroup(group) {
       cfbGroup = CFB_GROUPS.some(([id]) => id === group) ? group : 'all';
       cache.delete('ncaaf'); updatedAt = 0; updatedDayKey = '';
+      upcoming.delete('ncaaf'); upcomingAt = 0;
       if (loading) refreshQueued = true;
       else refresh();
     },
-    groups: CFB_GROUPS, get loading() { return loading; }, get failed() { return loadError; },
+    groups: CFB_GROUPS, get loading() { return loading; }, get failed() { return loadError; }, get offline() { return unreachable; },
+    days: UPCOMING_DAYS, get upcomingLoading() { return upcomingLoading || !upcomingAt; },
   };
 })(window.TO);

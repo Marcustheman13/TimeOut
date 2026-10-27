@@ -1,14 +1,32 @@
 # TimeOut — clickable web demo
 
+> **▶ Try the app:** [Phone view](https://marcustheman13.github.io/TimeOut/) · [Computer view](https://marcustheman13.github.io/TimeOut/web.html)
+> Live ESPN odds and real accounts, nothing to install. It updates by itself when the web demo changes on `main`.
+
 A working HTML/CSS/JS mockup of TimeOut, the sportsbook where you bet screen time instead of money.
 It follows the group PRD and screen specs in `../docs/PRD - Prioritization & Design Sprint.pdf`.
 For the backend, database and team setup, see the [main README](../README.md).
 
 ## Open it
 
+- **Easiest: the live site.** <https://marcustheman13.github.io/TimeOut/> (phone view) and <https://marcustheman13.github.io/TimeOut/web.html> (computer view). It's the real app with live ESPN odds and Supabase accounts, and it updates by itself a minute or two after anything in this folder is pushed to `main` (see `.github/workflows/pages.yml`).
 - **With Supabase (normal):** serve the app over HTTP. Accounts use Supabase Auth; preferences, bets, and wallet transactions use the Supabase tables and RPCs.
 - **Offline demo:** use the app with Supabase config removed. Accounts and state are then saved only in that browser.
 - On a laptop it shows as a phone with a **tester console** beside it. On a real phone it fills the screen, and the tester console moves to **Menu (☰) > Tester tools**.
+
+## Two versions, one app
+
+| | Phone version | Browser version |
+| --- | --- | --- |
+| Page | `index.html` (server: <http://localhost:3000>) | `web.html` (server: <http://localhost:3000/web>) |
+| Single file | `dist/TimeOut.html` | `dist/TimeOut-web.html` |
+| Layout | Phone frame, tab bar, menu drawer, bottom sheets | Sidebar, wide content grid, bet slip docked on the right, dialogs instead of sheets. Fits any window size: the sidebar shrinks to icons, then to a ☰ menu, and the slip becomes a dialog when there's no room to dock it. |
+| Demo controls (tester console) | Beside the phone | **Demo controls** dropdown in the demo bar |
+
+Both run the same JavaScript, so every feature works the same in each and your login carries over between them.
+The browser layout lives in `css/web.css` and `js/web.js`, which only `web.html` loads. To change how a feature
+works, edit the shared files in `js/`; to change only the desktop layout, edit those two. The **Phone / Computer** switch
+in the demo bar at the top of the page jumps between the two. The demo bar isn't part of TimeOut; it's hidden on a real phone.
 
 ## Logging in
 
@@ -23,17 +41,20 @@ For the backend, database and team setup, see the [main README](../README.md).
 
 | Spec item | Where to find it |
 | --- | --- |
-| Home: balance + open bets at top, live feed by sport, 3-tap betting | Home tab. Tap any price, then **Place bet** (2 taps). |
+| Today's and tomorrow's games | Home: the **Today / Tomorrow** picker under the sport filters. Tomorrow's odds load when you open it. |
+| Home: balance + open bets at top, live feed by sport, 3-tap betting | Home tab. Tap any price, then **Place bet** (2 taps). A new price replaces the pick; closing the slip (✕) clears it. |
+| Parlays | In the slip, **Add another pick for a parlay** opens a page of open games. Pick up to 3, then **Review parlay**. |
 | Odds/scores refresh ≤ 30 s; odds change on an open slip needs re-confirm | Live odds refresh every 15 s. Slip shows old → new price and an **Accept new odds** button. |
 | 60 min daily balance, resets at midnight; bets use tomorrow's time | Wallet card on Home, Menu > Screen time. |
-| "Not enough screentime" + remaining balance | Bet slip, when the stake is higher than your balance. |
+| "Not enough screentime" + remaining balance | Bet slip. The stake can't go above today's balance; typing more snaps back to it and shows this message. |
+| No connection | Red banner, and betting, logging in and accepting challenges are blocked. Demo controls > **Simulate losing internet**. |
 | Balance 0 → betting locked with midnight countdown | Home wallet card and bet slip. |
 | Auto settlement, voids for postponed games | Bets settle seconds after a game ends. Postponed games void and refund. |
-| Game detail: live score, stats, odds, your bets, research | Tap a team or **Stats & all odds** on any game. |
+| Game detail: live score, stats, odds, your bets, research | Tap a team or **Stats & all odds** on any game. Tapping a price opens the slip; the floating **Make a bet** button jumps to the odds. |
 | My Bets: open bets with live score/stats, history, record, share, send to friend | My Bets tab. |
 | Bet sharing image + friend bets with a 100-character custom stake | **Share** and **Send to friend** on any bet, or **Friend bet** in the slip. |
-| Social: stats vs friends, username search, invite link, requests, challenges, teams with dates, privacy | Social tab. What friends see is in Menu > What friends can see. |
-| Screentime & settings: how it works, controls (confirmed), sports, account, notifications, emergency unlock | Menu (☰) at the top left. |
+| Social: stats vs friends, username search, invite link, requests, challenges, teams with dates, privacy | Social tab. What friends see is in Menu > What friends can see. Requests shows when each was sent or received; sent requests can be sent again once an hour. |
+| Screentime & settings: how it works, controls (confirmed), sports, account, notifications, emergency unlock | Menu (☰) at the top left. **Enforce app limits** can only be on while at least one app is locked. |
 | Record / performance | Top of My Bets. |
 | Sports simulations for days without sports | Sim League (turn on "no real games" in the tester console to see the empty state). |
 | Emergency override with a penalty | Menu > Screen time > Emergency unlock: +15 min now, −30 min tomorrow, 2 per day, resets streak. |
@@ -53,13 +74,18 @@ everything worth testing from the spec, which ticks itself off as you go.
 
 - All games are simulated with real team names. Each game is sped up to 12 minutes so testers can watch bets settle.
 - Odds are fair (no house cut), computed from the score and time left, the same model as the iOS prototype.
-- `python3 build.py` rebuilds `dist/TimeOut.html` after you edit anything in `css/` or `js/`.
+- `python3 build.py` rebuilds `dist/TimeOut.html` and `dist/TimeOut-web.html` after you edit anything in `css/` or `js/`.
+
 # Supabase accounts and saved bets
 
 The web demo uses Supabase Auth for email/password accounts, saves user preferences in `public.user_settings`, and stores sports bet tickets and legs in `public.bets` and `public.bet_legs`. Wallet balance changes go through Supabase RPC functions and the `wallets` / `wallet_transactions` tables.
 
 1. The main schema and bet RPCs have been applied. Run [`../server/db/supabase-settings-migration.sql`](../server/db/supabase-settings-migration.sql) in **SQL Editor** to add the JSON settings field used for locked apps and other app preferences.
 2. Confirm **Email provider** is enabled under **Authentication → Providers**. Email confirmation is enabled, so new users must confirm their email before logging in.
+   After **Create account**, the app shows a *Verify your email* page. It logs the new user in by itself as soon as the email is confirmed, and the link in the email also logs them straight in. For the link to come back to the app, add these under **Authentication → URL Configuration → Redirect URLs** (plus your real site's address once it's hosted):
+   - `https://marcustheman13.github.io/TimeOut/**` (the live site)
+   - `http://localhost:3000/**`
+   - `http://localhost:8765/**` (only if you preview with the static server)
 3. Serve this app over HTTP (`cd server && npm start`, then open `http://localhost:3000`). Supabase sign-in does not work from the serverless `file://` mode.
 
 The frontend's publishable key is in `js/supabase-config.js`; publishable keys are intended to be public. The main schema enables row-level security, and the RPCs verify the signed-in owner before changing bets or wallet balances. Never put a Supabase secret/service-role key in this project or in browser code. The legacy local demo remains available only when Supabase is not configured.

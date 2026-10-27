@@ -1,7 +1,7 @@
 /* TimeOut web demo — app shell, navigation, live refresh loop and event wiring. */
 (function (TO) {
   'use strict';
-  const { esc, icon } = TO;
+  const { esc, icon, brandMark } = TO;
   const ui = TO.ui;
   const St = TO.state;
 
@@ -12,7 +12,8 @@
     ['social', 'Social', 'users'],
   ];
 
-  const shellHtml = () => `<div class="app" id="shell">
+  /** The phone shell. The browser version (web.js) swaps in its own layout. */
+  app.shellHtml = () => `<div class="app" id="shell">
       <header class="topbar" id="topbar"></header>
       <main class="view" id="view" tabindex="-1"></main>
       <div id="slipbar-host"></div>
@@ -36,7 +37,7 @@
       TO.tester.render();
       return;
     }
-    body.innerHTML = shellHtml();
+    body.innerHTML = app.shellHtml();
     app.tab = 'home';
     app.render();
     TO.live.refresh();
@@ -52,7 +53,7 @@
     const socialBadge = TO.views.social.badge();
     document.getElementById('topbar').innerHTML = `
       <button class="icon-btn" data-act="menu" aria-label="Menu and settings">${icon('menu', 22)}${wl.appsLocked ? '<span class="dotbadge"></span>' : ''}</button>
-      <div class="brand">${icon('hourglass', 20, 'brand-mark')}<span class="brand-word">Time<b>Out</b></span></div>
+      <div class="brand">${brandMark(18, 'brand-mark')}<span class="brand-word">TIME<b>OUT</b></span></div>
       <button class="bal-pill ${locked ? 'locked' : ''}" data-act="settings" data-section="screentime" aria-label="${locked ? 'Betting locked until midnight' : `${wl.balance} minutes available to bet`}">${icon(locked ? 'lock' : 'hourglass', 15)}${locked ? 'Locked' : `${wl.balance} min`}</button>`;
     const open = TO.data.bets.filter((b) => b.status === 'open' && b.kind === 'sports' && b.legs.length && b.legs.every((leg) => leg.kind === 'game' || (leg.kind === 'sports' && leg.gameId))).length;
     document.getElementById('tabbar').innerHTML = TABS.map(([k, label, ic]) => {
@@ -95,6 +96,7 @@
   app.refreshOddsButtons = () => {
     app.renderView();
     if (ui.pageOpen('game')) TO.views.game.refresh();
+    if (ui.pageOpen('parlay')) ui.refreshPage('parlay');
   };
 
   app.go = (tab) => {
@@ -188,6 +190,7 @@
       app.renderChrome();
       app.renderView();
       if (ui.pageOpen('game')) TO.views.game.refresh();
+      if (ui.pageOpen('parlay')) ui.refreshPage('parlay');
       const sp = document.querySelector('[data-page="settings"] .page-top .t');
       if (sp && ['Screen time', 'Tier & streak'].includes(sp.textContent)) ui.refreshPage('settings');
     } else {
@@ -200,6 +203,33 @@
     const a = document.activeElement;
     return a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA') && a.type !== 'checkbox';
   }
+
+  // ---------- Connection ----------
+  /** Red banner while offline. The slip, to-do parlays and challenges refuse new bets until it clears. */
+  function renderNet() {
+    const root = ui.root();
+    if (!root) return;
+    let el = document.getElementById('net-banner');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'net-banner';
+      el.className = 'net-banner';
+      el.setAttribute('role', 'alert');
+      el.innerHTML = `${icon('wifiOff', 17)}<span><b>No internet connection.</b> Betting is paused until you're back online.</span>`;
+      root.appendChild(el);
+    }
+    const off = !TO.net.online();
+    el.hidden = !off;
+    document.body.classList.toggle('is-offline', off);
+  }
+  app.netChanged = () => {
+    renderNet();
+    if (ui.sheetOpen('slip')) ui.refreshSheet('slip', ['body', 'foot']);
+    if (TO.net.online()) ui.toast({ kind: 'win', title: 'Back online', msg: 'Odds are updating again.' });
+    TO.tester.render();
+  };
+  window.addEventListener('online', app.netChanged);
+  window.addEventListener('offline', app.netChanged);
 
   // ---------- Core actions ----------
   const A = TO.actions;
@@ -274,7 +304,8 @@
       device.style.transform = '';
       return;
     }
-    const scale = Math.min(1, Math.max(0.6, (window.innerHeight - 48) / 852));
+    const bar = document.getElementById('demo-bar');
+    const scale = Math.min(1, Math.max(0.6, (window.innerHeight - 48 - (bar ? bar.offsetHeight : 0)) / 852));
     device.style.transform = `scale(${scale})`;
     slot.style.width = `${393 * scale}px`;
     slot.style.height = `${852 * scale}px`;
@@ -299,9 +330,18 @@
 
   async function start() {
     fit();
+    renderNet();
+    // Arriving from the link in a confirmation email: the URL carries the new session (or why it failed).
+    const redirect = TO.api.configured && TO.api.consumeAuthRedirect ? TO.api.consumeAuthRedirect() : null;
     if (await TO.api.init()) await restoreServerSession();
     else St.ensureDemoAccount();
     app.boot();
+    if (redirect && redirect.signedIn && TO.account) {
+      ui.toast({ kind: 'win', title: 'Email verified', msg: `You're logged in as @${TO.account.username}.` });
+    } else if (redirect && redirect.error && !TO.account) {
+      TO.views.auth.show('login');
+      ui.toast({ kind: 'loss', title: 'That link didn\'t work', msg: `${redirect.error}. Log in, or create your account again to get a new link.`, ms: 8000 });
+    }
     setInterval(() => app.tick(false), 1000);
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);

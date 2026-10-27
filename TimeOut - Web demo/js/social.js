@@ -80,13 +80,17 @@
     if (d.requestsIn.length) {
       parts.push(`<div class="eyebrow">Friend requests</div><div class="list">${d.requestsIn.map((r) => {
         const p = St.person(r.from);
-        return `<div class="person-row">${ui.avatar(p ? p.photo : TO.initialsAvatar(r.from))}<div class="grow"><b>@${esc(r.from)}</b><div class="tiny faint">${p && p.name && p.name !== r.from ? `${esc(p.name)} · ` : ''}${TO.ago(r.at)}</div></div><button class="btn xs ghost" data-act="decline-fr" data-id="${r.id}">Decline</button><button class="btn xs primary" data-act="accept-fr" data-id="${r.id}">Accept</button></div>`;
+        return `<div class="person-row">${ui.avatar(p ? p.photo : TO.initialsAvatar(r.from))}<div class="grow"><b>@${esc(r.from)}</b><div class="tiny faint">${p && p.name && p.name !== r.from ? `${esc(p.name)} · ` : ''}Received ${TO.ago(r.at)}</div></div><button class="btn xs ghost" data-act="decline-fr" data-id="${r.id}">Decline</button><button class="btn xs primary" data-act="accept-fr" data-id="${r.id}">Accept</button></div>`;
       }).join('')}</div>`);
     }
     if (d.requestsOut.length) {
       parts.push(`<div class="eyebrow">Sent requests</div><div class="list">${d.requestsOut.map((r) => {
         const p = St.person(r.to);
-        return `<div class="person-row">${ui.avatar(p ? p.photo : TO.initialsAvatar(r.to))}<div class="grow"><b>@${esc(r.to)}</b><div class="tiny faint">Waiting for them to accept</div></div><button class="btn xs ghost" data-act="cancel-request" data-u="${esc(r.to)}">Cancel</button></div>`;
+        const wait = St.resendWait(r);
+        const resend = wait
+          ? `<button class="btn xs ghost" disabled title="You can send it again in ${TO.fmtIn(wait)}">${icon('check', 13)} Sent</button>`
+          : `<button class="btn xs primary" data-act="resend-request" data-u="${esc(r.to)}">${icon('refresh', 13)} Send again</button>`;
+        return `<div class="person-row">${ui.avatar(p ? p.photo : TO.initialsAvatar(r.to))}<div class="grow" style="min-width:0"><b>@${esc(r.to)}</b><div class="tiny faint">Sent ${TO.ago(r.at)} · ${wait ? `send again in ${TO.fmtIn(wait)}` : 'waiting for them to accept'}</div></div><div class="row-s">${resend}<button class="btn xs quiet" data-act="cancel-request" data-u="${esc(r.to)}">Cancel</button></div></div>`;
       }).join('')}</div>`);
     }
     if (!parts.length) return `<div class="empty">${icon('bell', 36)}<h3>You're all caught up</h3><p>Friend requests and bet challenges from friends show up here.</p></div>`;
@@ -122,11 +126,15 @@
     else if (view.tab === 'teams') body = teams();
     else body = leaderboard();
     return `<div class="page-head"><h1>Social</h1><p>Compete with friends: compare records, send bet challenges, and join teams.</p></div>
-      <div class="stack">
-        ${meCard()}
-        ${findCard()}
-        <div class="pad"><div class="seg">${tab('board', 'Friends')}${tab('requests', 'Requests', reqCount)}${tab('teams', 'Teams')}</div></div>
-        ${body}
+      <div class="stack social-cols">
+        <div class="stack social-side">
+          ${meCard()}
+          ${findCard()}
+        </div>
+        <div class="stack social-main">
+          <div class="pad"><div class="seg">${tab('board', 'Friends')}${tab('requests', 'Requests', reqCount)}${tab('teams', 'Teams')}</div></div>
+          ${body}
+        </div>
       </div>`;
   }
 
@@ -220,6 +228,16 @@
     rerender();
   };
   A['cancel-request'] = (el) => { St.cancelFriendRequest(el.dataset.u); rerender(); };
+  A['resend-request'] = (el) => {
+    try {
+      St.resendFriendRequest(el.dataset.u);
+      ui.toast({ kind: 'win', title: `Request sent again to @${el.dataset.u}`, msg: 'You can send another one in an hour.' });
+    } catch (e) {
+      if (!(e instanceof TO.AppError)) throw e;
+      ui.toast({ kind: 'warn', title: 'Not yet', msg: e.message });
+    }
+    rerender();
+  };
   A['accept-fr'] = (el) => { const r = TO.data.requestsIn.find((x) => x.id === el.dataset.id); St.acceptFriendRequest(el.dataset.id); if (r) ui.toast({ kind: 'win', title: `You and @${r.from} are now friends` }); TO.app.render(); };
   A['decline-fr'] = (el) => { St.declineFriendRequest(el.dataset.id); TO.app.render(); };
   A['remove-friend'] = async (el) => {
@@ -230,6 +248,7 @@
     TO.app.render();
   };
   A['accept-ch'] = (el) => {
+    if (!TO.net.guard()) return;
     try {
       const bet = St.acceptChallenge(el.dataset.id);
       ui.toast({ kind: 'win', title: 'Challenge accepted', msg: `${bet.legs[0].label} · "${bet.friend.terms}". It's in My Bets.` });

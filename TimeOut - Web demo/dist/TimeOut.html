@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>TimeOut</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 100 100%27%3E%3Crect width=%27100%27 height=%27100%27 rx=%2722.5%27 fill=%27%2322D66E%27/%3E%3Cg transform=%27translate(48 50) skewX(-10) translate(-50 -50)%27 fill=%27%2303140A%27%3E%3Crect x=%2719%27 y=%2723%27 width=%2762%27 height=%2716%27 rx=%278%27/%3E%3Crect x=%2742%27 y=%2744%27 width=%2716%27 height=%2733%27 rx=%278%27/%3E%3C/g%3E%3C/svg%3E">
+<link rel="apple-touch-icon" href="img/apple-touch-icon.png">
 <meta name="description" content="Clickable demo of TimeOut, a sportsbook where you bet screen time instead of money.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -41,6 +43,7 @@
   --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
 
   --tabbar-h: 70px;
+  --demo-h: 52px;
   color-scheme: dark;
 }
 
@@ -67,7 +70,7 @@ button:disabled { cursor: not-allowed; }
 
 /* ---------- Stage & device ---------- */
 .stage {
-  min-height: 100%;
+  min-height: calc(100% - var(--demo-h));
   display: flex;
   align-items: flex-start;
   justify-content: center;
@@ -120,7 +123,9 @@ button:disabled { cursor: not-allowed; }
   .screen .app, .screen .layer, .screen .auth { top: 0; }
   .screen .toasts { top: 8px; }
   .tester { display: none !important; }
+  body:not(.web) .demo-bar { display: none; }
   html, body { overflow: hidden; }
+  .net-banner { top: 58px; }
   .stage, .device-slot { height: 100%; }
 }
 
@@ -158,9 +163,9 @@ button:disabled { cursor: not-allowed; }
 }
 .icon-btn:hover { background: var(--surface); }
 .icon-btn .dotbadge { position: absolute; top: 7px; right: 7px; width: 8px; height: 8px; border-radius: 50%; background: var(--live); box-shadow: 0 0 0 2px var(--bg); }
-.brand { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.brand { display: flex; align-items: center; gap: 7px; min-width: 0; }
 .brand-mark { color: var(--accent); }
-.brand-word { font-family: var(--font-display); font-weight: 900; font-style: italic; font-size: 25px; letter-spacing: 0.01em; line-height: 1; }
+.brand-word { font-family: var(--font-display); font-weight: 900; font-style: italic; font-size: 25px; letter-spacing: 0.02em; line-height: 1; }
 .brand-word b { color: var(--accent); font-weight: 900; }
 .top-title { font-family: var(--font-display); font-weight: 800; font-size: 22px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .bal-pill {
@@ -670,6 +675,7 @@ label.list-row { cursor: pointer; }
   background: var(--bg);
   display: flex; flex-direction: column;
   animation: slidein 0.26s cubic-bezier(0.2, 0.9, 0.3, 1);
+  z-index: 0; /* keeps a page's floating button under sheets opened on top of it */
 }
 .page .page-top { display: grid; grid-template-columns: 44px 1fr 44px; align-items: center; height: 52px; padding: 0 8px; flex: none; }
 .page .page-top .t { text-align: center; font-weight: 800; font-size: 17px; }
@@ -692,6 +698,8 @@ label.list-row { cursor: pointer; }
 .drawer .dn .sub { margin-left: auto; font-size: 12px; color: var(--muted); font-weight: 700; }
 .drawer .dn.dn-tester { color: var(--warn); }
 .drawer .dn.dn-tester .ic { color: var(--warn); }
+/* The tester console sits beside the phone here, so the menu doesn't repeat it. On a real phone it's the only way in. */
+@media (min-width: 561px) { .drawer .dn.dn-tester { display: none; } }
 
 .dialog-wrap { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; }
 .dialog {
@@ -799,8 +807,10 @@ label.list-row { cursor: pointer; }
     radial-gradient(420px 320px at 80% 10%, rgba(34, 214, 110, 0.22), transparent 70%),
     radial-gradient(360px 300px at 0% 60%, rgba(79, 179, 255, 0.12), transparent 70%);
 }
-.welcome-hero .wordmark { font-family: var(--font-display); font-weight: 900; font-style: italic; font-size: 64px; line-height: 0.9; letter-spacing: 0.005em; }
+.welcome-hero .wordmark { font-family: var(--font-display); font-weight: 900; font-style: italic; font-size: 64px; line-height: 0.9; letter-spacing: 0.02em; }
 .welcome-hero .wordmark b { color: var(--accent); }
+.brand-icon { display: block; flex: none; filter: drop-shadow(0 10px 24px rgba(34, 214, 110, 0.22)); }
+.welcome-hero .brand-icon { margin-bottom: 4px; }
 .welcome-hero .tagline { font-family: var(--font-display); font-weight: 700; font-size: 26px; line-height: 1.05; color: var(--text); max-width: 15ch; }
 .welcome-points { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
 .welcome-points div { display: flex; gap: 10px; align-items: flex-start; font-size: 14.5px; color: var(--text-2); font-weight: 600; }
@@ -816,6 +826,9 @@ label.list-row { cursor: pointer; }
 .photo-pick .ph { position: relative; width: 84px; height: 84px; border-radius: 50%; flex: none; }
 .photo-pick .ph img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; background: var(--raised); }
 .photo-pick .ph .cam { position: absolute; right: -2px; bottom: -2px; width: 30px; height: 30px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; border: 3px solid var(--bg); }
+.verify-email .verify-ic { width: 64px; height: 64px; border-radius: 20px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); }
+.verify-email .sub b { word-break: break-all; }
+.verify-dot { flex: none; width: 10px; height: 10px; margin-top: 4px; border-radius: 50%; background: var(--accent); animation: pulse 1.1s ease-in-out infinite alternate; }
 .form-error { padding: 10px 12px; border-radius: 12px; background: var(--loss-soft); color: var(--loss); font-weight: 700; font-size: 13.5px; }
 .steps { display: flex; gap: 6px; }
 .steps i { flex: 1; height: 4px; border-radius: 2px; background: var(--raised); }
@@ -837,6 +850,63 @@ label.list-row { cursor: pointer; }
   text-align: left;
   width: calc(100% - 32px);
 }
+
+/* Floating button pinned to the bottom of a page (game detail, parlay builder) */
+.page-fab { position: sticky; bottom: 14px; z-index: 3; margin-top: auto; padding-top: 6px; }
+.page .page-scroll:has(.page-fab) { padding-bottom: 14px; } /* sticky offsets count the padding, so keep it small */
+.page-fab .btn { box-shadow: 0 14px 34px rgba(0, 0, 0, 0.55); }
+.page-fab .btn .count-pill { margin-right: 2px; }
+.flash { animation: flash 1.1s ease; }
+@keyframes flash { 0%, 60% { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); } 100% { box-shadow: none; } }
+.parlay-list .game-card { margin: 0; }
+.day-bar { margin-top: 10px; }
+.simulated-note { margin: 0 16px; }
+.day-chip { flex: none; }
+.parlay-days .hscroll { padding: 0; }
+.parlay-list .league-head { padding: 6px 0 0; }
+
+/* No connection */
+.net-banner {
+  position: absolute; left: 10px; right: 10px; top: 108px; z-index: 52;
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px; border-radius: 12px;
+  background: var(--loss); color: #fff;
+  font-size: 13px; font-weight: 600; line-height: 1.3;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
+  animation: drop 0.25s ease;
+}
+.net-banner[hidden] { display: none; }
+body.is-offline .toasts { margin-top: 56px; }
+
+/* ---------- Demo bar (above the app, not part of it) ---------- */
+.demo-bar {
+  position: relative; z-index: 100;
+  height: var(--demo-h);
+  display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 12px;
+  padding: 0 16px;
+  background: #07090c;
+  border-bottom: 1px dashed var(--console-line);
+  font-size: 13px;
+}
+.db-left { display: flex; align-items: center; gap: 9px; min-width: 0; color: var(--text-2); font-weight: 700; white-space: nowrap; }
+.db-tag { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--warn); border: 1px solid rgba(255, 201, 64, 0.4); border-radius: 6px; padding: 2px 6px; }
+.db-title { overflow: hidden; text-overflow: ellipsis; }
+.db-switch { display: flex; gap: 3px; padding: 3px; border-radius: 999px; background: var(--surface); border: 1px solid var(--stroke); }
+.db-switch a { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 15px; border-radius: 999px; color: var(--text-2); font-weight: 800; text-decoration: none; white-space: nowrap; }
+.db-switch a:hover { color: var(--text); }
+.db-switch a.on { background: var(--accent); color: var(--accent-ink); }
+.db-right { position: relative; display: flex; justify-content: flex-end; align-items: center; min-width: 0; }
+.db-hint { color: var(--muted); font-size: 12.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.db-btn { display: inline-flex; align-items: center; gap: 7px; height: 36px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--console-line); background: #121821; color: var(--warn); font-weight: 800; font-size: 13px; white-space: nowrap; }
+.db-btn:hover, .db-btn[aria-expanded="true"] { border-color: var(--warn); }
+.db-btn[aria-expanded="true"] svg:last-child { transform: rotate(180deg); }
+@media (max-width: 760px) { .db-title, .db-hint { display: none; } }
+@media (max-width: 600px) {
+  .demo-bar { grid-template-columns: auto minmax(0, 1fr); padding: 0 10px; }
+  .db-left { display: none; }
+  .db-switch a { padding: 0 11px; }
+}
+@media (max-width: 440px) { .db-btn-l { display: none; } .db-btn { padding: 0 9px; gap: 4px; } }
 
 /* ---------- Tester console ---------- */
 .tester {
@@ -886,6 +956,15 @@ a.btn { text-decoration: none; }
 </style>
 </head>
 <body>
+<!-- Demo bar: sits above the app and isn't part of TimeOut. Switches views and holds the demo controls. -->
+<header class="demo-bar" id="demo-bar">
+  <div class="db-left"><span class="db-tag">Demo</span><span class="db-title">TimeOut prototype</span></div>
+  <nav class="db-switch" aria-label="Switch view">
+    <a href="TimeOut.html" class="on" aria-current="page"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M11 18h2"/></svg>Phone</a>
+    <a href="TimeOut-web.html"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>Computer</a>
+  </nav>
+  <div class="db-right"><span class="db-hint">Demo controls are beside the phone</span></div>
+</header>
 <div class="stage">
   <div class="device-slot" id="device-slot">
     <div class="device" id="device">
@@ -1165,9 +1244,24 @@ window.TO = window.TO || {};
     grid: '<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/>',
     radio: '<circle cx="12" cy="12" r="2"/><path d="M8.5 8.5a5 5 0 0 0 0 7M15.5 8.5a5 5 0 0 1 0 7M5.6 5.6a9 9 0 0 0 0 12.8M18.4 5.6a9 9 0 0 1 0 12.8"/>',
     gift: '<rect x="3" y="8" width="18" height="4" rx="1"/><path d="M5 12v9h14v-9M12 8v13M12 8S10.5 3.5 8 4.5 9 8 12 8Zm0 0s1.5-4.5 4-3.5S15 8 12 8Z"/>',
+    wifiOff: '<path d="M3 3l18 18"/><path d="M8.5 16.4a5 5 0 0 1 7 0M5 12.9a10 10 0 0 1 4.2-2.5M14.8 10.4A10 10 0 0 1 19 12.9M2 9.3a15 15 0 0 1 4.3-2.8M11 5.1A15 15 0 0 1 22 9.3"/><circle cx="12" cy="20" r="1" fill="currentColor"/>',
   };
+  // ---------- Connection ----------
+  // Testers can fake a dropped connection from the demo controls; otherwise this follows the browser.
+  TO.net = {
+    simulatedOffline: false,
+    online: () => navigator.onLine !== false && !TO.net.simulatedOffline,
+  };
+
   TO.icon = (name, size = 20, extra = '') =>
     `<svg class="ic ${extra}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[name] || ''}</svg>`;
+
+  // The TimeOut logo: a referee's "T" slanted 10° to match the italic wordmark. Source files are in /branding.
+  TO.brandMark = (size = 20, extra = '') =>
+    `<svg class="ic ${extra}" width="${Math.round(size * 1.12)}" height="${size}" viewBox="18.5 20 67 60" fill="currentColor" aria-hidden="true"><g transform="translate(48 50) skewX(-10) translate(-50 -50)"><rect x="19" y="23" width="62" height="16" rx="8"/><rect x="42" y="44" width="16" height="33" rx="8"/></g></svg>`;
+  // The same T on its green app-icon tile, for the welcome and login screens.
+  TO.brandIcon = (size = 56, extra = '') =>
+    `<svg class="brand-icon ${extra}" width="${size}" height="${size}" viewBox="0 0 100 100" role="img" aria-label="TimeOut"><rect width="100" height="100" rx="22.5" fill="#22D66E"/><g transform="translate(48 50) skewX(-10) translate(-50 -50)" fill="#03140A"><rect x="19" y="23" width="62" height="16" rx="8"/><rect x="42" y="44" width="16" height="33" rx="8"/></g></svg>`;
 })(window.TO);
 
 </script>
@@ -1787,7 +1881,7 @@ window.TO = window.TO || {};
 (function (TO) {
   'use strict';
   const S = TO.sim;
-  const MIN = TO.MIN, DAY = TO.DAY;
+  const MIN = TO.MIN, HOUR = TO.HOUR, DAY = TO.DAY;
 
   const RULES = {
     daily: 60,
@@ -2064,6 +2158,7 @@ window.TO = window.TO || {};
     for (const k of Object.keys(f)) if (d[k] === undefined) d[k] = f[k];
     for (const k of Object.keys(f.wallet)) if (d.wallet[k] === undefined) d.wallet[k] = f.wallet[k];
     for (const k of Object.keys(f.settings)) if (d.settings[k] === undefined) d.settings[k] = f.settings[k];
+    if (!d.settings.lockedApps.length) d.settings.enforce = false; // nothing to block, so limits can't be on
     return d;
   }
 
@@ -2199,7 +2294,10 @@ window.TO = window.TO || {};
     const parts = path.split('.');
     let o = TO.data.settings;
     while (parts.length > 1) o = o[parts.shift()];
+    const hadLocks = TO.data.settings.lockedApps.length > 0;
     o[parts[0]] = value;
+    // App limits need something to block: they switch off with the last locked app and back on with the first.
+    if (path === 'lockedApps') TO.data.settings.enforce = value.length > 0 && (TO.data.settings.enforce || !hadLocks);
     if (path === 'lockedApps' || path === 'enforce') grantTierBonus();
     save();
   }
@@ -2499,6 +2597,21 @@ window.TO = window.TO || {};
     save();
   }
 
+  /** Resending is allowed once an hour per request. Returns ms until it can be sent again (0 = now). */
+  const RESEND_WAIT = TO.HOUR;
+  const resendWait = (req, now = TO.now()) => Math.max(0, req.at + RESEND_WAIT - now);
+
+  function resendFriendRequest(username, now = TO.now()) {
+    const req = TO.data.requestsOut.find((r) => r.to === username);
+    if (!req) return false;
+    if (resendWait(req, now) > 0) throw new AppError('too_soon', `You can send @${username} another request in ${TO.fmtIn(resendWait(req, now))}.`);
+    req.at = now;
+    const acc = findAccountByUsername(username);
+    if (acc) mutateData(acc.id, (o) => { const r = o.requestsIn.find((x) => x.from === TO.account.username); if (r) r.at = now; });
+    save();
+    return true;
+  }
+
   function cancelFriendRequest(username) {
     TO.data.requestsOut = TO.data.requestsOut.filter((r) => r.to !== username);
     const acc = findAccountByUsername(username);
@@ -2722,6 +2835,8 @@ window.TO = window.TO || {};
     d.settings.lockedApps = ['instagram', 'tiktok', 'youtube', 'cat-social'];
     d.friends = ['mike_t', 'jess.plays', 'coach_dan', 'lily_k', 'tbone22'];
     d.requestsIn = [{ id: TO.uid('fr'), from: 'priya_p', at: now - 20 * MIN }];
+    // Still waiting on these two: one can be resent, the other was sent too recently.
+    d.requestsOut = [{ id: TO.uid('fr'), to: 'sam_the_fan', at: now - 3 * HOUR }, { id: TO.uid('fr'), to: 'ava.r', at: now - 25 * MIN }];
     d.teams = [{ id: 'team_sunday', name: 'Sunday Squad', start: TO.addDays(day, -3), end: TO.addDays(day, 4), members: ['demo', 'mike_t', 'jess.plays', 'lily_k'], owner: 'mike_t', createdAt: now - 3 * DAY }];
 
     // Bet history from real (simulated) past games, graded with the same rules as live bets.
@@ -2850,7 +2965,7 @@ window.TO = window.TO || {};
     save, wallet, rollover, grantTierBonus, addUsage, checkPhoneTime, useEmergencyUnlock, setSetting, limitFor, baseLimitFor, lockPoints, tier,
     placeBet, placeTodoParlay, completeTodo, settle, outcome, combine, legFromSelection,
     myStats, statsFor, person, sharedPicks, searchPeople, relation,
-    sendFriendRequest, acceptFriendRequest, declineFriendRequest, cancelFriendRequest, removeFriend,
+    sendFriendRequest, acceptFriendRequest, declineFriendRequest, cancelFriendRequest, resendFriendRequest, resendWait, removeFriend,
     incomingChallenge, acceptChallenge, declineChallenge, sendBetToFriends, socialTick,
     teamStatus, teamStandings, createTeam, leaveTeam, inviteToTeam, leaderboard,
     ensureDemoAccount, loginDemo, resetMyData, seedDemoData,
@@ -2884,6 +2999,7 @@ window.TO = window.TO || {};
   let loadingDayKey = '';
   let refreshQueued = false;
   let loadError = false;
+  let unreachable = false; // ESPN couldn't be reached at all (no network, or a page that can't call other sites)
   let cfbGroup = 'all';
 
   function todayBounds(now) {
@@ -3092,9 +3208,9 @@ window.TO = window.TO || {};
   }
 
   function selectedGroup() { return cfbGroup; }
-  async function fetchLeague(league, group = '80', now = TO.now()) {
+  async function fetchLeague(league, group = '80', now = TO.now(), days = scoreboardDays(now)) {
     const [path] = LEAGUES[league];
-    const responses = await Promise.all(scoreboardDays(now).map(async (date) => {
+    const responses = await Promise.all(days.map(async (date) => {
       const params = new URLSearchParams({ dates: date });
       if (league === 'ncaaf') {
         if (group !== 'all') params.set('groups', group);
@@ -3244,6 +3360,7 @@ window.TO = window.TO || {};
       cache.set(league, games);
     });
     loadError = failed && !results.some((r) => r.status === 'fulfilled');
+    unreachable = loadError;
     updatedAt = completedAt;
     updatedDayKey = requestedDay;
     loading = false;
@@ -3258,8 +3375,58 @@ window.TO = window.TO || {};
     }
   }
 
+  // ---------- Tomorrow's games (Home's Today / Tomorrow picker) ----------
+  // Fetched in the background and refreshed every 10 minutes. Raise UPCOMING_DAYS to offer more days ahead
+  // (ESPN's scoreboard takes one day per request). Odds for a future day load when someone opens that day.
+  const UPCOMING_DAYS = 1;
+  const UPCOMING_TTL = 10 * TO.MIN;
+  const upcoming = new Map(); // league -> scheduled games after today, up to UPCOMING_DAYS ahead
+  let upcomingAt = 0;
+  let upcomingDayKey = '';
+  let upcomingLoading = false;
+
+  /** 0 = today, 1 = tomorrow, ... in the viewer's own time zone. */
+  function dayOffset(start, now) {
+    const [today] = todayBounds(now);
+    const d = new Date(start);
+    return Math.round((new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime() - today) / TO.DAY);
+  }
+
+  const followedLeagues = () => TO.data?.settings?.sports?.filter((key) => LEAGUES[key]) || Object.keys(LEAGUES);
+
+  async function refreshUpcoming(now = TO.now()) {
+    const leagues = followedLeagues();
+    const fresh = localDayKey(now) === upcomingDayKey && now - upcomingAt < UPCOMING_TTL && leagues.every((l) => upcoming.has(l));
+    if (upcomingLoading || fresh) return;
+    upcomingLoading = true;
+    const [, todayEnd] = todayBounds(now);
+    const weekEnd = todayEnd + UPCOMING_DAYS * TO.DAY;
+    const first = espnDayKey(todayEnd);
+    const days = Array.from({ length: UPCOMING_DAYS + 1 }, (_, i) => shiftDayKey(first, i));
+    const results = await Promise.allSettled(leagues.map((league) => fetchLeague(league, cfbGroup, now, days)));
+    results.forEach((result, index) => {
+      const league = leagues[index];
+      // A failed league keeps what it had (or nothing) until the next scheduled refresh, so a dead network
+      // can't turn into a tight retry loop.
+      if (result.status !== 'fulfilled') { if (!upcoming.has(league)) upcoming.set(league, []); return; }
+      let games = result.value.filter((game) => game.start >= todayEnd && game.start < weekEnd && game.state !== 'final');
+      if (league === 'ncaaf' && cfbGroup === '80') games = games.filter((game) => game.home.rank || game.away.rank);
+      const before = new Map((upcoming.get(league) || []).map((game) => [game.id, game]));
+      games.forEach((game) => {
+        const old = before.get(game.id);
+        if (old) { game._oddsBooks = old._oddsBooks; game._oddsRequested = old._oddsRequested; }
+        game.odds = makeOdds(game, now);
+      });
+      upcoming.set(league, games);
+    });
+    upcomingAt = TO.now();
+    upcomingDayKey = localDayKey(now);
+    upcomingLoading = false;
+    if (results.some((r) => r.status === 'fulfilled')) TO.emit('live:updated');
+  }
+
   function byId(id) {
-    for (const games of cache.values()) {
+    for (const games of [...cache.values(), ...upcoming.values()]) {
       const game = games.find((item) => item.id === id || item.eventID === id);
       if (game) return game;
     }
@@ -3269,9 +3436,23 @@ window.TO = window.TO || {};
   // Keep the existing selection, slip and settlement code, but supply ESPN game data and prices.
   const simGame = S.game, simBoard = S.board, simOdds = S.odds, simCurrent = S.currentSelection, simGrade = S.grade;
   S.game = (id, now) => byId(id) || simGame(id, now);
+  /** options.day: 0 = today (live and today's games), 1 = tomorrow (up to UPCOMING_DAYS).
+   *  options.peek: just look (for counts), don't start loading odds. */
   S.board = (now = TO.now(), options = {}) => {
     if (localDayKey(now) !== updatedDayKey || now - updatedAt > 25000) refresh(now);
+    refreshUpcoming(now);
+    // Without ESPN, fall back to the simulated games so the demo still works (today only).
+    if (unreachable) return options.day ? [] : simBoard(now, options);
     const leagues = options.leagues || S.LEAGUE_ORDER;
+    const day = options.day || 0;
+    if (day > 0) {
+      const games = leagues.flatMap((league) => upcoming.get(league) || [])
+        .filter((game) => dayOffset(game.start, now) === day)
+        .sort((a, b) => a.start - b.start);
+      const needOdds = options.peek ? [] : games.filter((game) => !game._oddsRequested);
+      if (needOdds.length) { needOdds.forEach((game) => { game._oddsRequested = true; }); loadOdds(needOdds, now); }
+      return games;
+    }
     const [start, end] = todayBounds(now);
     return leagues.flatMap((league) => {
       const games = [...(cache.get(league) || [])];
@@ -3300,10 +3481,12 @@ window.TO = window.TO || {};
     refresh, loadDetails, stats: realStats, selectedGroup, setGroup(group) {
       cfbGroup = CFB_GROUPS.some(([id]) => id === group) ? group : 'all';
       cache.delete('ncaaf'); updatedAt = 0; updatedDayKey = '';
+      upcoming.delete('ncaaf'); upcomingAt = 0;
       if (loading) refreshQueued = true;
       else refresh();
     },
-    groups: CFB_GROUPS, get loading() { return loading; }, get failed() { return loadError; },
+    groups: CFB_GROUPS, get loading() { return loading; }, get failed() { return loadError; }, get offline() { return unreachable; },
+    days: UPCOMING_DAYS, get upcomingLoading() { return upcomingLoading || !upcomingAt; },
   };
 })(window.TO);
 
@@ -3376,7 +3559,47 @@ window.TIMEOUT_SUPABASE = {
     if (session?.access_token) TO.store.set(TOKEN_KEY, { ...session, expires_at: session.expires_at || Math.floor(Date.now() / 1000) + Number(session.expires_in || 3600) });
   }
 
-  api.init = async () => api.configured;
+  /** Falls back to the on-device demo accounts when Supabase can't be reached at all, e.g. on a shared page
+   *  that isn't allowed to contact other sites. Without internet the offline banner explains things instead. */
+  api.init = async () => {
+    if (!api.configured || !navigator.onLine) return api.configured;
+    try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 5000);
+      await fetch(`${config.url}/auth/v1/health`, { headers: { apikey: config.publishableKey }, signal: ctrl.signal });
+      clearTimeout(timer);
+    } catch (e) {
+      console.warn('Supabase unreachable, using on-device demo accounts:', e.message);
+      api.configured = false;
+      api.online = false;
+    }
+    return api.configured;
+  };
+
+  /** Where the confirmation email sends people back to: the page they signed up on (phone or computer view).
+   *  Supabase only allows it if it matches a Redirect URL in Authentication > URL Configuration. */
+  const returnUrl = () => `${location.origin}${location.pathname}`;
+
+  api.resendConfirmation = async (email) => {
+    await authRequest(`resend?redirect_to=${encodeURIComponent(returnUrl())}`, { type: 'signup', email: String(email || '').trim() });
+  };
+
+  /** The confirmation link lands back here with the new session in the URL hash (#access_token=…&refresh_token=…).
+   *  Saves it and cleans the URL. Returns 'signed-in', an error message, or null when there's nothing to handle. */
+  api.consumeAuthRedirect = () => {
+    const hash = new URLSearchParams(location.hash.replace(/^#/, ''));
+    const query = new URLSearchParams(location.search);
+    const error = hash.get('error_description') || query.get('error_description');
+    const access = hash.get('access_token');
+    if (!access && !error) return null;
+    history.replaceState(null, '', location.pathname);
+    if (error) return { error: error.replace(/\+/g, ' ') };
+    saveSession({ access_token: access, refresh_token: hash.get('refresh_token'), expires_in: Number(hash.get('expires_in') || 3600), expires_at: Number(hash.get('expires_at')) || undefined, token_type: hash.get('token_type') || 'bearer' });
+    lastSettingsSnapshot = '';
+    supportsAppPreferences = true;
+    return { signedIn: true, type: hash.get('type') };
+  };
+  api.sessionKey = TOKEN_KEY;
   api.hasToken = () => !!token();
   api.clearToken = () => TO.store.del(TOKEN_KEY);
   api.login = async (email, password) => {
@@ -3389,9 +3612,14 @@ window.TIMEOUT_SUPABASE = {
   };
   api.register = async ({ username, email, password, photoUrl }) => {
     if (!/^[a-zA-Z0-9_.]{3,20}$/.test(username)) throw new TO.AppError('invalid', 'Use 3–20 letters, numbers, dots or underscores.', { fields: { username: 'Use 3–20 letters, numbers, dots or underscores.' } });
-    const result = await authRequest('signup', { email: String(email || '').trim(), password, data: { username, display_name: username, avatar_url: photoUrl || null } });
-    if (!result.session?.access_token) throw new TO.AppError('email_confirmation', 'Supabase did not return a login session. To allow immediate access, turn off email confirmation in your Supabase Auth settings.');
-    saveSession(result.session);
+    const result = await authRequest(`signup?redirect_to=${encodeURIComponent(returnUrl())}`, { email: String(email || '').trim(), password, data: { username, display_name: username, avatar_url: photoUrl || null } });
+    // Supabase answers a sign-up for an email that's already registered with a user that has no identities.
+    if (Array.isArray(result.identities) && result.identities.length === 0) {
+      throw new TO.AppError('taken', 'An account with this email already exists. Log in instead.', { fields: { email: 'An account with this email already exists.' } });
+    }
+    // Email confirmation is on: there's no session until the link in the email is opened.
+    if (!result.session?.access_token && !result.access_token) return { needsConfirmation: true, email: String(email || '').trim() };
+    saveSession(result.session || result);
     lastSettingsSnapshot = '';
     supportsAppPreferences = true;
     const user = await api.me();
@@ -3667,7 +3895,9 @@ window.TIMEOUT_SUPABASE = {
     el.dataset.page = name;
     el._opts = opts;
     el.innerHTML = `<div class="page-top"><button class="icon-btn" data-act="close-page" data-name="${name}" aria-label="Back">${icon('chevL', 22)}</button><div class="t"></div><div class="pt-right"></div></div><div class="page-scroll"></div>`;
-    ui.layer().insertBefore(el, ui.layer().firstChild);
+    // Newer pages stack above older ones (a game opened from the parlay builder), but below sheets and dialogs.
+    const pages = ui.layer().querySelectorAll('[data-page]');
+    ui.layer().insertBefore(el, pages.length ? pages[pages.length - 1].nextSibling : ui.layer().firstChild);
     ui.refreshPage(name);
     return el;
   };
@@ -3724,6 +3954,13 @@ window.TIMEOUT_SUPABASE = {
   };
   TO.on('toast', (t) => ui.toast(t));
 
+  /** For actions that need a connection (placing bets). False, with a toast, when offline. */
+  TO.net.guard = () => {
+    if (TO.net.online()) return true;
+    ui.toast({ kind: 'loss', title: 'No internet connection', msg: 'Betting is paused until you\'re back online.' });
+    return false;
+  };
+
   // ---------- Images ----------
   /** Reads an uploaded photo and returns a square 256px JPEG data URL. */
   ui.readPhoto = (file) =>
@@ -3773,7 +4010,7 @@ window.TIMEOUT_SUPABASE = {
 
   const slip = (TO.slip = {
     legs: [],
-    parlayMode: false,
+    parlayMode: false, // picks stack up only in parlay mode; otherwise a new pick replaces the old one
     mode: 'minutes',
     stake: null,
     friends: [],
@@ -3781,16 +4018,18 @@ window.TIMEOUT_SUPABASE = {
     boost: false,
     insure: false,
     error: null,
+    capped: false,
     notifiedChange: '',
     has(id) { return this.legs.some((l) => l.selId === id); },
     clear() {
-      Object.assign(this, { legs: [], parlayMode: false, mode: 'minutes', stake: null, friends: [], terms: '', boost: false, insure: false, error: null, notifiedChange: '' });
+      Object.assign(this, { legs: [], parlayMode: false, mode: 'minutes', stake: null, friends: [], terms: '', boost: false, insure: false, error: null, capped: false, notifiedChange: '' });
     },
   });
 
   const refOf = (sel) => sel.gameId || sel.predId;
 
-  /** Tap an odds button: single-pick mode replaces the current pick; parlay mode adds legs. */
+  /** Tap on an odds button. Outside parlay mode the pick replaces whatever is on the slip and opens it;
+   *  in parlay mode (Build parlay on Home, or Add another pick) it's added, or swapped for a second pick on the same game. */
   slip.toggle = (selId) => {
     if (slip.has(selId)) {
       slip.legs = slip.legs.filter((l) => l.selId !== selId);
@@ -3803,10 +4042,9 @@ window.TIMEOUT_SUPABASE = {
     const sameGame = slip.legs.findIndex((l) => l.ref === refOf(sel));
     const leg = { selId: sel.id, price: sel.price, line: sel.line, ref: refOf(sel) };
     if (!slip.parlayMode) {
-      const wasEmpty = slip.legs.length === 0;
       slip.legs = [leg];
       slip.error = null;
-      if (ui.sheetOpen('slip') || wasEmpty) open();
+      open();
       afterChange();
       return;
     }
@@ -3830,15 +4068,22 @@ window.TIMEOUT_SUPABASE = {
     slip.parlayMode = entering;
     slip.legs = [];
     slip.error = null;
-    if (ui.sheetOpen('slip')) {
-      ui.closeSheet('slip');
-    }
+    ui.closeSheet('slip', true); // not discard(): that would also switch parlay mode back off
+    ui.closePage('parlay', true);
     TO.app.render();
   };
 
   function afterChange() {
-    if (!slip.legs.length) { ui.closeSheet('slip'); }
+    if (!slip.legs.length) { ui.closeSheet('slip'); ui.closePage('parlay', true); }
     else if (ui.sheetOpen('slip')) ui.refreshSheet('slip');
+    TO.app.renderChrome();
+    TO.app.refreshOddsButtons();
+  }
+
+  /** Closing the slip (X, tapping outside, Escape) throws the picks away, so nothing lingers on Home. */
+  function discard() {
+    slip.clear();
+    ui.closePage('parlay', true);
     TO.app.renderChrome();
     TO.app.refreshOddsButtons();
   }
@@ -3863,7 +4108,7 @@ window.TIMEOUT_SUPABASE = {
     if (slip.boost && wl.boostsLeft > 0) mult *= 1 + TO.RULES.boostPercent;
     const s = Number.isFinite(stake) ? stake : 0;
     const winnings = Math.round((Math.round(s * dec) - s) * mult);
-    return { wl, stake, dec, american: TO.odds.fromDecimal(dec), mult, winnings, valid: Number.isInteger(stake) && stake >= 1 && stake <= wl.balance };
+    return { wl, stake, dec, american: TO.odds.fromDecimal(dec), mult, winnings, valid: Number.isInteger(stake) && stake >= 1 && stake <= wl.balance && TO.net.online() };
   }
 
   // ---------- Rendering ----------
@@ -3913,7 +4158,8 @@ window.TIMEOUT_SUPABASE = {
     if (wl.lockedOut || wl.balance <= 0) return '';
     const stake = Number.isFinite(n.stake) ? n.stake : 0;
     let err = '';
-    if (Number.isFinite(n.stake) && n.stake > wl.balance) err = `<div class="note red">${icon('alert', 16)}<span><b>Not enough screentime.</b> You have ${wl.balance} min left to bet today.</span></div>`;
+    if (slip.capped) err = `<div class="note red">${icon('alert', 16)}<span><b>Not enough screentime.</b> You have ${wl.balance} min left to bet today, so that's the most you can stake.</span></div>`;
+    else if (Number.isFinite(n.stake) && n.stake > wl.balance) err = `<div class="note red">${icon('alert', 16)}<span><b>Not enough screentime.</b> You have ${wl.balance} min left to bet today.</span></div>`;
     else if (slip.stake !== null && slip.stake !== '' && (!Number.isFinite(n.stake) || n.stake < 1)) err = `<div class="note red">${icon('alert', 16)}<span>Enter a stake of at least 1 minute.</span></div>`;
     const after = Math.max(wl.balance - stake, 0);
     return `${err}
@@ -3928,7 +4174,8 @@ window.TIMEOUT_SUPABASE = {
 
   function footHtml() {
     const st = slip.status();
-    const more = slip.parlayMode && slip.legs.length < TO.RULES.maxLegs && !st.closed ? `<button class="btn quiet sm" data-act="slip-more">${icon('plus', 16)} Add another pick</button>` : '';
+    const more = slip.legs.length < TO.RULES.maxLegs && !st.closed ? `<button class="btn quiet sm" data-act="slip-more">${icon('plus', 16)} ${slip.parlayMode ? 'Add another pick' : 'Add another pick for a parlay'}</button>` : '';
+    if (!TO.net.online()) return `<div class="note red">${icon('wifiOff', 16)}<span><b>No internet connection.</b> Betting is paused until you're back online, because odds can't update.</span></div><button class="btn full" disabled>${icon('wifiOff', 18)} Waiting for connection</button>`;
     if (st.closed) return `<button class="btn primary full" disabled>Remove unavailable picks to continue</button>`;
     if (st.changed) return `<button class="btn warn full" data-act="slip-accept">Accept new odds</button>`;
     if (slip.mode === 'friend') {
@@ -4000,7 +4247,7 @@ window.TIMEOUT_SUPABASE = {
         body: bodyHtml(),
         foot: footHtml(),
       }),
-      onClose: () => TO.app.renderChrome(),
+      onClose: discard,
     });
     TO.app.renderChrome();
   }
@@ -4019,17 +4266,55 @@ window.TIMEOUT_SUPABASE = {
     wrap.querySelector('.sheet-head h2').textContent = slip.legs.length > 1 ? `Parlay · ${slip.legs.length} picks` : 'Bet Slip';
   };
 
+  // ---------- Parlay builder: a page of games to add picks from ----------
+  function parlayPage() {
+    const games = TO.views.home.boardGames().filter((g) => g.state === 'live' || g.state === 'scheduled');
+    const inSlip = new Set(slip.legs.map((l) => l.ref));
+    const groups = S.LEAGUE_ORDER.filter((l) => games.some((g) => g.league === l)).map((l) => {
+      const lg = games.filter((g) => g.league === l);
+      return `<div class="league-head"><h3>${esc(S.LEAGUES[l].title)}</h3><span class="cnt">${lg.length} games</span></div>${lg.map((g) => TO.views.home.gameCard(g)).join('')}`;
+    }).join('');
+    const n = slip.legs.length;
+    const dec = slip.legs.reduce((p, l) => p * TO.odds.decimal(l.price), 1);
+    const full = n >= TO.RULES.maxLegs;
+    return {
+      title: 'Build a parlay',
+      body: `<div class="note blue">${icon('info', 16)}<span>Pick up to ${TO.RULES.maxLegs} sides from <b>different games</b>. Every pick has to win for the parlay to pay. ${inSlip.size ? `Games already on your slip are highlighted.` : ''}</span></div>
+        <div class="parlay-days">${TO.views.home.dayBar()}</div>
+        ${full ? `<div class="note warn">${icon('alert', 16)}<span>Your parlay is full. Remove a pick on the slip to add a different one.</span></div>` : ''}
+        <div class="stack parlay-list">${groups || `<div class="empty">${icon('target', 36)}<h3>No games open for betting</h3><p>Check back when the next games start.</p></div>`}</div>
+        <div class="page-fab parlay-fab"><button class="btn primary full" data-act="parlay-review" ${n ? '' : 'disabled'}><span class="count-pill" style="background:var(--accent-ink);color:var(--accent)">${n}</span>${n > 1 ? `Review ${n}-pick parlay` : 'Review bet slip'}${n > 1 ? `<span class="display" style="margin-left:auto;font-size:19px">${TO.odds.fmt(TO.odds.fromDecimal(dec))}</span>` : ''}</button></div>`,
+    };
+  }
+  function openParlayPage() {
+    ui.openPage('parlay', {
+      render: parlayPage,
+      // Going back returns to the slip with the picks so far.
+      onClose: () => { if (slip.legs.length && !ui.sheetOpen('slip')) open(); },
+    });
+  }
+  /** True when the slip sits beside the content instead of over it (the browser version overrides this). */
+  slip.docked = () => false;
+
   // ---------- Actions ----------
   const A = TO.actions;
+  A['parlay-review'] = () => { ui.closePage('parlay'); TO.app.render(); };
   A.pick = (el) => slip.toggle(el.dataset.sel);
   A['slip-remove'] = (el) => { slip.legs = slip.legs.filter((l) => l.selId !== el.dataset.sel); afterChange(); };
-  A['slip-more'] = () => { ui.closeSheet('slip'); TO.ui.toast({ kind: 'info', title: 'Pick another game', msg: 'Tap any odds to add it. Your slip is at the bottom of the screen.', ms: 3000 }); };
+  A['slip-more'] = () => {
+    slip.parlayMode = true;
+    if (!slip.docked()) ui.closeSheet('slip', true); // hide it without discarding the picks
+    openParlayPage();
+    TO.app.renderChrome();
+  };
   A['open-slip'] = () => open();
   A['slip-mode'] = (el) => { slip.mode = el.dataset.m; slip.error = null; ui.refreshSheet('slip'); };
-  A['slip-quick'] = (el) => { slip.stake = el.dataset.v; slip.error = null; ui.refreshSheet('slip', ['body', 'foot']); };
+  A['slip-quick'] = (el) => { slip.stake = el.dataset.v; slip.error = null; slip.capped = false; ui.refreshSheet('slip', ['body', 'foot']); };
   A['slip-step'] = (el) => {
     const v = (parseInt(slip.stake, 10) || 0) + Number(el.dataset.d);
-    slip.stake = String(Math.max(1, v));
+    const max = TO.state.wallet().balance;
+    slip.capped = v > max;
+    slip.stake = String(Math.max(1, Math.min(v, max)));
     const input = document.getElementById('slip-stake');
     if (input) input.value = slip.stake;
     slip.error = null;
@@ -4057,6 +4342,7 @@ window.TIMEOUT_SUPABASE = {
     TO.tester.mark('odds');
   };
   A['slip-place'] = () => {
+    if (!TO.net.online()) { ui.refreshSheet('slip'); return; }
     const friend = slip.mode === 'friend' ? { with: slip.friends, terms: slip.terms } : null;
     const n = numbers();
     try {
@@ -4073,6 +4359,7 @@ window.TIMEOUT_SUPABASE = {
       }
       slip.clear();
       ui.closeSheet('slip');
+      ui.closePage('parlay', true);
       TO.app.render();
     } catch (e) {
       if (!(e instanceof TO.AppError)) throw e;
@@ -4083,12 +4370,15 @@ window.TIMEOUT_SUPABASE = {
     }
   };
 
+  // The stake can't go above today's betting balance: a bigger number snaps back to it.
   TO.inputs['slip-stake'] = (el) => {
+    const max = TO.state.wallet().balance;
+    const n = parseInt(el.value, 10);
+    slip.capped = Number.isFinite(n) && n > max;
+    if (slip.capped) { el.value = String(max); TO.tester.mark('overstake'); }
     slip.stake = el.value;
     slip.error = null;
-    const n = parseInt(el.value, 10);
-    el.classList.toggle('bad', Number.isFinite(n) && n > TO.state.wallet().balance);
-    if (Number.isFinite(n) && n > TO.state.wallet().balance) TO.tester.mark('overstake');
+    el.classList.remove('bad');
     document.querySelectorAll('.quick button').forEach((b) => b.classList.toggle('on', b.dataset.v === el.value && b.textContent !== 'Max'));
     slip.update();
   };
@@ -4113,8 +4403,32 @@ window.TIMEOUT_SUPABASE = {
   const activeFilter = () => ['pred', 'todo', 'sim'].includes(TO.data.feedFilter) ? 'all' : (TO.data.feedFilter || 'all');
   const sportsOnly = (bet) => bet.kind === 'sports' && bet.legs.every((leg) => leg.gameId && S.game(leg.gameId)?.league !== 'sim');
 
-  function boardGames() {
-    return S.board(TO.now(), { offDay: offDay(), leagues: S.LEAGUE_ORDER.filter((l) => l !== 'sim' && followed().includes(l)) }).filter((g) => !g.simulated && g.league !== 'sim');
+  // Which day the board shows: 0 = today, 1 = tomorrow. Live games are always today.
+  let feedDay = 0;
+  const activeDay = () => (activeFilter() === 'live' ? 0 : feedDay);
+
+  function boardGames(day = activeDay(), peek = false) {
+    return S.board(TO.now(), { offDay: offDay(), day, peek, leagues: S.LEAGUE_ORDER.filter((l) => l !== 'sim' && followed().includes(l)) }).filter((g) => !g.simulated && g.league !== 'sim');
+  }
+
+  function dayLabel(offset) {
+    if (offset === 0) return 'Today';
+    if (offset === 1) return 'Tomorrow';
+    const d = new Date(TO.now() + offset * TO.DAY);
+    return `${d.toLocaleDateString([], { weekday: 'short' })} ${d.getMonth() + 1}/${d.getDate()}`;
+  }
+
+  /** Today and tomorrow. Counts are games still to be played that day, in the sports being shown. */
+  function dayBar() {
+    if (activeFilter() === 'live' || TO.live.offline) return '';
+    const f = activeFilter();
+    const chips = [];
+    for (let i = 0; i <= TO.live.days; i++) {
+      const games = boardGames(i, true).filter((g) => g.state !== 'final' && (f === 'all' || g.league === f));
+      const n = games.length;
+      chips.push(`<button class="chip sm day-chip ${feedDay === i ? 'on' : ''}" data-act="feed-day" data-day="${i}" aria-pressed="${feedDay === i}">${esc(dayLabel(i))}${n ? `<span class="n">${n}</span>` : ''}</button>`);
+    }
+    return `<div class="hscroll day-bar" data-hkey="days" aria-label="Pick a day">${chips.join('')}</div>`;
   }
 
   function myOpenBetOn(ref) {
@@ -4193,7 +4507,7 @@ window.TIMEOUT_SUPABASE = {
 
   function openBetsStrip() {
     const open = TO.data.bets.filter((b) => b.status === 'open' && sportsOnly(b)).sort((a, b) => b.placedAt - a.placedAt);
-    return `<div class="stack-s">
+    return `<div class="stack-s open-bets">
       <div class="section-title"><div class="row-s"><h2>Open bets</h2><span class="count-pill ${open.length ? '' : 'off'}">${open.length}</span></div>${open.length ? `<button class="link-btn" data-act="tab" data-tab="bets">See all</button>` : ''}</div>
       ${open.length
         ? `<div class="hscroll mini-bets" data-hkey="minibets">${open.map(miniBet).join('')}</div>`
@@ -4213,8 +4527,8 @@ window.TIMEOUT_SUPABASE = {
       chips.push(chip(l, l === 'ncaaf' ? 'College Football' : S.LEAGUES[l].short === 'SIM' ? 'Sim League' : S.LEAGUES[l].short, n));
     }
     chips.push(`<button class="chip dashed" data-act="settings" data-section="sports">${icon('sliders', 14)}Edit</button>`);
-    const cfb = f === 'ncaaf' || f === 'all' ? `<label class="cfb-select-label" for="cfb-group">College Football</label><select id="cfb-group" class="cfb-select" aria-label="College football conference">${TO.live.groups.map(([id, name]) => `<option value="${id}" ${TO.live.selectedGroup() === id ? 'selected' : ''}>${esc(name)}</option>`).join('')}</select>` : '';
-    return `<div class="filterbar"><div class="hscroll" data-hkey="filters">${chips.join('')}</div>${cfb}</div>`;
+    const cfb = (f === 'ncaaf' || f === 'all') && !TO.live.offline ? `<label class="cfb-select-label" for="cfb-group">College Football</label><select id="cfb-group" class="cfb-select" aria-label="College football conference">${TO.live.groups.map(([id, name]) => `<option value="${id}" ${TO.live.selectedGroup() === id ? 'selected' : ''}>${esc(name)}</option>`).join('')}</select>` : '';
+    return `<div class="filterbar"><div class="hscroll" data-hkey="filters">${chips.join('')}</div>${dayBar()}${cfb}</div>`;
   }
 
   // ---------- Game card ----------
@@ -4297,11 +4611,16 @@ window.TIMEOUT_SUPABASE = {
   }
 
   function emptyBoard(f) {
-    const title = f === 'live' ? 'No live games right now' : 'Sorry, no games are happening for this sport today.';
+    const day = activeDay();
+    const when = day === 0 ? 'today' : day === 1 ? 'tomorrow' : `on ${dayLabel(day)}`;
+    const loading = day > 0 && TO.live.upcomingLoading;
+    const title = f === 'live' ? 'No live games right now' : loading ? 'Loading the schedule…' : `Sorry, no games are happening for this sport ${when}.`;
+    const next = f !== 'live' && !loading ? Array.from({ length: TO.live.days + 1 }, (_, i) => i).find((i) => i !== day && boardGames(i, true).some((g) => f === 'all' || g.league === f)) : null;
     return `<div class="empty">
-      ${icon('target', 40)}
+      ${icon(loading ? 'clock' : 'target', 40)}
       <h3>${title}</h3>
       ${f === 'live' ? '<p>Check back when a game is underway.</p>' : ''}
+      ${next != null ? `<button class="btn primary" data-act="feed-day" data-day="${next}">See games ${next === 1 ? 'tomorrow' : `on ${esc(dayLabel(next))}`}</button>` : ''}
     </div>`;
   }
 
@@ -4333,14 +4652,15 @@ window.TIMEOUT_SUPABASE = {
     const lock = wl.appsLocked
       ? `<button class="app-lock" data-act="settings" data-section="screentime">${icon('phone', 22, 'red')}<span class="grow"><b class="red">Your locked apps are blocked</b><div class="small muted">You've used all ${wl.todayLimit} min of today's phone time. Emergency unlocks are in Settings.</div></span>${icon('chevR', 16)}</button>`
       : '';
-    return `<div class="stack" style="padding-top:2px">
+    return `<div class="stack home" style="padding-top:2px">
       ${walletCard(wl)}
       ${lock}
       ${statusStrip(wl)}
       ${openBetsStrip()}
-      <div class="stack" style="gap:12px">
+      <div class="stack feed" style="gap:12px">
         ${filterBar(games)}
         ${buildParlayControl()}
+        ${TO.live.offline ? `<div class="note blue simulated-note">${icon('info', 16)}<span>Live ESPN odds can't be reached here, so these are simulated games with real team names. Everything else works the same.</span></div>` : ''}
         ${feed(games)}
       </div>
     </div>`;
@@ -4376,10 +4696,18 @@ window.TIMEOUT_SUPABASE = {
     if (next.firstElementChild) syncNode(view.firstElementChild, next.firstElementChild);
   }
 
-  TO.views.home = { render, gameCard, refreshLive };
+  TO.views.home = { render, gameCard, refreshLive, boardGames, dayBar };
 
   // ---------- Actions ----------
   const A = TO.actions;
+  A['feed-day'] = (el) => {
+    feedDay = Number(el.dataset.day) || 0;
+    TO.app.render();
+    if (TO.ui.pageOpen('parlay')) TO.ui.refreshPage('parlay');
+    const v = document.getElementById('view');
+    const fb = v && v.querySelector('.filterbar');
+    if (fb && v.scrollTop > fb.offsetTop) v.scrollTop = fb.offsetTop;
+  };
   A.filter = (el) => { TO.data.feedFilter = el.dataset.f; TO.state.save(); TO.app.render(); const v = document.getElementById('view'); const fb = v.querySelector('.filterbar'); if (fb && v.scrollTop > fb.offsetTop) v.scrollTop = fb.offsetTop; };
   A['go-sim'] = () => {
     if (!followed().includes('sim')) TO.state.setSetting('sports', [...followed(), 'sim']);
@@ -4450,7 +4778,7 @@ window.TIMEOUT_SUPABASE = {
       o.total.length ? block(`Total ${Sp.unit} · both teams combined`, o.total, (s) => (s.side === 'over' ? 'Over' : 'Under')) : '',
     ].filter(Boolean);
     if (!available.length) return `<div class="card small muted">ESPN betting lines are not available for this game yet.</div>`;
-    return `<div class="card stack">
+    return `<div class="card stack" id="game-markets">
       <div class="spread"><h2 style="margin:0;font-size:17px">Pick a side</h2><span class="tiny faint bold">ESPN odds refresh every 25 seconds</span></div>
       ${available.join('')}
       <div class="tiny faint">ESPN lines and prices. Tap a price to add it to your bet slip.</div>
@@ -4475,12 +4803,20 @@ window.TIMEOUT_SUPABASE = {
     return `<div class="card stack"><h2 style="margin:0;font-size:17px">ESPN team information</h2>${teams.map((team) => `<div class="spread"><span class="row-s bold">${ui.teamBadge(team, 22)}${esc(team.name)}</span><span class="small muted">${[team.rank ? `#${team.rank}` : '', team.record || ''].filter(Boolean).map(esc).join(' · ')}</span></div>`).join('')}</div>`;
   }
 
+  /** Floating button: jumps to the odds, or back to the slip once there's a pick on it. */
+  function fab(g, o) {
+    if (g.state !== 'live' && g.state !== 'scheduled') return '';
+    const n = TO.slip.legs.length;
+    if (n) return `<div class="page-fab game-fab has-slip"><button class="btn primary full" data-act="open-slip">${icon('ticket', 18)} Open bet slip · ${n} pick${n === 1 ? '' : 's'}</button></div>`;
+    return `<div class="page-fab game-fab"><button class="btn primary full" data-act="game-bet" ${o.suspended ? 'disabled' : ''}>${icon(o.suspended ? 'lock' : 'ticket', 18)} ${o.suspended ? 'Betting is closed on this game' : 'Make a bet'}</button></div>`;
+  }
+
   function render() {
     const g = S.game(currentId);
     const o = S.odds(currentId);
     return {
       title: `${esc(g.away.abbr)} @ ${esc(g.home.abbr)}`,
-      body: `${scoreboard(g)}${banner(g, o)}${myBets(g)}${markets(g, o)}${statsCard(g)}${researchCard(g)}`,
+      body: `${scoreboard(g)}${banner(g, o)}${myBets(g)}${markets(g, o)}${statsCard(g)}${researchCard(g)}${fab(g, o)}`,
     };
   }
 
@@ -4494,6 +4830,15 @@ window.TIMEOUT_SUPABASE = {
 
   TO.views.game = { open, refresh: () => ui.refreshPage('game') };
   TO.actions['open-game'] = (el) => open(el.dataset.id);
+  TO.actions['game-bet'] = () => {
+    const m = document.getElementById('game-markets');
+    if (!m) return;
+    m.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    m.classList.remove('flash');
+    void m.offsetWidth; // restart the highlight
+    m.classList.add('flash');
+    ui.toast({ kind: 'info', title: 'Pick a price', msg: 'Tap any odds and your bet slip opens with it.', ms: 2600 });
+  };
 })(window.TO);
 
 </script>
@@ -4925,6 +5270,7 @@ window.TIMEOUT_SUPABASE = {
   TO.inputs['todo-stake'] = (el) => { todo.stake = el.value; };
   for (let i = 0; i < 3; i++) TO.inputs[`todo-${i}`] = (el) => { todo.tasks[i].text = el.value; };
   TO.actions['todo-place'] = () => {
+    if (!TO.net.guard()) return;
     try {
       TO.state.placeTodoParlay({ tasks: todo.tasks, stake: parseInt(todo.stake, 10) });
       ui.closeSheet('todo');
@@ -5035,13 +5381,17 @@ window.TIMEOUT_SUPABASE = {
     if (d.requestsIn.length) {
       parts.push(`<div class="eyebrow">Friend requests</div><div class="list">${d.requestsIn.map((r) => {
         const p = St.person(r.from);
-        return `<div class="person-row">${ui.avatar(p ? p.photo : TO.initialsAvatar(r.from))}<div class="grow"><b>@${esc(r.from)}</b><div class="tiny faint">${p && p.name && p.name !== r.from ? `${esc(p.name)} · ` : ''}${TO.ago(r.at)}</div></div><button class="btn xs ghost" data-act="decline-fr" data-id="${r.id}">Decline</button><button class="btn xs primary" data-act="accept-fr" data-id="${r.id}">Accept</button></div>`;
+        return `<div class="person-row">${ui.avatar(p ? p.photo : TO.initialsAvatar(r.from))}<div class="grow"><b>@${esc(r.from)}</b><div class="tiny faint">${p && p.name && p.name !== r.from ? `${esc(p.name)} · ` : ''}Received ${TO.ago(r.at)}</div></div><button class="btn xs ghost" data-act="decline-fr" data-id="${r.id}">Decline</button><button class="btn xs primary" data-act="accept-fr" data-id="${r.id}">Accept</button></div>`;
       }).join('')}</div>`);
     }
     if (d.requestsOut.length) {
       parts.push(`<div class="eyebrow">Sent requests</div><div class="list">${d.requestsOut.map((r) => {
         const p = St.person(r.to);
-        return `<div class="person-row">${ui.avatar(p ? p.photo : TO.initialsAvatar(r.to))}<div class="grow"><b>@${esc(r.to)}</b><div class="tiny faint">Waiting for them to accept</div></div><button class="btn xs ghost" data-act="cancel-request" data-u="${esc(r.to)}">Cancel</button></div>`;
+        const wait = St.resendWait(r);
+        const resend = wait
+          ? `<button class="btn xs ghost" disabled title="You can send it again in ${TO.fmtIn(wait)}">${icon('check', 13)} Sent</button>`
+          : `<button class="btn xs primary" data-act="resend-request" data-u="${esc(r.to)}">${icon('refresh', 13)} Send again</button>`;
+        return `<div class="person-row">${ui.avatar(p ? p.photo : TO.initialsAvatar(r.to))}<div class="grow" style="min-width:0"><b>@${esc(r.to)}</b><div class="tiny faint">Sent ${TO.ago(r.at)} · ${wait ? `send again in ${TO.fmtIn(wait)}` : 'waiting for them to accept'}</div></div><div class="row-s">${resend}<button class="btn xs quiet" data-act="cancel-request" data-u="${esc(r.to)}">Cancel</button></div></div>`;
       }).join('')}</div>`);
     }
     if (!parts.length) return `<div class="empty">${icon('bell', 36)}<h3>You're all caught up</h3><p>Friend requests and bet challenges from friends show up here.</p></div>`;
@@ -5077,11 +5427,15 @@ window.TIMEOUT_SUPABASE = {
     else if (view.tab === 'teams') body = teams();
     else body = leaderboard();
     return `<div class="page-head"><h1>Social</h1><p>Compete with friends: compare records, send bet challenges, and join teams.</p></div>
-      <div class="stack">
-        ${meCard()}
-        ${findCard()}
-        <div class="pad"><div class="seg">${tab('board', 'Friends')}${tab('requests', 'Requests', reqCount)}${tab('teams', 'Teams')}</div></div>
-        ${body}
+      <div class="stack social-cols">
+        <div class="stack social-side">
+          ${meCard()}
+          ${findCard()}
+        </div>
+        <div class="stack social-main">
+          <div class="pad"><div class="seg">${tab('board', 'Friends')}${tab('requests', 'Requests', reqCount)}${tab('teams', 'Teams')}</div></div>
+          ${body}
+        </div>
       </div>`;
   }
 
@@ -5175,6 +5529,16 @@ window.TIMEOUT_SUPABASE = {
     rerender();
   };
   A['cancel-request'] = (el) => { St.cancelFriendRequest(el.dataset.u); rerender(); };
+  A['resend-request'] = (el) => {
+    try {
+      St.resendFriendRequest(el.dataset.u);
+      ui.toast({ kind: 'win', title: `Request sent again to @${el.dataset.u}`, msg: 'You can send another one in an hour.' });
+    } catch (e) {
+      if (!(e instanceof TO.AppError)) throw e;
+      ui.toast({ kind: 'warn', title: 'Not yet', msg: e.message });
+    }
+    rerender();
+  };
   A['accept-fr'] = (el) => { const r = TO.data.requestsIn.find((x) => x.id === el.dataset.id); St.acceptFriendRequest(el.dataset.id); if (r) ui.toast({ kind: 'win', title: `You and @${r.from} are now friends` }); TO.app.render(); };
   A['decline-fr'] = (el) => { St.declineFriendRequest(el.dataset.id); TO.app.render(); };
   A['remove-friend'] = async (el) => {
@@ -5185,6 +5549,7 @@ window.TIMEOUT_SUPABASE = {
     TO.app.render();
   };
   A['accept-ch'] = (el) => {
+    if (!TO.net.guard()) return;
     try {
       const bet = St.acceptChallenge(el.dataset.id);
       ui.toast({ kind: 'win', title: 'Challenge accepted', msg: `${bet.legs[0].label} · "${bet.friend.terms}". It's in My Bets.` });
@@ -5344,7 +5709,7 @@ window.TIMEOUT_SUPABASE = {
       <div class="stack-s">
         <div class="eyebrow">Controls</div>
         <div class="list">
-          ${listRow('shield', 'Enforce app limits', 'Blocks your locked apps when today\'s phone time runs out', ui.switchEl('set-enforce', s.enforce, 'data-change="set-enforce"'), 'for="set-enforce"')}
+          ${listRow('shield', 'Enforce app limits', s.lockedApps.length ? 'Blocks your locked apps when today\'s phone time runs out' : '<span class="yellow">Lock at least one app or site below to turn this on</span>', ui.switchEl('set-enforce', s.enforce && s.lockedApps.length > 0, 'data-change="set-enforce"'), 'for="set-enforce"')}
           <button class="list-row" data-act="locked-apps"><span class="lr-icon">${icon('lock', 17)}</span><span class="lr-main"><div class="lr-title">Locked apps & sites</div><div class="lr-sub">${s.lockedApps.length} locked · ${St.lockPoints()} lock points</div></span>${icon('chevR', 18, 'chev')}</button>
           <div class="list-row" style="flex-wrap:wrap"><span class="lr-icon">${icon('clock', 17)}</span><span class="lr-main"><div class="lr-title">Minimum phone time per day</div><div class="lr-sub">Losses can't push your limit below this</div></span><div class="seg" style="width:100%;margin-top:4px">${[0, 15, 30].map((v) => `<button class="${s.minLimit === v ? 'on' : ''}" data-act="set-minlimit" data-v="${v}">${v ? `${v} min` : 'None'}</button>`).join('')}</div></div>
           <div class="list-row" style="flex-wrap:wrap"><span class="lr-icon">${icon('bell', 17)}</span><span class="lr-main"><div class="lr-title">Warn me when phone time is low</div><div class="lr-sub">Shows a heads-up before apps lock</div></span><div class="seg" style="width:100%;margin-top:4px">${[5, 10, 15].map((v) => `<button class="${s.lowWarn === v ? 'on' : ''}" data-act="set-lowwarn" data-v="${v}">${v} min left</button>`).join('')}</div></div>
@@ -5522,8 +5887,9 @@ window.TIMEOUT_SUPABASE = {
     const before = TO.data.settings.lockedApps;
     const removed = before.filter((x) => !lockDraft.includes(x));
     const oldTier = St.tier();
-    const newTier = St.tierForPoints(TO.data.settings.enforce ? lockDraft.reduce((s, id) => s + St.LOCKABLE.find((x) => x.id === id).pts, 0) : 0);
-    const body = `${lockDraft.length} apps, sites and categories will be locked when your phone time runs out.${newTier.id !== oldTier.id ? `<br><br>Your tier changes from <b>${esc(oldTier.title)}</b> to <b>${esc(newTier.title)}</b>.` : ''}${removed.length ? '<br><br>Unlocked apps stop counting right away.' : ''}`;
+    const willEnforce = lockDraft.length > 0 && (TO.data.settings.enforce || !before.length); // matches St.setSetting
+    const newTier = St.tierForPoints(willEnforce ? lockDraft.reduce((s, id) => s + St.LOCKABLE.find((x) => x.id === id).pts, 0) : 0);
+    const body = `${lockDraft.length} apps, sites and categories will be locked when your phone time runs out.${newTier.id !== oldTier.id ? `<br><br>Your tier changes from <b>${esc(oldTier.title)}</b> to <b>${esc(newTier.title)}</b>.` : ''}${removed.length ? '<br><br>Unlocked apps stop counting right away.' : ''}${!lockDraft.length && TO.data.settings.enforce ? '<br><br><b>App limits turn off</b> because nothing is locked.' : ''}${lockDraft.length && !before.length ? '<br><br>App limits turn on.' : ''}`;
     if (!(await ui.confirm({ title: 'Update locked apps?', body, confirm: 'Save' }))) return;
     St.setSetting('lockedApps', lockDraft.slice());
     ui.closeSheet('locked');
@@ -5605,6 +5971,11 @@ window.TIMEOUT_SUPABASE = {
   C['set-enforce'] = async (el) => {
     const want = el.checked;
     el.checked = !want;
+    if (want && !TO.data.settings.lockedApps.length) {
+      const pick = await ui.confirm({ title: 'Lock an app first', body: 'App limits need at least one locked app, site or category to block. Choose what TimeOut locks when your phone time runs out, and limits turn on with it.', confirm: 'Choose apps', cancel: 'Not now' });
+      if (pick) lockedAppsSheet();
+      return;
+    }
     const ok = await ui.confirm(want
       ? { title: 'Turn app limits on?', body: 'Your locked apps will close when today\'s phone time runs out.', confirm: 'Turn on' }
       : { title: 'Turn app limits off?', body: 'Your locked apps won\'t close anymore. Your tier drops to Rookie and today won\'t count as a clean day.', confirm: 'Turn off', danger: true });
@@ -5646,7 +6017,7 @@ window.TIMEOUT_SUPABASE = {
 /* TimeOut web demo — welcome, log in, create account and onboarding. */
 (function (TO) {
   'use strict';
-  const { esc, icon } = TO;
+  const { esc, icon, brandIcon } = TO;
   const S = TO.sim;
   const ui = TO.ui;
   const St = TO.state;
@@ -5665,7 +6036,8 @@ window.TIMEOUT_SUPABASE = {
       <div class="welcome-hero">
         ${ticker()}
         <div style="margin-top:auto"></div>
-        <div class="wordmark">Time<b>Out</b></div>
+        ${brandIcon(64)}
+        <div class="wordmark">TIME<b>OUT</b></div>
         <div class="tagline">Bet your screen time, not your money.</div>
         <div class="welcome-points">
           <div>${icon('hourglass', 18)}<span>60 betting minutes a day. Win and you get more phone time tomorrow.</span></div>
@@ -5674,8 +6046,8 @@ window.TIMEOUT_SUPABASE = {
         </div>
       </div>
       <div class="auth-inner" style="flex:none;gap:10px">
-        <button class="btn primary full" data-act="auth-go" data-s="signup">Create account</button>
-        <button class="btn ghost full" data-act="auth-go" data-s="login">Log in</button>
+        <button class="btn primary full" data-act="auth-go" data-s="login">Log in</button>
+        <button class="btn ghost full" data-act="auth-go" data-s="signup">Create account</button>
         ${TO.api.configured ? '' : `<button class="btn quiet full sm" data-act="auth-demo">${icon('flask', 16)} Try the demo account</button>`}
       </div>
     </div>`;
@@ -5689,6 +6061,7 @@ window.TIMEOUT_SUPABASE = {
     const v = av.values;
     return `<div class="auth"><form class="auth-inner" data-form="login" novalidate>
       ${back()}
+      ${brandIcon(52)}
       <h1>Welcome back</h1>
       <p class="sub">Log in with your email and password.</p>
       ${av.formError ? `<div class="form-error">${esc(av.formError)}</div>` : ''}
@@ -5707,6 +6080,7 @@ window.TIMEOUT_SUPABASE = {
     const photo = av.photo || TO.initialsAvatar(v['su-user'] || '?', '#1d2430');
     return `<div class="auth"><form class="auth-inner" data-form="signup" novalidate>
       ${back()}
+      ${brandIcon(52)}
       <h1>Create your account</h1>
       <p class="sub">Friends find you by your username.</p>
       ${av.formError ? `<div class="form-error">${esc(av.formError)}</div>` : ''}
@@ -5751,15 +6125,96 @@ window.TIMEOUT_SUPABASE = {
     return `<div class="auth"><div class="auth-inner">${steps}${step > 1 ? `<button class="icon-btn" style="margin-left:-10px" data-act="ob-back" aria-label="Back">${icon('chevL', 22)}</button>` : ''}${body}<div class="stack-s" style="margin-top:auto">${next}</div></div></div>`;
   }
 
+  // ---------- Verify email (after Create account, until the link in the email is opened) ----------
+  const VERIFY_POLL_MS = 5000;
+  const VERIFY_GIVE_UP_MS = 30 * TO.MIN;
+  const RESEND_WAIT_MS = 60 * 1000;
+  // The password is kept in memory only, so this page can log in by itself once the email is confirmed.
+  const pending = { email: '', password: '', since: 0, resentAt: 0, timer: null, checking: false, note: '' };
+
+  function verify() {
+    const wait = Math.max(0, pending.resentAt + RESEND_WAIT_MS - Date.now());
+    const stopped = Date.now() - pending.since > VERIFY_GIVE_UP_MS;
+    return `<div class="auth"><div class="auth-inner verify-email">
+      <button type="button" class="icon-btn" style="margin-left:-10px" data-act="verify-cancel" aria-label="Back">${icon('chevL', 22)}</button>
+      <span class="verify-ic">${icon('send', 30)}</span>
+      <h1>Verify your email</h1>
+      <p class="sub">We sent a confirmation link to <b style="color:var(--text)">${esc(pending.email)}</b>. Open it to finish creating your account.</p>
+      ${av.formError ? `<div class="form-error">${esc(av.formError)}</div>` : ''}
+      <div class="note ${stopped ? '' : 'green'}">${stopped ? icon('clock', 16) : '<span class="verify-dot"></span>'}<span>${stopped
+        ? 'Still waiting. Once you\'ve opened the link, tap the button below.'
+        : 'Waiting for you to confirm. You\'ll be logged in automatically as soon as you do, on this page or from the link.'}</span></div>
+      ${pending.note ? `<div class="small muted" style="text-align:center">${esc(pending.note)}</div>` : ''}
+      <button type="button" class="btn primary full" data-act="verify-check" ${pending.checking ? 'disabled' : ''}>${pending.checking ? 'Checking…' : 'I\'ve confirmed my email'}</button>
+      <button type="button" class="btn ghost full" data-act="verify-resend" ${wait ? 'disabled' : ''}>${icon('refresh', 16)} ${wait ? `Resend email in ${Math.ceil(wait / 1000)}s` : 'Resend email'}</button>
+      <div class="small muted" style="text-align:center">Can't find it? Check spam or promotions. Wrong email? <button type="button" class="link-btn" data-act="verify-cancel">Start over</button></div>
+    </div></div>`;
+  }
+
+  function stopVerifyPolling() {
+    clearInterval(pending.timer);
+    pending.timer = null;
+  }
+
+  /** Tries to log in with the new account. Supabase refuses with "Email not confirmed" until the link is opened. */
+  async function checkVerified(manual) {
+    if (pending.checking || !pending.email) return;
+    if (!manual && (document.hidden || Date.now() - pending.since > VERIFY_GIVE_UP_MS)) return;
+    pending.checking = true;
+    if (manual) render();
+    try {
+      // Another tab may already have signed in from the email link.
+      if (TO.api.hasToken()) { await finishVerified(await TO.api.me()); return; }
+      const { user } = await TO.api.login(pending.email, pending.password);
+      await finishVerified(user);
+    } catch (e) {
+      if (!(e instanceof TO.AppError)) throw e;
+      const unconfirmed = /not confirmed|confirm/i.test(e.message);
+      if (manual) av.formError = unconfirmed ? 'Your email isn\'t confirmed yet. Open the link we sent, then try again.' : e.message;
+    } finally {
+      pending.checking = false;
+      if (av.screen === 'verify') render();
+    }
+  }
+
+  async function finishVerified(user) {
+    stopVerifyPolling();
+    pending.password = '';
+    St.adoptServerUser(user, await TO.api.loadState());
+    av.values = {}; av.photo = null;
+    av.screen = 'onboard';
+    TO.tester.mark('signup');
+    TO.app.boot(); // new accounts land in onboarding
+    ui.toast({ kind: 'win', title: 'Email verified', msg: `Welcome to TimeOut, @${user.username}.` });
+  }
+
+  function startVerify(email, password) {
+    stopVerifyPolling();
+    Object.assign(pending, { email, password, since: Date.now(), resentAt: Date.now(), checking: false, note: '' });
+    av.screen = 'verify'; av.errors = {}; av.formError = '';
+    render();
+    pending.timer = setInterval(() => {
+      if (av.screen !== 'verify') { stopVerifyPolling(); return; }
+      checkVerified(false);
+      render(); // keeps the resend countdown current
+    }, VERIFY_POLL_MS);
+  }
+
+  // The email link signs in whichever tab it opens in. When that tab saves the session, this one follows.
+  window.addEventListener('storage', (e) => {
+    if (av.screen === 'verify' && e.key === TO.api.sessionKey && e.newValue) checkVerified(true);
+  });
+
   function render() {
     const root = document.getElementById('app-body');
-    const map = { welcome, login, signup, onboard };
+    const map = { welcome, login, signup, onboard, verify };
     root.innerHTML = map[av.screen]();
     const first = root.querySelector('input:not([type=file])');
     if (first && av.screen !== 'welcome' && !av.errors.password && av.screen !== 'onboard') setTimeout(() => { try { first.focus({ preventScroll: true }); } catch (e) { /* ignore */ } }, 50);
   }
 
   function show(screen) {
+    if (screen !== 'verify') { stopVerifyPolling(); pending.password = ''; }
     av.screen = screen; av.errors = {}; av.formError = '';
     if (screen === 'welcome') { av.values = {}; av.photo = null; }
     render();
@@ -5803,6 +6258,7 @@ window.TIMEOUT_SUPABASE = {
   async function submit(form) {
     collect(form);
     av.errors = {}; av.formError = '';
+    if (!TO.net.online()) { av.formError = 'No internet connection. Check your Wi-Fi or data and try again.'; render(); return; }
     const v = av.values;
     if (form.dataset.form === 'login') {
       try {
@@ -5826,7 +6282,9 @@ window.TIMEOUT_SUPABASE = {
       try {
         if (av.errors.confirm) throw new TO.AppError('invalid', 'Fix the highlighted fields.');
         setBusy(form, 'Creating account…');
-        const { user, state } = await TO.api.register({ username: (v['su-user'] || '').trim(), email: (v['su-email'] || '').trim(), password: v['su-pw'] || '', photoUrl: av.photo });
+        const result = await TO.api.register({ username: (v['su-user'] || '').trim(), email: (v['su-email'] || '').trim(), password: v['su-pw'] || '', photoUrl: av.photo });
+        if (result.needsConfirmation) { startVerify(result.email, v['su-pw'] || ''); return; }
+        const { user, state } = result;
         St.adoptServerUser(user, state);
         av.values = {}; av.photo = null;
         TO.tester.mark('signup');
@@ -5853,8 +6311,24 @@ window.TIMEOUT_SUPABASE = {
 
   const A = TO.actions;
   A['auth-go'] = (el) => show(el.dataset.s);
+  A['verify-check'] = () => checkVerified(true);
+  A['verify-cancel'] = () => { av.values = { 'su-user': av.values['su-user'], 'su-email': pending.email }; show('signup'); };
+  A['verify-resend'] = async () => {
+    if (Date.now() < pending.resentAt + RESEND_WAIT_MS) return;
+    try {
+      await TO.api.resendConfirmation(pending.email);
+      pending.resentAt = Date.now();
+      pending.note = `Sent a new link to ${pending.email}.`;
+      av.formError = '';
+    } catch (e) {
+      if (!(e instanceof TO.AppError)) throw e;
+      av.formError = e.message;
+    }
+    render();
+  };
   A['auth-demo'] = async (el) => {
     if (TO.api.configured) return;
+    if (!TO.net.online()) { ui.toast({ kind: 'loss', title: 'No internet connection', msg: 'Check your Wi-Fi or data and try again.' }); return; }
     if (!TO.api.online) { St.loginDemo(); TO.tester.mark('login'); TO.app.boot(); return; }
     el.disabled = true;
     try {
@@ -5968,6 +6442,11 @@ window.TIMEOUT_SUPABASE = {
           ${b('t-zero', 'lock', 'Set betting balance to 0', 'wide')}
         </div>
       </div>
+      <div class="tgroup"><h3>Connection</h3>
+        <div class="tgrid">
+          <button class="tbtn wide ${TO.net.simulatedOffline ? 'on' : ''}" data-act="t-offline">${icon('wifiOff', 15)}<span>${TO.net.simulatedOffline ? 'No internet: ON (tap to reconnect)' : 'Simulate losing internet'}</span></button>
+        </div>
+      </div>
       <div class="tgroup"><h3>Friends</h3>
         <div class="tgrid">
           ${b('t-fr', 'userPlus', 'Get a friend request')}${b('t-ch', 'target', 'Get a bet challenge')}
@@ -6065,6 +6544,10 @@ window.TIMEOUT_SUPABASE = {
   };
   A['t-use'] = () => { TO.state.addUsage(10); after(); };
   A['t-use30'] = () => { TO.state.addUsage(30); after(); };
+  A['t-offline'] = () => {
+    TO.net.simulatedOffline = !TO.net.simulatedOffline;
+    TO.app.netChanged();
+  };
   A['t-zero'] = () => {
     const w = TO.data.wallet;
     w.balance = 0; w.lockedOut = true;
@@ -6118,7 +6601,7 @@ window.TIMEOUT_SUPABASE = {
 /* TimeOut web demo — app shell, navigation, live refresh loop and event wiring. */
 (function (TO) {
   'use strict';
-  const { esc, icon } = TO;
+  const { esc, icon, brandMark } = TO;
   const ui = TO.ui;
   const St = TO.state;
 
@@ -6129,7 +6612,8 @@ window.TIMEOUT_SUPABASE = {
     ['social', 'Social', 'users'],
   ];
 
-  const shellHtml = () => `<div class="app" id="shell">
+  /** The phone shell. The browser version (web.js) swaps in its own layout. */
+  app.shellHtml = () => `<div class="app" id="shell">
       <header class="topbar" id="topbar"></header>
       <main class="view" id="view" tabindex="-1"></main>
       <div id="slipbar-host"></div>
@@ -6153,7 +6637,7 @@ window.TIMEOUT_SUPABASE = {
       TO.tester.render();
       return;
     }
-    body.innerHTML = shellHtml();
+    body.innerHTML = app.shellHtml();
     app.tab = 'home';
     app.render();
     TO.live.refresh();
@@ -6169,7 +6653,7 @@ window.TIMEOUT_SUPABASE = {
     const socialBadge = TO.views.social.badge();
     document.getElementById('topbar').innerHTML = `
       <button class="icon-btn" data-act="menu" aria-label="Menu and settings">${icon('menu', 22)}${wl.appsLocked ? '<span class="dotbadge"></span>' : ''}</button>
-      <div class="brand">${icon('hourglass', 20, 'brand-mark')}<span class="brand-word">Time<b>Out</b></span></div>
+      <div class="brand">${brandMark(18, 'brand-mark')}<span class="brand-word">TIME<b>OUT</b></span></div>
       <button class="bal-pill ${locked ? 'locked' : ''}" data-act="settings" data-section="screentime" aria-label="${locked ? 'Betting locked until midnight' : `${wl.balance} minutes available to bet`}">${icon(locked ? 'lock' : 'hourglass', 15)}${locked ? 'Locked' : `${wl.balance} min`}</button>`;
     const open = TO.data.bets.filter((b) => b.status === 'open' && b.kind === 'sports' && b.legs.length && b.legs.every((leg) => leg.kind === 'game' || (leg.kind === 'sports' && leg.gameId))).length;
     document.getElementById('tabbar').innerHTML = TABS.map(([k, label, ic]) => {
@@ -6212,6 +6696,7 @@ window.TIMEOUT_SUPABASE = {
   app.refreshOddsButtons = () => {
     app.renderView();
     if (ui.pageOpen('game')) TO.views.game.refresh();
+    if (ui.pageOpen('parlay')) ui.refreshPage('parlay');
   };
 
   app.go = (tab) => {
@@ -6305,6 +6790,7 @@ window.TIMEOUT_SUPABASE = {
       app.renderChrome();
       app.renderView();
       if (ui.pageOpen('game')) TO.views.game.refresh();
+      if (ui.pageOpen('parlay')) ui.refreshPage('parlay');
       const sp = document.querySelector('[data-page="settings"] .page-top .t');
       if (sp && ['Screen time', 'Tier & streak'].includes(sp.textContent)) ui.refreshPage('settings');
     } else {
@@ -6317,6 +6803,33 @@ window.TIMEOUT_SUPABASE = {
     const a = document.activeElement;
     return a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA') && a.type !== 'checkbox';
   }
+
+  // ---------- Connection ----------
+  /** Red banner while offline. The slip, to-do parlays and challenges refuse new bets until it clears. */
+  function renderNet() {
+    const root = ui.root();
+    if (!root) return;
+    let el = document.getElementById('net-banner');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'net-banner';
+      el.className = 'net-banner';
+      el.setAttribute('role', 'alert');
+      el.innerHTML = `${icon('wifiOff', 17)}<span><b>No internet connection.</b> Betting is paused until you're back online.</span>`;
+      root.appendChild(el);
+    }
+    const off = !TO.net.online();
+    el.hidden = !off;
+    document.body.classList.toggle('is-offline', off);
+  }
+  app.netChanged = () => {
+    renderNet();
+    if (ui.sheetOpen('slip')) ui.refreshSheet('slip', ['body', 'foot']);
+    if (TO.net.online()) ui.toast({ kind: 'win', title: 'Back online', msg: 'Odds are updating again.' });
+    TO.tester.render();
+  };
+  window.addEventListener('online', app.netChanged);
+  window.addEventListener('offline', app.netChanged);
 
   // ---------- Core actions ----------
   const A = TO.actions;
@@ -6388,7 +6901,8 @@ window.TIMEOUT_SUPABASE = {
       device.style.transform = '';
       return;
     }
-    const scale = Math.min(1, Math.max(0.6, (window.innerHeight - 48) / 852));
+    const bar = document.getElementById('demo-bar');
+    const scale = Math.min(1, Math.max(0.6, (window.innerHeight - 48 - (bar ? bar.offsetHeight : 0)) / 852));
     device.style.transform = `scale(${scale})`;
     slot.style.width = `${393 * scale}px`;
     slot.style.height = `${852 * scale}px`;
@@ -6413,9 +6927,18 @@ window.TIMEOUT_SUPABASE = {
 
   async function start() {
     fit();
+    renderNet();
+    // Arriving from the link in a confirmation email: the URL carries the new session (or why it failed).
+    const redirect = TO.api.configured && TO.api.consumeAuthRedirect ? TO.api.consumeAuthRedirect() : null;
     if (await TO.api.init()) await restoreServerSession();
     else St.ensureDemoAccount();
     app.boot();
+    if (redirect && redirect.signedIn && TO.account) {
+      ui.toast({ kind: 'win', title: 'Email verified', msg: `You're logged in as @${TO.account.username}.` });
+    } else if (redirect && redirect.error && !TO.account) {
+      TO.views.auth.show('login');
+      ui.toast({ kind: 'loss', title: 'That link didn\'t work', msg: `${redirect.error}. Log in, or create your account again to get a new link.`, ms: 8000 });
+    }
     setInterval(() => app.tick(false), 1000);
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);

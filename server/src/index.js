@@ -33,7 +33,7 @@ app.use((err, req, res, next) => { // eslint-disable-line no-unused-vars
   res.status(500).json({ error: { code: 'server_error', message: 'Something went wrong on the server.' } });
 });
 
-app.use(express.static(WEB_DIR));
+app.use(express.static(WEB_DIR, { extensions: ['html'] })); // /web serves web.html, the browser version
 
 /** First run on a fresh database: create the tables and sample rows so `npm start` just works. */
 async function setupIfEmpty() {

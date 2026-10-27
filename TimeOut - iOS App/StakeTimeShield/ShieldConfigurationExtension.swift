@@ -45,7 +45,7 @@ class ShieldConfigurationExtension: ShieldConfigurationDataSource {
             "Tomorrow's limit: \(tomorrow) min\(change)",
         ]
         if let record { lines.append("Your record: \(record)") }
-        lines += ["", "Win picks in StakeTime to earn time back.", "Emergency unlock is in the app."]
+        lines += ["", "Win picks in TimeOut to earn time back.", "Emergency unlock is in the app."]
 
         return ShieldConfiguration(
             backgroundBlurStyle: .systemUltraThinMaterialDark,
