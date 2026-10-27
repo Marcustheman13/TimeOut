@@ -1,4 +1,4 @@
-/* TimeOut web app — browser layout. Loaded only by web.html, after app.js.
+/* TimeOut web app — the responsive browser layout. Loaded by index.html, after app.js.
    Same app, data and actions as the app version, laid out for a desktop browser: a sidebar instead of the
    tab bar and menu drawer, a wide content area, and the bet slip docked on the right. */
 (function (TO) {
@@ -80,7 +80,7 @@
     const now = new Date(TO.now());
     const phoneCls = wl.appsLocked ? 'red' : wl.phoneLeft <= TO.data.settings.lowWarn ? 'yellow' : '';
     return `<button class="icon-btn wt-menu" data-act="side-toggle" aria-label="Open menu" aria-expanded="${document.body.classList.contains('side-open')}">${icon('menu', 22)}</button>
-      <div class="wt-when"><b>${now.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}</b><span>${now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}${TO.clock.offset ? ' · demo clock' : ''}</span></div>
+      <div class="wt-when"><b>${now.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}</b><span>${now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span></div>
       <button class="wt-stat opt" data-act="settings" data-section="screentime">${icon('phone', 15)}<span><b class="${phoneCls}">${TO.data.settings.enforce ? `${wl.phoneLeft} min` : 'Off'}</b> phone time left</span></button>
       <span class="wt-stat opt">${icon('clock', 15)}<span>Resets in <b>${ui.countdownEl(TO.nextMidnight())}</b></span></span>
       <button class="bal-pill ${locked ? 'locked' : ''}" data-act="settings" data-section="screentime" aria-label="${locked ? 'Betting locked until midnight' : `${wl.balance} minutes available to bet`}">${icon(locked ? 'lock' : 'hourglass', 16)}${locked ? 'Betting locked' : `${wl.balance} min to bet`}</button>`;

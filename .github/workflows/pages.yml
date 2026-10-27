@@ -1,6 +1,6 @@
 # Publishes the web demo to GitHub Pages whenever it changes on main:
-#   https://marcustheman13.github.io/TimeOut/          phone view (index.html)
-#   https://marcustheman13.github.io/TimeOut/web.html  computer view
+#   https://marcustheman13.github.io/TimeOut/          the web app (index.html), resizes from phone to desktop
+#   https://marcustheman13.github.io/TimeOut/web.html  forwards old links to the main page
 # Pages can't serve a folder with spaces in its name directly, so this uploads "TimeOut - Web demo" as the site.
 name: Deploy web demo to GitHub Pages
 

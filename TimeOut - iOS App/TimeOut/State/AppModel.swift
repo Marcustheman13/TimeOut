@@ -83,6 +83,9 @@ final class AppModel {
         Invites.offer()
         ScreenTime.shared.sync()
         requestNotifications()
+        #if DEBUG
+        ScreenshotSeed.runIfRequested()
+        #endif
     }
 
     /// Bet results and the "5 minutes left" warning arrive as notifications while the app is in the background.

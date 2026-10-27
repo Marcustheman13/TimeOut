@@ -1,4 +1,4 @@
-/* TimeOut in a desktop browser. Loaded after app.css by web.html only.
+/* TimeOut in the browser, from phone to desktop widths. Loaded after app.css by index.html.
    Shared components are laid out for a wide screen: sidebar navigation on the left, content in a
    centered grid, and the bet slip docked on the right. */
 .web {
