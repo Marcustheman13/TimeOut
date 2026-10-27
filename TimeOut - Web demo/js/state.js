@@ -687,6 +687,25 @@
     return 'none';
   };
 
+  /** An invite link is a yes from the sender, so this connects both people when the other account is on this device. */
+  function addFriend(username) {
+    const u = String(username || '').trim().replace(/^@/, '');
+    if (!u || sameUser(u, TO.account.username) || !/^[a-zA-Z0-9_.]{1,20}$/.test(u)) return false;
+    if (!TO.data.friends.some((f) => sameUser(f, u))) TO.data.friends.push(u);
+    TO.data.requestsIn = TO.data.requestsIn.filter((r) => !sameUser(r.from, u));
+    TO.data.requestsOut = TO.data.requestsOut.filter((r) => !sameUser(r.to, u));
+    const acc = findAccountByUsername(u);
+    if (acc) {
+      mutateData(acc.id, (d) => {
+        if (!d.friends.some((f) => sameUser(f, TO.account.username))) d.friends.push(TO.account.username);
+        d.requestsOut = d.requestsOut.filter((r) => !sameUser(r.to, TO.account.username));
+        d.requestsIn = d.requestsIn.filter((r) => !sameUser(r.from, TO.account.username));
+      });
+    }
+    save();
+    return true;
+  }
+
   function sendFriendRequest(username, now = TO.now()) {
     const rel = relation(username);
     if (rel === 'friend' || rel === 'requested') return;
@@ -946,6 +965,17 @@
     if (remote.owner) local.owner = remote.owner;
     if (Array.isArray(remote.members) && remote.members.length) local.members = remote.members.slice();
     local.remote = true;
+  }
+
+  function ensureTeamKey(team) {
+    if (!team) return null;
+    if (!team.shareKey) {
+      team.shareKey = newShareKey();
+      touch(team);
+      save();
+      publishTeam(team);
+    }
+    return team.shareKey;
   }
 
   function publishTeam(team) {
@@ -1282,9 +1312,9 @@
     save, wallet, rollover, grantTierBonus, addUsage, checkPhoneTime, useEmergencyUnlock, setSetting, limitFor, baseLimitFor, lockPoints, tier,
     placeBet, placeTodoParlay, completeTodo, settle, outcome, combine, legFromSelection,
     myStats, statsFor, person, sharedPicks, searchPeople, relation,
-    sendFriendRequest, acceptFriendRequest, declineFriendRequest, cancelFriendRequest, resendFriendRequest, resendWait, removeFriend,
+    sendFriendRequest, addFriend, acceptFriendRequest, declineFriendRequest, cancelFriendRequest, resendFriendRequest, resendWait, removeFriend,
     incomingChallenge, acceptChallenge, declineChallenge, sendBetToFriends, socialTick,
-    teamStatus, teamStandings, createTeam, leaveTeam, inviteToTeam, joinTeam, refreshTeams, sameUser, leaderboard,
+    teamStatus, teamStandings, createTeam, leaveTeam, inviteToTeam, joinTeam, refreshTeams, ensureTeamKey, sameUser, leaderboard,
     ensureDemoAccount, loginDemo, resetMyData, seedDemoData,
   };
 })(window.TO);

@@ -6,7 +6,85 @@
   const St = TO.state;
 
   const view = { tab: 'board', query: '', remote: [], searching: false, searchSeq: 0 };
-  const inviteLink = () => `https://timeout.app/join/${TO.account.username}`;
+
+  // Invite links stay on this page so they open the app (phone or computer view).
+  // ?invite=username is the friend link. ?join=username is accepted too, so another
+  // share-link change can use either name. A team link adds team, teamName, start, end, and key.
+  function friendLink(username = TO.account.username) {
+    const url = new URL(`${location.origin}${location.pathname}`);
+    url.searchParams.set('invite', username);
+    return url.toString();
+  }
+  function teamLink(team) {
+    const url = new URL(friendLink(team.owner || TO.account.username));
+    url.searchParams.set('team', team.id);
+    url.searchParams.set('teamName', team.name);
+    url.searchParams.set('start', team.start);
+    url.searchParams.set('end', team.end);
+    if (team.shareKey) url.searchParams.set('key', team.shareKey);
+    return url.toString();
+  }
+  const inviteLink = () => friendLink();
+
+  const INVITE_KEY = 'timeout.invite';
+  function readInvite() {
+    try { return JSON.parse(sessionStorage.getItem(INVITE_KEY) || 'null'); } catch (e) { return null; }
+  }
+  function clearInvite() {
+    try { sessionStorage.removeItem(INVITE_KEY); } catch (e) { /* private mode */ }
+  }
+  function captureInvite() {
+    const q = new URLSearchParams(location.search);
+    const invite = String(q.get('invite') || q.get('join') || '').replace(/^@/, '').trim();
+    const team = String(q.get('team') || '').trim();
+    if (!invite && !team) return null;
+    const pending = { invite, team, teamName: q.get('teamName') || '', start: q.get('start') || '', end: q.get('end') || '', key: q.get('key') || '' };
+    try { sessionStorage.setItem(INVITE_KEY, JSON.stringify(pending)); } catch (e) { /* keep going */ }
+    ['invite', 'join', 'team', 'teamName', 'start', 'end', 'key'].forEach((k) => q.delete(k));
+    const next = `${location.pathname}${q.toString() ? `?${q}` : ''}${location.hash}`;
+    history.replaceState(null, '', next);
+    return pending;
+  }
+  function offerInvite() {
+    const p = readInvite();
+    if (!p || !TO.account || !TO.data || !TO.data.onboarded) return;
+    const own = p.invite && St.sameUser(p.invite, TO.account.username);
+    const already = p.team && TO.data.teams.some((t) => t.id === p.team && t.members.some((m) => St.sameUser(m, TO.account.username)));
+    if (own && (!p.team || already)) { clearInvite(); return; }
+    if (ui.sheetOpen('invite')) return;
+    const who = p.invite ? `@${esc(p.invite)}` : 'Someone';
+    const joining = p.team && p.teamName;
+    ui.sheet('invite', {
+      render: () => ({
+        title: joining ? `Join ${esc(p.teamName)}` : 'Friend link',
+        body: joining
+          ? `<p class="sub" style="margin-top:0">${who} invited you to <b style="color:var(--text)">${esc(p.teamName)}</b>${p.start && p.end ? `, ${esc(TO.fmtDate(TO.dayStart(p.start)))} – ${esc(TO.fmtDate(TO.dayStart(p.end)))}` : ''}. Joining also adds them as a friend. It is still screen time, not money.</p>`
+          : `<p class="sub" style="margin-top:0">${who} sent you their TimeOut link. Add them as a friend to compare screen time instead of betting money.</p>`,
+        foot: `<button class="btn primary full" data-act="invite-accept">${joining ? 'Add friend and join' : 'Add friend'}</button><button class="btn quiet sm" data-act="invite-dismiss">Not now</button>`,
+      }),
+    });
+  }
+  function acceptInvite() {
+    const p = readInvite();
+    if (!p) return;
+    if (p.invite && !St.sameUser(p.invite, TO.account.username)) St.addFriend(p.invite);
+    let team = null;
+    if (p.team && p.teamName && p.start && p.end) {
+      try { team = St.joinTeam({ id: p.team, name: p.teamName, start: p.start, end: p.end, owner: p.invite, shareKey: /^[a-f0-9]{32}$/.test(p.key) ? p.key : null, members: p.invite ? [p.invite] : [] }); }
+      catch (e) {
+        if (!(e instanceof TO.AppError)) throw e;
+        ui.toast({ kind: 'warn', title: 'Could not join that team', msg: e.message });
+      }
+    }
+    clearInvite();
+    ui.closeSheet('invite');
+    if (team) view.tab = 'teams';
+    else if (p.invite) view.tab = 'board';
+    TO.app.tab = 'social';
+    TO.app.render();
+    ui.toast({ kind: 'win', title: team ? `You joined ${team.name}` : `You and @${p.invite} are now friends` });
+  }
+  TO.invites = { capture: captureInvite, offer: offerInvite, friendLink, teamLink };
 
   function meCard() {
     const st = St.myStats();
@@ -238,7 +316,7 @@
             <div class="list">${rows.map((r, i) => `<div class="lb-row ${r.me ? 'me' : ''}"><span class="rk">${r.hidden ? '–' : i + 1}</span>${ui.avatar(r.photo)}<span><span class="nm">${r.me ? 'You' : `@${esc(r.username)}`}</span><span class="sub">${r.w}-${r.l} during this team</span></span><span class="val">${r.hidden ? '<span class="faint" style="font-size:14px">Private</span>' : `<span class="${r.net > 0 ? 'green' : r.net < 0 ? 'red' : ''}">${TO.signed(r.net)}</span><small>min</small>`}</span></div>`).join('')}</div>
             <div class="tiny faint">Standings count screen-time bets placed between the start and end dates. Friend bets don't count.</div>
             ${invitable.length ? `<div class="field"><span class="label">Invite more friends</span><div class="pick-friends">${invitable.map((u) => { const p = personFor(u); return p ? `<button class="pick-friend" data-act="team-invite" data-id="${t.id}" data-u="${esc(u)}"><img src="${esc(p.photo)}" alt="">${icon('plus', 14)} ${esc(u)}</button>` : ''; }).join('')}</div></div>` : ''}`,
-          foot: `<button class="btn quiet sm" data-act="team-leave" data-id="${t.id}">Leave team</button>`,
+          foot: `<button class="btn ghost sm" data-act="copy-team" data-id="${t.id}">${icon('link', 16)} Copy team link</button><button class="btn quiet sm" data-act="team-leave" data-id="${t.id}">Leave team</button>`,
         };
       },
     });
@@ -251,7 +329,7 @@
         body: `<p class="sub" style="margin-top:0">Teams are how friends compete here without betting money. TimeOut puts screen time on the line instead of cash, and a team is the stretch of days you compare.</p>
           <div class="how-card"><span class="n">1</span><div><h3>Pick a name and the dates</h3><p>Create a team for a week or a season. You can start it on your own and invite people later.</p></div></div>
           <div class="how-card"><span class="n">2</span><div><h3>Minutes decide the standings</h3><p>Between the start and end dates, screen-time bets count. Whoever comes out ahead on minutes leads. A side bet with a friend does not count.</p></div></div>
-          <div class="how-card"><span class="n">3</span><div><h3>Invite friends onto the roster</h3><p>Open the team and add a friend. They show up with you, and their record for those dates is what you compare.</p></div></div>
+          <div class="how-card"><span class="n">3</span><div><h3>Invite friends onto the roster</h3><p>Open the team and add a friend, or copy the team link. When they open it, you become friends and they join the roster.</p></div></div>
           <div class="how-card"><span class="n">4</span><div><h3>Leave whenever you want</h3><p>Leaving takes you off the standings. The team stays for everyone else.</p></div></div>
           <div class="tiny faint">The team is saved in this browser. When this page can reach the TimeOut server, the roster is saved there too, one member at a time, so it is still here the next time you open the app.</div>`,
         foot: `<button class="btn primary full" data-act="close-sheet" data-name="team-how">Got it</button>`,
@@ -363,6 +441,16 @@
     }
   };
   A['team-invite'] = (el) => { St.inviteToTeam(el.dataset.id, [el.dataset.u]); ui.toast({ kind: 'win', title: `Invited @${el.dataset.u}` }); ui.refreshSheet('team'); TO.app.render(); };
+  A['copy-team'] = async (el) => {
+    const t = TO.data.teams.find((x) => x.id === el.dataset.id);
+    if (!t) return;
+    St.ensureTeamKey(t);
+    const link = teamLink(t);
+    const ok = await ui.copy(link);
+    ui.toast({ kind: ok ? 'win' : 'info', title: ok ? 'Team link copied' : 'Team link', msg: ok ? link : `Copy this: ${link}`, ms: 5000 });
+  };
+  A['invite-accept'] = () => acceptInvite();
+  A['invite-dismiss'] = () => { clearInvite(); ui.closeSheet('invite'); };
   A['team-leave'] = async (el) => {
     if (!(await ui.confirm({ title: 'Leave this team?', body: 'Your results stop counting toward its standings.', confirm: 'Leave team', danger: true }))) return;
     St.leaveTeam(el.dataset.id);
