@@ -3,8 +3,10 @@
 **The sportsbook where you bet screen time instead of money.**
 Group 9, Section 1: Owen Smith, Easton Putnam, Will Fairholm, Marcus Williams.
 
-> **▶ Try the app:** [Phone view](https://marcustheman13.github.io/TimeOut/) · [Computer view](https://marcustheman13.github.io/TimeOut/web.html)
+> **▶ Try the app:** <https://marcustheman13.github.io/TimeOut/> (resizes to fit phones, tablets and computers)
 > Live ESPN odds and real accounts, nothing to install. It updates by itself when the web demo changes on `main`.
+>
+> **🔑 Test login** (website and iPhone app): email `marcusdanielwill@gmail.com` · password `test_account_pass` (username `@time_out_account`).
 
 ---
 
@@ -44,7 +46,7 @@ users → sessions is one-to-many (one user can be logged in on several devices)
 | Layer | What we use | Where it lives |
 | --- | --- | --- |
 | Frontend (now) | Plain HTML, CSS and JavaScript, no framework | [`TimeOut - Web demo/`](TimeOut%20-%20Web%20demo) |
-| Frontend (later) | Native iOS app in SwiftUI (Screen Time / FamilyControls APIs) | [`TimeOut - iOS App/`](TimeOut%20-%20iOS%20App) |
+| Frontend (iOS) | Native SwiftUI app with the same screens and features as the web demo, plus real Screen Time blocking (FamilyControls) | [`TimeOut - iOS App/`](TimeOut%20-%20iOS%20App) |
 | Backend | Node.js + Express 5 REST API | [`server/src/`](server/src) |
 | Database | PostgreSQL | [`server/db/`](server/db) |
 | Auth | bcrypt password hashes + random session tokens sent as `Authorization: Bearer <token>` | [`server/src/auth.js`](server/src/auth.js) |
@@ -60,7 +62,7 @@ When we want everyone on one database, one person creates a free Supabase or Neo
 
 ## How to Get It Running
 
-**Just want to try it?** Open the live site, no setup needed: <https://marcustheman13.github.io/TimeOut/> (phone view) or <https://marcustheman13.github.io/TimeOut/web.html> (computer view). It's the real app with live odds and Supabase accounts, and it redeploys whenever the web demo changes on `main`. The steps below are for running and changing the code yourself.
+**Just want to try it?** Open the live site, no setup needed: <https://marcustheman13.github.io/TimeOut/>. It resizes to fit any screen. It's the real app with live odds and Supabase accounts, and it redeploys whenever the web demo changes on `main`. The steps below are for running and changing the code yourself.
 
 **You need:** [Node.js](https://nodejs.org) 20 or newer (`node -v` to check) and Git. Nothing else, not even PostgreSQL.
 
@@ -106,7 +108,7 @@ On a shared Supabase or Neon database you can run them while the server is up, o
 **Shared database setup (one person, once):** create a free project at [supabase.com](https://supabase.com) or [neon.tech](https://neon.tech), copy its Postgres connection string
 (Supabase: *Connect > Session pooler > URI*), put it in your `server/.env` as `DATABASE_URL=...`, run `npm run db:reset`, then send the string to teammates privately.
 
-**No server?** You can still double-click `TimeOut - Web demo/index.html` or `web.html` (or `dist/TimeOut.html` / `dist/TimeOut-web.html`). It runs in offline demo mode with accounts saved only in that browser.
+**No server?** You can still double-click `TimeOut - Web demo/index.html` (or `dist/TimeOut.html`). It runs in offline demo mode with accounts saved only in that browser.
 
 ---
 
@@ -147,11 +149,11 @@ TimeOut/
 │   ├── scripts/                 ← db:reset and db:query
 │   └── .env.example             ← copy to .env (which git ignores)
 ├── TimeOut - Web demo/          ← the clickable web app (HTML/CSS/JS)
-│   ├── index.html / web.html     ← phone version / browser version of the same app
-│   ├── css/web.css, js/web.js   ← the browser version's layout (only web.html loads them)
+│   ├── index.html               ← the web app; resizes from phone to desktop
+│   ├── css/web.css, js/web.js   ← its responsive layout (web.html just forwards old links)
 │   ├── js/api.js                ← every call from the web app to the server goes through here
 │   └── README.md                ← what each screen does and the tester console
-└── TimeOut - iOS App/           ← SwiftUI iOS prototype (open the .xcodeproj in Xcode)
+└── TimeOut - iOS App/           ← SwiftUI iOS app (open TimeOut.xcodeproj in Xcode)
 ```
 
 ## API
@@ -180,7 +182,7 @@ All requests and responses are JSON. Errors look like `{ "error": { "code", "mes
   ```
 - **Never commit `server/.env`** or paste the database connection string into code, issues or chat. `.gitignore` already blocks `.env`.
 - If you change `schema.sql`, also update `seed.sql` and the ERD, and tell the team to run `npm run db:reset`.
-- After editing anything in `TimeOut - Web demo/css` or `js`, run `python3 build.py` in that folder if you want the single-file `dist/TimeOut.html` and `dist/TimeOut-web.html` updated.
+- After editing anything in `TimeOut - Web demo/css` or `js`, run `python3 build.py` in that folder if you want the single-file `dist/TimeOut.html` updated.
 
 ## What's Still Stored Only in the Browser
 

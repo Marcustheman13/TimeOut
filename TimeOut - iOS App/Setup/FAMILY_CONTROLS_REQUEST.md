@@ -1,7 +1,7 @@
 # Requesting Family Controls (Distribution)
 
 Development builds on your own phone already work. Apple has to approve the **distribution** version of
-Family Controls before StakeTime can go out through TestFlight or the App Store. Approval can take days to weeks,
+Family Controls before TimeOut can go out through TestFlight or the App Store. Approval can take days to weeks,
 so request it early.
 
 ## Who submits it
@@ -24,13 +24,13 @@ Every target that has the Family Controls capability needs its own approval:
 
 Edit these to fit. The form asks what the app does and how it uses the Screen Time APIs.
 
-**App name:** StakeTime
+**App name:** TimeOut
 
 **Who uses it:** Individuals managing their own screen time (`.individual` authorization). This is not a
 parental-control app and it doesn't manage other people's devices.
 
 **What the app does:**
-> StakeTime is a free sports-prediction game that helps people who struggle with sports-betting addiction get
+> TimeOut is a free sports-prediction game that helps people who struggle with sports-betting addiction get
 > the excitement of betting without risking money. Instead of money, users stake minutes of their own daily
 > screen time. Each user gets a 60-minute daily allowance. Winning picks add minutes to the next day's
 > screen-time limit, and losing picks remove minutes. No real money is ever involved, and the app has no

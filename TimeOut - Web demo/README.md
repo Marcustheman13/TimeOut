@@ -1,6 +1,6 @@
 # TimeOut — app frontend
 
-> **▶ Try the app:** [App view](https://marcustheman13.github.io/TimeOut/) · [Browser view](https://marcustheman13.github.io/TimeOut/web.html)
+> **▶ Try the app:** <https://marcustheman13.github.io/TimeOut/> (resizes to fit phones, tablets and computers)
 > Live ESPN odds and real accounts, nothing to install. It updates by itself when the web demo changes on `main`.
 
 A working HTML/CSS/JS mockup of TimeOut, the sportsbook where you bet screen time instead of money.
@@ -9,22 +9,24 @@ For the backend, database and team setup, see the [main README](../README.md).
 
 ## Open it
 
-- **Easiest: the live site.** <https://marcustheman13.github.io/TimeOut/> (app view) and <https://marcustheman13.github.io/TimeOut/web.html> (browser view). It uses live ESPN odds and Supabase accounts, and updates after changes are pushed to `main`.
+- **Easiest: the live site.** <https://marcustheman13.github.io/TimeOut/>. It uses live ESPN odds and Supabase accounts, and updates after changes are pushed to `main`.
 - **With Supabase (normal):** serve the app over HTTP. Accounts use Supabase Auth; preferences, bets, and wallet transactions use the Supabase tables and RPCs.
 - **Offline demo:** use the app with Supabase config removed. Accounts and state are then saved only in that browser.
 - The interface fills the available viewport and can be wrapped in a native app shell.
 
-## Two versions, one app
+## One page for every screen size
 
-| | App version | Browser version |
-| --- | --- | --- |
-| Page | `index.html` (server: <http://localhost:3000>) | `web.html` (server: <http://localhost:3000/web>) |
-| Single file | `dist/TimeOut.html` | `dist/TimeOut-web.html` |
-| Layout | Full-screen app surface, tab bar, menu drawer, bottom sheets | Sidebar, wide content grid, bet slip docked on the right, dialogs instead of sheets. |
+`index.html` (server: <http://localhost:3000>, single file: `dist/TimeOut.html`) adapts to the window:
 
-Both run the same JavaScript, so every feature works the same in each and your login carries over between them.
-The browser layout lives in `css/web.css` and `js/web.js`, which only `web.html` loads. To change how a feature
-works, edit the shared files in `js/`; to change only the browser layout, edit those two.
+| Width | Layout |
+| --- | --- |
+| 900 px and up | Sidebar, wide content grid, bet slip docked on the right |
+| 721–899 px | Icon sidebar, bet slip opens as a dialog |
+| 720 px and below | Menu button, single column, phone-sized controls |
+
+The layout lives in `css/web.css` and `js/web.js`, loaded after the shared `css/app.css` and `js/` files. To change how a
+feature works, edit the shared files in `js/`; to change only the layout, edit those two. `web.html` is kept only so old
+links (and invite links) forward to the main page. The iPhone app is the native version of the phone layout.
 
 ## Logging in
 
@@ -66,7 +68,7 @@ Not included on purpose: monetization (per the team's call), real money, parlays
 
 - Games use simulated scores and odds with real team names. Each game runs for 12 minutes.
 - Odds are fair (no house cut), computed from the score and time left, the same model as the iOS prototype.
-- `python3 build.py` rebuilds `dist/TimeOut.html` and `dist/TimeOut-web.html` after you edit anything in `css/` or `js/`.
+- `python3 build.py` rebuilds `dist/TimeOut.html` after you edit anything in `css/` or `js/`.
 
 # Supabase accounts and saved bets
 
