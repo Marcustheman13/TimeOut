@@ -142,8 +142,8 @@ The demo account above already has open bets, friends and a team. Account deleti
 | Secondary category | Lifestyle |
 | Age rating | Answer **Simulated Gambling: Frequent/Intense** |
 | Copyright | `2026 TimeOut` (or your team's name) |
-| Privacy policy URL | Needed before submitting (see `Setup/APP_STORE_CHECKLIST.md`) |
-| Support URL | Needed before submitting |
+| Privacy policy URL | `https://marcustheman13.github.io/TimeOut/privacy.html` |
+| Support URL | `https://marcustheman13.github.io/TimeOut/support.html` |
 
 ## Screenshots
 

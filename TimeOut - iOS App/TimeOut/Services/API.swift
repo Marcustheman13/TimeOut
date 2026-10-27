@@ -13,6 +13,8 @@ final class API {
     static let returnURL = "https://marcustheman13.github.io/TimeOut/"
     /// The web app, used for invite links so anyone can open them.
     static let webURL = "https://marcustheman13.github.io/TimeOut/"
+    static let privacyURL = URL(string: "https://marcustheman13.github.io/TimeOut/privacy.html")!
+    static let supportURL = URL(string: "https://marcustheman13.github.io/TimeOut/support.html")!
 
     private(set) var configured = true
     private(set) var online = true
