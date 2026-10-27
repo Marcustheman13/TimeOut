@@ -705,26 +705,54 @@
     return picks;
   }
 
+  const sameUser = (a, b) => String(a || '').toLowerCase() === String(b || '').toLowerCase();
+
   function searchPeople(query) {
     const q = String(query || '').trim().toLowerCase().replace(/^@/, '');
     if (!q) return [];
     const me = TO.account.username.toLowerCase();
     const locals = Object.values(accounts()).filter((a) => a.username.toLowerCase() !== me).map((a) => ({ username: a.username, name: a.username, photo: a.photo, local: true }));
-    return [...PEOPLE, ...locals].filter((p) => p.username.toLowerCase().includes(q) || (p.name || '').toLowerCase().includes(q)).slice(0, 8);
+    return [...PEOPLE, ...locals].filter((p) => {
+      const username = p.username.toLowerCase();
+      return username !== me && (username.includes(q) || (p.name || '').toLowerCase().includes(q));
+    }).slice(0, 8);
   }
 
   const relation = (username) => {
     const d = TO.data;
-    if (d.friends.includes(username)) return 'friend';
-    if (d.requestsOut.some((r) => r.to === username)) return 'requested';
-    if (d.requestsIn.some((r) => r.from === username)) return 'incoming';
+    if (d.friends.some((f) => sameUser(f, username))) return 'friend';
+    if (d.requestsOut.some((r) => sameUser(r.to, username))) return 'requested';
+    if (d.requestsIn.some((r) => sameUser(r.from, username))) return 'incoming';
     return 'none';
   };
+
+  /** An invite link is a yes from the sender, so this connects both people when the other account is on this device. */
+  function addFriend(username) {
+    const u = String(username || '').trim().replace(/^@/, '');
+    if (!u || sameUser(u, TO.account.username) || !/^[a-zA-Z0-9_.]{1,20}$/.test(u)) return false;
+    if (!TO.data.friends.some((f) => sameUser(f, u))) TO.data.friends.push(u);
+    TO.data.requestsIn = TO.data.requestsIn.filter((r) => !sameUser(r.from, u));
+    TO.data.requestsOut = TO.data.requestsOut.filter((r) => !sameUser(r.to, u));
+    const acc = findAccountByUsername(u);
+    if (acc) {
+      mutateData(acc.id, (d) => {
+        if (!d.friends.some((f) => sameUser(f, TO.account.username))) d.friends.push(TO.account.username);
+        d.requestsOut = d.requestsOut.filter((r) => !sameUser(r.to, TO.account.username));
+        d.requestsIn = d.requestsIn.filter((r) => !sameUser(r.from, TO.account.username));
+      });
+    }
+    save();
+    return true;
+  }
 
   function sendFriendRequest(username, now = TO.now()) {
     const rel = relation(username);
     if (rel === 'friend' || rel === 'requested') return;
-    if (rel === 'incoming') { acceptFriendRequest(TO.data.requestsIn.find((r) => r.from === username).id); return; }
+    if (rel === 'incoming') {
+      const incoming = TO.data.requestsIn.find((r) => sameUser(r.from, username));
+      if (incoming) acceptFriendRequest(incoming.id);
+      return;
+    }
     const p = person(username);
     const req = { id: TO.uid('fr'), to: username, at: now };
     if (p && p.fake) req.acceptAt = now + 6000; // fake people accept after a few seconds
@@ -816,7 +844,13 @@
     const start = TO.dayStart(t.start), end = TO.dayStart(t.end) + DAY;
     const lastDay = TO.dayKey(Math.min(now, end - 1));
     return t.members.map((u) => {
-      const p = u === TO.account.username ? null : person(u);
+      const mine = sameUser(u, TO.account.username);
+      const p = mine ? null : person(u);
+      // A username from search that isn't a demo profile or an account on this device
+      // still belongs on the roster. Don't borrow the current user's record for them.
+      if (!mine && !p) {
+        return { username: u, me: false, net: 0, w: 0, l: 0, hidden: true, photo: TO.initialsAvatar(u), tier: 'rookie' };
+      }
       let net = 0, w = 0, l = 0, hidden = false;
       if (!p || p.local) {
         const bets = p ? migrate(TO.store.get(dataKey(p.accountId), null) || freshData(now)).bets : TO.data.bets;
@@ -839,8 +873,74 @@
         }
         if (!p.share.minutes) hidden = true;
       }
-      return { username: u, me: !p, net, w, l, hidden, photo: p ? p.photo : TO.account.photo, tier: p ? p.tier : tier().id };
+      return { username: u, me: mine, net, w, l, hidden, photo: p ? p.photo : TO.account.photo, tier: p ? p.tier : tier().id };
     }).sort((a, b) => (a.hidden - b.hidden) || b.net - a.net);
+  }
+
+  function saveQuiet() {
+    if (TO.account && TO.data) TO.store.set(dataKey(TO.account.id), TO.data);
+  }
+
+  function newShareKey() {
+    const bytes = new Uint8Array(16);
+    if (globalThis.crypto && globalThis.crypto.getRandomValues) globalThis.crypto.getRandomValues(bytes);
+    else for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
+    return [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
+  }
+
+  function touch(team) {
+    team.rev = (team.rev || 0) + 1;
+    return team.rev;
+  }
+
+  function applyRemote(local, remote) {
+    if (remote.name) local.name = remote.name;
+    if (remote.start) local.start = String(remote.start).slice(0, 10);
+    if (remote.end) local.end = String(remote.end).slice(0, 10);
+    if (remote.owner) local.owner = remote.owner;
+    if (Array.isArray(remote.members) && remote.members.length) local.members = remote.members.slice();
+    local.remote = true;
+  }
+
+  function ensureTeamKey(team) {
+    if (!team) return null;
+    if (!team.shareKey) {
+      team.shareKey = newShareKey();
+      touch(team);
+      save();
+      publishTeam(team);
+    }
+    return team.shareKey;
+  }
+
+  function publishTeam(team) {
+    if (!team.shareKey || !TO.api || !TO.api.publishTeam) return;
+    TO.api.publishTeam(team).then((remote) => {
+      const current = TO.data && TO.data.teams.find((t) => t.id === team.id);
+      if (!current || !remote) return;
+      current.remote = true;
+      saveQuiet();
+    }).catch(() => {});
+  }
+
+  /** Copies the team onto every member who has an account saved in this browser. */
+  function syncTeamCopies(team) {
+    const copy = JSON.parse(JSON.stringify(team));
+    for (const u of team.members) {
+      if (sameUser(u, TO.account.username)) continue;
+      const acc = findAccountByUsername(u);
+      if (!acc) continue;
+      mutateData(acc.id, (d) => {
+        const existing = d.teams.find((x) => x.id === team.id);
+        if (existing) {
+          existing.name = copy.name;
+          existing.start = copy.start;
+          existing.end = copy.end;
+          existing.owner = copy.owner;
+          existing.members = copy.members.slice();
+        } else d.teams.push(JSON.parse(JSON.stringify(copy)));
+      });
+    }
   }
 
   function createTeam({ name, start, end, members }) {
@@ -850,28 +950,151 @@
     if (!start) errors.start = 'Pick a start date.';
     if (!end) errors.end = 'Pick an end date.';
     if (start && end && end < start) errors.end = 'End date must be on or after the start date.';
-    if (!members.length) errors.members = 'Invite at least one friend.';
     if (Object.keys(errors).length) throw new AppError('invalid', 'Fix the highlighted fields.', { fields: errors });
-    const team = { id: TO.uid('team'), name, start, end, members: [TO.account.username, ...members], owner: TO.account.username, createdAt: TO.now() };
-    TO.data.teams.push(team);
-    for (const u of members) {
-      const acc = findAccountByUsername(u);
-      if (acc) mutateData(acc.id, (d) => d.teams.push(JSON.parse(JSON.stringify(team))));
+    const invited = [];
+    const seen = new Set([TO.account.username.toLowerCase()]);
+    for (const raw of members || []) {
+      const u = String(raw || '').trim();
+      const key = u.toLowerCase();
+      if (!u || seen.has(key)) continue;
+      seen.add(key);
+      invited.push(u);
     }
+    const team = { id: TO.uid('team'), name, start, end, members: [TO.account.username, ...invited], owner: TO.account.username, createdAt: TO.now(), shareKey: newShareKey(), remote: false, rev: 1 };
+    TO.data.teams.push(team);
+    syncTeamCopies(team);
     save();
+    publishTeam(team);
     return team;
   }
 
-  function leaveTeam(id) {
-    TO.data.teams = TO.data.teams.filter((t) => t.id !== id);
+  function leaveTeam(id, opts = {}) {
+    const t = TO.data.teams.find((x) => x.id === id);
+    const shareKey = t && t.shareKey;
+    const username = TO.account.username;
+    TO.data.teams = TO.data.teams.filter((x) => x.id !== id);
+    if (t) {
+      for (const u of t.members) {
+        if (sameUser(u, username)) continue;
+        const acc = findAccountByUsername(u);
+        if (!acc) continue;
+        mutateData(acc.id, (d) => {
+          const existing = d.teams.find((x) => x.id === id);
+          if (!existing) return;
+          existing.members = existing.members.filter((m) => !sameUser(m, username));
+          if (!existing.members.length) d.teams = d.teams.filter((x) => x.id !== id);
+        });
+      }
+    }
     save();
+    if (opts.remote !== false && shareKey && TO.api && TO.api.leaveTeamRemote) TO.api.leaveTeamRemote({ id, shareKey }, username).catch(() => {});
   }
 
   function inviteToTeam(id, members) {
     const t = TO.data.teams.find((x) => x.id === id);
     if (!t) return;
-    for (const u of members) if (!t.members.includes(u)) t.members.push(u);
+    const added = [];
+    for (const raw of members || []) {
+      const u = String(raw || '').trim();
+      if (!u || t.members.some((m) => sameUser(m, u))) continue;
+      t.members.push(u);
+      added.push(u);
+    }
+    if (!added.length) return;
+    touch(t);
+    syncTeamCopies(t);
     save();
+    if (t.shareKey && TO.api && TO.api.addTeamMember) added.forEach((u) => { TO.api.addTeamMember(t, u).catch(() => {}); });
+  }
+
+  /** Join a team from its link. Adds you, and the server roster when the link has a key. */
+  function joinTeam(snapshot) {
+    const id = String(snapshot.id || '').trim();
+    const name = String(snapshot.name || '').trim();
+    const start = String(snapshot.start || '').slice(0, 10);
+    const end = String(snapshot.end || '').slice(0, 10);
+    if (!/^[A-Za-z0-9_-]{1,40}$/.test(id) || !name || !/^\d{4}-\d{2}-\d{2}$/.test(start) || !/^\d{4}-\d{2}-\d{2}$/.test(end) || end < start) {
+      throw new AppError('invalid', 'That team link is missing a name or its dates.');
+    }
+    let team = TO.data.teams.find((t) => t.id === id);
+    if (!team) {
+      team = { id, name, start, end, members: [], owner: snapshot.owner || TO.account.username, createdAt: TO.now(), shareKey: snapshot.shareKey || null, remote: false, rev: 0 };
+      TO.data.teams.push(team);
+    }
+    if (snapshot.shareKey) team.shareKey = snapshot.shareKey;
+    team.name = name;
+    team.start = start;
+    team.end = end;
+    if (snapshot.owner) team.owner = snapshot.owner;
+    const add = (u) => { if (u && !team.members.some((m) => sameUser(m, u))) team.members.push(u); };
+    add(snapshot.owner);
+    for (const raw of snapshot.members || []) add(String(raw || '').trim());
+    add(TO.account.username);
+    const rev = touch(team);
+    syncTeamCopies(team);
+    save();
+    if (team.shareKey && TO.api && TO.api.addTeamMember) {
+      const key = team.shareKey;
+      TO.api.addTeamMember(team, TO.account.username).then((remote) => {
+        const current = TO.data && TO.data.teams.find((t) => t.id === id);
+        if (!current || !remote || (current.rev || 0) !== rev) return;
+        applyRemote(current, remote);
+        current.shareKey = key;
+        syncTeamCopies(current);
+        saveQuiet();
+      }).catch(() => {});
+    }
+    return team;
+  }
+
+  /** Pull rosters that were saved on the server. A failed request leaves the local team alone. */
+  function refreshTeams() {
+    if (!TO.data || !TO.api || !TO.api.fetchTeam) return Promise.resolve(false);
+    const revs = new Map(TO.data.teams.map((t) => [t.id, t.rev || 0]));
+    let changed = false;
+    const pulls = TO.data.teams.filter((t) => t.shareKey && t.remote).map(async (team) => {
+      const remote = await TO.api.fetchTeam(team.id, team.shareKey);
+      const current = TO.data && TO.data.teams.find((t) => t.id === team.id);
+      if (!current || (current.rev || 0) !== revs.get(team.id) || remote === null) return;
+      if (remote === false || !(remote.members || []).some((m) => sameUser(m, TO.account.username))) {
+        leaveTeam(team.id, { remote: false });
+        changed = true;
+        return;
+      }
+      applyRemote(current, remote);
+      current.shareKey = team.shareKey;
+      syncTeamCopies(current);
+      changed = true;
+    });
+    const mine = TO.api.myTeams ? TO.api.myTeams() : Promise.resolve(null);
+    return Promise.all([mine, ...pulls]).then(([listed]) => {
+      if (Array.isArray(listed) && TO.data) {
+        const seen = new Set();
+        for (const remote of listed) {
+          if (!remote || !remote.id) continue;
+          seen.add(remote.id);
+          let local = TO.data.teams.find((t) => t.id === remote.id);
+          if (!local) {
+            local = { id: remote.id, name: remote.name, start: String(remote.start).slice(0, 10), end: String(remote.end).slice(0, 10), members: remote.members || [TO.account.username], owner: remote.owner || TO.account.username, createdAt: TO.now(), remote: true, rev: 1 };
+            TO.data.teams.push(local);
+            changed = true;
+          } else if ((local.rev || 0) === revs.get(local.id)) {
+            const key = local.shareKey;
+            applyRemote(local, remote);
+            if (key) local.shareKey = key;
+            changed = true;
+          }
+        }
+        const kept = TO.data.teams.filter((t) => t.shareKey || !t.remote || seen.has(t.id));
+        if (kept.length !== TO.data.teams.length) { TO.data.teams = kept; changed = true; }
+      }
+      if (changed) {
+        saveQuiet();
+        if (TO.app) TO.app.render();
+        if (TO.ui && TO.ui.sheetOpen && TO.ui.sheetOpen('team')) TO.ui.refreshSheet('team');
+      }
+      return changed;
+    }).catch(() => false);
   }
 
   // ---------- Leaderboard ----------
@@ -1009,9 +1232,9 @@
     save, wallet, rollover, grantTierBonus, addUsage, checkPhoneTime, useEmergencyUnlock, setSetting, limitFor, baseLimitFor, lockPoints, tier,
     placeBet, placeTodoParlay, completeTodo, settle, outcome, combine, legFromSelection,
     myStats, statsFor, person, sharedPicks, searchPeople, relation,
-    sendFriendRequest, acceptFriendRequest, declineFriendRequest, cancelFriendRequest, resendFriendRequest, resendWait, removeFriend,
+    sendFriendRequest, addFriend, acceptFriendRequest, declineFriendRequest, cancelFriendRequest, resendFriendRequest, resendWait, removeFriend,
     socialTick,
-    teamStatus, teamStandings, createTeam, leaveTeam, inviteToTeam, leaderboard,
+    teamStatus, teamStandings, createTeam, leaveTeam, inviteToTeam, joinTeam, refreshTeams, ensureTeamKey, sameUser, leaderboard,
     ensureDemoAccount, loginDemo, resetMyData, seedDemoData,
   };
 })(window.TO);

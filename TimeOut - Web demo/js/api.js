@@ -418,4 +418,119 @@
     api.clearToken();
     lastSettingsSnapshot = '';
   };
+
+  /** Usernames that match a query, from Supabase profiles (when signed in) and this app's API.
+   *  Either source can be missing — GitHub Pages has no API, and profiles may be hidden — so a failure is just no extra rows. */
+  api.searchUsers = async (query) => {
+    const safe = String(query || '').trim().replace(/^@/, '').slice(0, 20).replace(/[^a-zA-Z0-9_.]/g, '');
+    if (!safe) return [];
+    const me = String(TO.account?.username || '').toLowerCase();
+    const found = new Map();
+    const add = (username, name, photo) => {
+      const u = String(username || '').trim();
+      const key = u.toLowerCase();
+      if (!u || key === me || found.has(key) || !/^[a-zA-Z0-9_.]{1,20}$/.test(u)) return;
+      found.set(key, { username: u, name: name || u, photo: photo || null, remote: true });
+    };
+    const tasks = [];
+    if (api.configured && token()) {
+      tasks.push((async () => {
+        try {
+          const like = safe.replace(/[_\\*]/g, (ch) => `\\${ch}`);
+          const rows = await rest(`profiles?select=username,display_name,avatar_url&username=ilike.*${encodeURIComponent(like)}*&limit=8`, { signal: AbortSignal.timeout(4000) });
+          if (Array.isArray(rows)) for (const r of rows) add(r.username, r.display_name, r.avatar_url);
+        } catch (e) { /* RLS or a slow network: local results still show */ }
+      })());
+    }
+    tasks.push((async () => {
+      try {
+        const res = await fetch(`/api/users/search?q=${encodeURIComponent(safe)}`, { signal: AbortSignal.timeout(4000), headers: { accept: 'application/json' } });
+        if (!res.ok) return;
+        const json = await res.json().catch(() => ({}));
+        for (const r of json.users || []) add(r.username, r.username, r.photoUrl);
+      } catch (e) { /* opened as a static page, or the API is down */ }
+    })());
+    await Promise.all(tasks);
+    return [...found.values()].slice(0, 8);
+  };
+
+  let expressReady = null;
+  async function expressUp() {
+    if (expressReady != null) return expressReady;
+    try {
+      const res = await fetch('/api/health', { signal: AbortSignal.timeout(1500), headers: { accept: 'application/json' } });
+      const json = await res.json().catch(() => null);
+      expressReady = !!(res.ok && json && json.ok);
+    } catch (e) { expressReady = false; }
+    return expressReady;
+  }
+
+  const teamBody = (team, extra) => JSON.stringify({ ...extra, key: team.shareKey });
+
+  async function expressTeam(path, options) {
+    const res = await fetch(path, { ...options, signal: AbortSignal.timeout(4000), headers: { 'content-type': 'application/json', accept: 'application/json', ...(options.headers || {}) } });
+    if (res.status === 404) return false;
+    if (!res.ok) return null;
+    const json = await res.json().catch(() => null);
+    return json && Object.prototype.hasOwnProperty.call(json, 'team') ? json.team : null;
+  }
+
+  /** Save one new team. A repeat with the same link returns the roster and does not add people again. */
+  api.publishTeam = async (team) => {
+    if (!team?.shareKey) return null;
+    try {
+      if (await expressUp()) {
+        return await expressTeam('/api/teams', { method: 'POST', body: JSON.stringify({ id: team.id, name: team.name, start: team.start, end: team.end, owner: team.owner, key: team.shareKey, members: team.members }) });
+      }
+      if (!(api.configured && token())) return null;
+      return await rest('rpc/timeout_save_team', { method: 'POST', signal: AbortSignal.timeout(4000), body: JSON.stringify({ p_id: team.id, p_name: team.name, p_start: team.start, p_end: team.end, p_key: team.shareKey, p_members: team.members }) });
+    } catch (e) { return null; }
+  };
+
+  api.addTeamMember = async (team, username) => {
+    if (!team?.shareKey || !username) return null;
+    const send = async () => {
+      if (await expressUp()) return expressTeam(`/api/teams/${encodeURIComponent(team.id)}/members`, { method: 'POST', body: teamBody(team, { username }) });
+      if (!(api.configured && token())) return null;
+      return rest('rpc/timeout_add_team_member', { method: 'POST', signal: AbortSignal.timeout(4000), body: JSON.stringify({ p_id: team.id, p_key: team.shareKey, p_username: username }) });
+    };
+    try {
+      let result = await send();
+      if (result === false) {
+        await api.publishTeam(team);
+        result = await send();
+      }
+      return result === false ? null : result;
+    } catch (e) { return null; }
+  };
+
+  api.leaveTeamRemote = async (team, username) => {
+    if (!team?.shareKey || !username) return null;
+    try {
+      if (await expressUp()) return expressTeam(`/api/teams/${encodeURIComponent(team.id)}/leave`, { method: 'POST', body: teamBody(team, { username }) });
+      if (!(api.configured && token())) return null;
+      return await rest('rpc/timeout_leave_team', { method: 'POST', signal: AbortSignal.timeout(4000), body: JSON.stringify({ p_id: team.id, p_key: team.shareKey, p_username: username }) });
+    } catch (e) { return null; }
+  };
+
+  /** The roster, false when the link is wrong or the team is gone, null when the server can't be reached. */
+  api.fetchTeam = async (id, key) => {
+    if (!id || !key) return null;
+    try {
+      if (await expressUp()) return expressTeam(`/api/teams/${encodeURIComponent(id)}?key=${encodeURIComponent(key)}`, { method: 'GET', headers: { accept: 'application/json' } });
+      if (!(api.configured && token())) return null;
+      const row = await rest('rpc/timeout_get_team', { method: 'POST', signal: AbortSignal.timeout(4000), body: JSON.stringify({ p_id: id, p_key: key }) });
+      return row && row.id ? row : false;
+    } catch (e) { return null; }
+  };
+
+  /** Teams this signed-in Supabase profile is on. Null means "don't change the local list". */
+  api.myTeams = async () => {
+    if (await expressUp()) return null;
+    if (!(api.configured && token())) return null;
+    try {
+      const rows = await rest('rpc/timeout_my_teams', { method: 'POST', signal: AbortSignal.timeout(4000), body: '{}' });
+      return Array.isArray(rows) ? rows : null;
+    } catch (e) { return null; }
+  };
 })(window.TO);

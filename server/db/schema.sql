@@ -4,7 +4,7 @@
 -- Right now it only has the two tables the login vertical slice needs. Add the rest of the tables
 -- from the team's ERD (docs/erd.png) below, and add their names to the DROP line so resets stay clean.
 
-DROP TABLE IF EXISTS sessions, users CASCADE;
+DROP TABLE IF EXISTS team_members, teams, sessions, users CASCADE;
 
 -- One row per person who signs up. Login checks password_hash; every successful login
 -- updates last_login_at and login_count (this is the team's vertical slice).
@@ -31,4 +31,24 @@ CREATE TABLE sessions (
   expires_at      TIMESTAMPTZ  NOT NULL
 );
 
--- ---------- Team ERD tables go here ----------
+-- A team is a dated contest. The share key is stored only as a hash.
+-- Membership is its own row, so leaving removes one person and never replaces the whole roster.
+CREATE TABLE teams (
+  team_id         TEXT PRIMARY KEY,
+  name            VARCHAR(30)  NOT NULL,
+  start_date      DATE         NOT NULL,
+  end_date        DATE         NOT NULL,
+  owner_username  VARCHAR(20)  NOT NULL,
+  key_hash        CHAR(64)     NOT NULL,
+  created_at      TIMESTAMPTZ  NOT NULL DEFAULT now(),
+  CONSTRAINT teams_dates CHECK (end_date >= start_date)
+);
+
+CREATE TABLE team_members (
+  team_id    TEXT         NOT NULL REFERENCES teams(team_id) ON DELETE CASCADE,
+  username   VARCHAR(20)  NOT NULL,
+  joined_at  TIMESTAMPTZ  NOT NULL DEFAULT now(),
+  PRIMARY KEY (team_id, username)
+);
+
+CREATE UNIQUE INDEX team_members_lower ON team_members (team_id, lower(username));

@@ -39,6 +39,8 @@
     app.tab = 'home';
     app.render();
     TO.live.refresh();
+    if (St.refreshTeams) St.refreshTeams();
+    if (TO.invites) TO.invites.offer();
   };
 
   const inShell = () => !!document.getElementById('shell') && !!TO.data;
@@ -306,6 +308,7 @@
 
   async function start() {
     renderNet();
+    if (TO.invites) TO.invites.capture();
     // Arriving from the link in a confirmation email: the URL carries the new session (or why it failed).
     const redirect = TO.api.configured && TO.api.consumeAuthRedirect ? TO.api.consumeAuthRedirect() : null;
     if (await TO.api.init()) await restoreServerSession();

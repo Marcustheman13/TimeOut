@@ -8,6 +8,8 @@ const fs = require('fs');
 const express = require('express');
 const db = require('./db');
 const auth = require('./auth');
+const users = require('./users');
+const teams = require('./teams');
 
 const PORT = Number(process.env.PORT) || 3000;
 const WEB_DIR = path.join(__dirname, '..', '..', 'TimeOut - Web demo');
@@ -23,6 +25,8 @@ app.get('/api/health', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 app.use('/api/auth', auth.router);
+app.use('/api/users', users.router);
+app.use('/api/teams', teams.router);
 app.use('/api', (req, res) => res.status(404).json({ error: { code: 'not_found', message: `No API route for ${req.method} ${req.originalUrl}` } }));
 
 // Every error leaves as { error: { code, message, fields? } } so clients can show it next to the right input.
@@ -44,11 +48,17 @@ async function setupIfEmpty() {
   await db.exec(fs.readFileSync(path.join(SQL_DIR, 'seed.sql'), 'utf8'));
 }
 
+/** Existing databases predate teams. Adding the tables never rewrites users or sessions. */
+async function ensureTeams() {
+  await db.exec(fs.readFileSync(path.join(SQL_DIR, 'teams.sql'), 'utf8'));
+}
+
 async function main() {
   db.assertServerNotRunning();
   await db.connect();
   db.holdLock();
   await setupIfEmpty();
+  await ensureTeams();
   app.listen(PORT, () => {
     console.log(`TimeOut is running at http://localhost:${PORT}`);
     console.log(`Database: ${db.describe()}`);
