@@ -12,7 +12,7 @@
     ['social', 'Social', 'users'],
   ];
 
-  /** The phone shell. The browser version (web.js) swaps in its own layout. */
+  /** The app shell. The browser version (web.js) swaps in its own layout. */
   app.shellHtml = () => `<div class="app" id="shell">
       <header class="topbar" id="topbar"></header>
       <main class="view" id="view" tabindex="-1"></main>
@@ -28,20 +28,17 @@
     if (!St.loadSession()) {
       body.innerHTML = '';
       TO.views.auth.show('welcome');
-      TO.tester.render();
       return;
     }
     if (!TO.data.onboarded) {
       body.innerHTML = '';
       TO.views.auth.startOnboarding();
-      TO.tester.render();
       return;
     }
     body.innerHTML = app.shellHtml();
     app.tab = 'home';
     app.render();
     TO.live.refresh();
-    TO.tester.render();
   };
 
   const inShell = () => !!document.getElementById('shell') && !!TO.data;
@@ -55,7 +52,7 @@
       <button class="icon-btn" data-act="menu" aria-label="Menu and settings">${icon('menu', 22)}${wl.appsLocked ? '<span class="dotbadge"></span>' : ''}</button>
       <div class="brand">${brandMark(18, 'brand-mark')}<span class="brand-word">TIME<b>OUT</b></span></div>
       <button class="bal-pill ${locked ? 'locked' : ''}" data-act="settings" data-section="screentime" aria-label="${locked ? 'Betting locked until midnight' : `${wl.balance} minutes available to bet`}">${icon(locked ? 'lock' : 'hourglass', 15)}${locked ? 'Locked' : `${wl.balance} min`}</button>`;
-    const open = TO.data.bets.filter((b) => b.status === 'open' && b.kind === 'sports' && b.legs.length && b.legs.every((leg) => leg.kind === 'game' || (leg.kind === 'sports' && leg.gameId))).length;
+    const open = TO.data.bets.filter((b) => b.status === 'open' && (b.kind === 'sports' || b.kind === 'race') && b.legs.length && b.legs.every((leg) => leg.kind === 'race' || leg.kind === 'game' || (leg.kind === 'sports' && leg.gameId))).length;
     document.getElementById('tabbar').innerHTML = TABS.map(([k, label, ic]) => {
       const badge = k === 'bets' && open ? `<span class="badge green">${open}</span>` : k === 'social' && socialBadge ? `<span class="badge">${socialBadge}</span>` : '';
       return `<button class="tab ${app.tab === k ? 'on' : ''}" data-act="tab" data-tab="${k}" aria-current="${app.tab === k ? 'page' : 'false'}">${icon(ic, 23)}<span>${label}</span>${badge}</button>`;
@@ -129,14 +126,6 @@
   function notifySettled(list) {
     const n = TO.data.settings.notify;
     for (const b of list) {
-      if (b.friend) {
-        if (!n.challenges) continue;
-        const who = b.friend.with.join(', ');
-        if (b.status === 'won') ui.toast({ kind: 'win', title: `You beat @${who}`, msg: `They owe you: "${b.friend.terms}"` });
-        else if (b.status === 'lost') ui.toast({ kind: 'loss', title: `@${who} won your friend bet`, msg: `You owe them: "${b.friend.terms}"` });
-        else ui.toast({ kind: 'info', title: 'Friend bet voided', msg: `${betTitle(b)} · no winner` });
-        continue;
-      }
       if (!n.settled) continue;
       if (b.status === 'won') ui.toast({ kind: 'win', title: `Won: ${betTitle(b)}`, msg: `+${b.payout - b.stake} min added to tomorrow's phone time.` });
       else if (b.status === 'lost') ui.toast({ kind: 'loss', title: `Lost: ${betTitle(b)}`, msg: `−${b.stake} min from tomorrow's phone time.` });
@@ -148,18 +137,13 @@
     const now = TO.now();
     // Every second: clocks and countdowns.
     document.querySelectorAll('[data-countdown]').forEach((el) => { el.textContent = TO.countdown(Number(el.dataset.countdown) - now); });
-    const sb = document.getElementById('sb-time');
-    if (sb) sb.textContent = new Date(now).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).replace(/\s?[AP]M$/i, '');
-    const cf = document.querySelector('#tester-body .clockface b');
-    if (cf) cf.textContent = new Date(now).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' });
-
     if (!force && Date.now() - lastFull < 5000) return;
     lastFull = Date.now();
-    if (!inShell()) { TO.tester.render(); return; }
+    if (!inShell()) return;
 
     TO.live.refresh();
 
-    // Midnight reset, settlement (PRD: within 5 minutes of a game ending; here within seconds) and friend activity.
+    // Midnight reset, bet settlement and friend activity.
     const rolledOver = St.rollover(now);
     if (rolledOver) {
       St.save();
@@ -170,18 +154,11 @@
     const socialEvents = St.socialTick(now);
     for (const ev of socialEvents) {
       if (ev.type === 'friend' && TO.data.settings.notify.friends) ui.toast({ kind: 'win', title: `@${ev.username} accepted your friend request` });
-      if (ev.type === 'challenge' && TO.data.settings.notify.challenges) ui.toast({ kind: 'win', title: `@${ev.bet.friend.with.join(', ')} accepted your friend bet`, msg: `"${ev.bet.friend.terms}"` });
     }
     St.checkPhoneTime();
 
     const slip = TO.slip;
     if (slip.legs.length) {
-      const st = slip.status();
-      const sig = slip.legs.map((l) => { const c = TO.sim.currentSelection(l.selId); return c && c.sel ? `${c.sel.price}|${c.sel.line}` : 'x'; }).join(',');
-      if (st.changed && sig !== slip.notifiedChange) {
-        slip.notifiedChange = sig;
-        if (TO.data.settings.notify.odds && !ui.sheetOpen('slip')) ui.toast({ kind: 'warn', title: 'Odds changed on your bet slip', msg: 'Open the slip to review and accept the new odds.' });
-      }
       refreshSlip();
     }
 
@@ -196,7 +173,6 @@
     } else {
       app.refreshSlipbar();
     }
-    TO.tester.render();
   };
 
   function isTyping() {
@@ -205,7 +181,7 @@
   }
 
   // ---------- Connection ----------
-  /** Red banner while offline. The slip, to-do parlays and challenges refuse new bets until it clears. */
+  /** Red banner while offline; the slip refuses bets until the connection returns. */
   function renderNet() {
     const root = ui.root();
     if (!root) return;
@@ -226,7 +202,6 @@
     renderNet();
     if (ui.sheetOpen('slip')) ui.refreshSheet('slip', ['body', 'foot']);
     if (TO.net.online()) ui.toast({ kind: 'win', title: 'Back online', msg: 'Odds are updating again.' });
-    TO.tester.render();
   };
   window.addEventListener('online', app.netChanged);
   window.addEventListener('offline', app.netChanged);
@@ -293,26 +268,6 @@
   document.addEventListener('pointerup', () => { setTimeout(() => { app.pressing = false; }, 60); });
   document.addEventListener('pointercancel', () => { app.pressing = false; });
 
-  // ---------- Fit the phone frame to the window ----------
-  function fit() {
-    const slot = document.getElementById('device-slot');
-    const device = document.getElementById('device');
-    const tester = document.getElementById('tester');
-    if (!slot || !device) return;
-    if (window.innerWidth <= 560) {
-      slot.style.width = slot.style.height = '';
-      device.style.transform = '';
-      return;
-    }
-    const bar = document.getElementById('demo-bar');
-    const scale = Math.min(1, Math.max(0.6, (window.innerHeight - 48 - (bar ? bar.offsetHeight : 0)) / 852));
-    device.style.transform = `scale(${scale})`;
-    slot.style.width = `${393 * scale}px`;
-    slot.style.height = `${852 * scale}px`;
-    if (tester) tester.style.height = `${852 * scale}px`;
-  }
-  window.addEventListener('resize', fit);
-
   /** Server mode: the database decides who is logged in. Re-reads the user on every page load,
    *  so values the server changed (last login, login count) survive a refresh. */
   async function restoreServerSession() {
@@ -328,8 +283,28 @@
     }
   }
 
+  // A browser session can stay open while bets are placed in another one. Refresh the
+  // shared account snapshot when this tab returns and periodically while it is visible.
+  let remoteSyncAt = 0;
+  let remoteSync = null;
+  function syncRemoteState(force = false) {
+    if (!inShell() || document.hidden || !TO.api.configured || !TO.api.hasToken() || !TO.account?.server) return;
+    if (remoteSync) return remoteSync;
+    if (!force && Date.now() - remoteSyncAt < 30000) return;
+    remoteSyncAt = Date.now();
+    remoteSync = TO.api.loadState().then((state) => {
+      if (!state || !inShell()) return;
+      St.adoptServerUser(TO.account.server, state);
+      app.render();
+    }).catch((error) => {
+      console.warn('Could not refresh TimeOut data from Supabase:', error.message);
+    }).finally(() => { remoteSync = null; });
+    return remoteSync;
+  }
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) syncRemoteState(true); });
+  window.addEventListener('focus', () => syncRemoteState(true));
+
   async function start() {
-    fit();
     renderNet();
     // Arriving from the link in a confirmation email: the URL carries the new session (or why it failed).
     const redirect = TO.api.configured && TO.api.consumeAuthRedirect ? TO.api.consumeAuthRedirect() : null;
@@ -343,6 +318,7 @@
       ui.toast({ kind: 'loss', title: 'That link didn\'t work', msg: `${redirect.error}. Log in, or create your account again to get a new link.`, ms: 8000 });
     }
     setInterval(() => app.tick(false), 1000);
+    setInterval(() => syncRemoteState(), 30000);
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
   else start();

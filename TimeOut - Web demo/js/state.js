@@ -10,7 +10,6 @@
   const RULES = {
     daily: 60,
     maxLegs: 10,
-    friendLimit: 100,
     overrideMinutes: 15,
     overridePenalty: 30,
     maxOverrides: 2,
@@ -72,8 +71,6 @@
     { username: 'maria.g', name: 'Maria Garcia', color: '#DB2777', w: 20, l: 21, net: -3, tier: 'starter', streak: 2, share: { record: true, minutes: true, bets: false } },
   ];
   PEOPLE.forEach((p) => { p.photo = TO.initialsAvatar(p.name, p.color); p.fake = true; });
-
-  const TERMS_EXAMPLES = ['Loser does the dishes', 'Loser buys lunch', 'Winner picks the movie', 'Loser folds the laundry', 'Loser posts a shoutout'];
 
   // ---------- Events ----------
   const listeners = {};
@@ -160,8 +157,42 @@
         const preferences = remoteHasPreferences
           ? Object.assign({}, cached.settings || {}, remoteState.settings || {})
           : Object.assign({}, remoteState.settings || {}, cached.settings || {});
+        const savedSports = [
+          ...(Array.isArray(cached.settings?.sports) ? cached.settings.sports : []),
+          ...(Array.isArray(remoteState.settings?.sports) ? remoteState.settings.sports : []),
+        ].filter((league) => S.REAL_LEAGUES.includes(league));
+        if (savedSports.length) preferences.sports = [...new Set(savedSports)];
         remoteState = Object.assign({}, cached, remoteState, { bets: [...mergedBets.values()], settings: preferences });
         if (hasUnsyncedBets || !remoteState.wallet) remoteState.wallet = cached.wallet;
+        else if (cached.wallet) {
+          // Supabase currently owns the balance fields, while clean-day history is local-only.
+          // Keep those local streak and usage ledgers when refreshing the server wallet.
+          const serverWallet = remoteState.wallet;
+          const localWallet = cached.wallet;
+          remoteState.wallet = Object.assign({}, localWallet, serverWallet);
+          for (const key of ['streakDays', 'netByDay', 'penaltyByDay', 'overridesByDay', 'usageByDay', 'bonusDay', 'bonusGranted', 'warned']) {
+            if (localWallet[key] !== undefined) remoteState.wallet[key] = localWallet[key];
+          }
+          for (const key of ['boostsByDay', 'insuranceByWeek']) {
+            const serverCounts = serverWallet[key] || {};
+            const localCounts = localWallet[key] || {};
+            remoteState.wallet[key] = Object.fromEntries([...new Set([...Object.keys(serverCounts), ...Object.keys(localCounts)])]
+              .map((day) => [day, Math.max(Number(serverCounts[day] || 0), Number(localCounts[day] || 0))]));
+          }
+          // The server may not have credited today's local tier bonus yet. Keep
+          // that uncredited portion in the visible balance; the bet RPC applies
+          // the same amount atomically before it checks the stake.
+          const serverDay = serverWallet.dayKey;
+          const localBonus = localWallet.bonusDay === serverDay ? Number(localWallet.bonusGranted || 0) : 0;
+          const serverBonus = serverWallet.bonusDay === serverDay ? Number(serverWallet.bonusGranted || 0) : 0;
+          const uncreditedBonus = Math.max(localBonus - serverBonus, 0);
+          remoteState.wallet.balance = Number(serverWallet.balance || 0) + uncreditedBonus;
+          if (uncreditedBonus > 0 && remoteState.wallet.balance > 0) remoteState.wallet.lockedOut = false;
+          if (localBonus || serverBonus) {
+            remoteState.wallet.bonusDay = serverDay;
+            remoteState.wallet.bonusGranted = Math.max(localBonus, serverBonus);
+          }
+        }
       }
       delete remoteState.appPreferencesReady;
       TO.store.set(dataKey(id), remoteState);
@@ -265,14 +296,13 @@
         lockedApps: [],
         minLimit: 0,
         lowWarn: 10,
-        notify: { settled: true, odds: true, friends: true, challenges: true, lowTime: true },
+        notify: { settled: true, friends: true, lowTime: true },
         privacy: { record: true, minutes: true, bets: true },
       },
       onboarded: false,
       friends: [],
       requestsIn: [],
       requestsOut: [],
-      challengesIn: [],
       teams: [],
     };
   }
@@ -282,7 +312,21 @@
     for (const k of Object.keys(f)) if (d[k] === undefined) d[k] = f[k];
     for (const k of Object.keys(f.wallet)) if (d.wallet[k] === undefined) d.wallet[k] = f.wallet[k];
     for (const k of Object.keys(f.settings)) if (d.settings[k] === undefined) d.settings[k] = f.settings[k];
+    if (!Array.isArray(d.settings.sports) || d.settings.sports.length === 0) d.settings.sports = S.REAL_LEAGUES.slice();
+    d.bets = (d.bets || []).filter((bet) => !bet.friend);
+    // Server wallets don't store the daily bet-result ledger. Rebuild it from settled bets
+    // so previous-day results continue to determine today's screen-time balance after sync.
+    const settledNetByDay = {};
+    for (const bet of d.bets || []) {
+      if (bet.status === 'open') continue;
+      const day = bet.dayKey || (Number.isFinite(Number(bet.placedAt)) ? TO.dayKey(Number(bet.placedAt)) : null);
+      if (!day) continue;
+      settledNetByDay[day] = (settledNetByDay[day] || 0) + (Number(bet.payout || 0) - Number(bet.stake || 0));
+    }
+    Object.assign(d.wallet.netByDay, settledNetByDay);
     if (!d.settings.lockedApps.length) d.settings.enforce = false; // nothing to block, so limits can't be on
+    delete d.challengesIn;
+    if (d.settings.notify) delete d.settings.notify.challenges;
     return d;
   }
 
@@ -330,7 +374,7 @@
       overridesUsed: w.overridesByDay[day] || 0,
       used, phoneLeft: Math.max(todayLimit - used, 0),
       appsLocked: TO.data.settings.enforce && used >= todayLimit,
-      atRisk: open.filter((b) => !b.friend).reduce((s, b) => s + b.stake, 0),
+      atRisk: open.reduce((s, b) => s + b.stake, 0),
       openCount: open.length,
       tier: t, points: lockPoints(),
       streak: w.streakDays, multiplier: streakMultiplier(w.streakDays),
@@ -344,9 +388,10 @@
     const w = W(), day = today();
     if (w.bonusDay !== day) { w.bonusDay = day; w.bonusGranted = 0; }
     const owed = tier().bonus - w.bonusGranted;
-    if (owed > 0 && !w.lockedOut) {
+    if (owed > 0) {
       w.balance += owed;
       w.bonusGranted = tier().bonus;
+      if (w.balance > 0) w.lockedOut = false;
     }
   }
 
@@ -355,7 +400,7 @@
     const w = W();
     const target = TO.dayKey(now);
     if (w.dayKey === target) return false;
-    if (w.dayKey > target) { w.dayKey = target; return false; } // clock moved back (tester reset)
+    if (w.dayKey > target) { w.dayKey = target; return false; } // The local date moved backward.
     let guard = 0;
     while (w.dayKey < target && guard++ < 400) {
       const day = w.dayKey;
@@ -433,6 +478,12 @@
       return { selId: sel.id, kind: 'pred', predId: sel.predId, market: 'pred', side: sel.side, line: null, price: sel.price,
         label: S.selectionLabel(sel), marketLabel: 'Prediction', matchup: p.q, league: 'pred', start: p.resolves, result: 'pending', final: null };
     }
+    if (sel.kind === 'race' || sel.market === 'race') {
+      const race = TO.races.get(sel.raceId);
+      const horse = TO.races.horse(sel.horseId || sel.side);
+      return { selId: sel.id, kind: 'race', raceId: sel.raceId, horseId: horse.id, market: 'race', side: String(horse.id), price: sel.price,
+        label: horse.name, marketLabel: 'Race winner', matchup: `Virtual Race #${race.number}`, league: 'race', start: race.startedAt || now, result: 'pending', final: null };
+    }
     const g = S.game(sel.gameId, now);
     return { selId: sel.id, kind: 'game', gameId: sel.gameId, market: sel.market, side: sel.side, line: sel.line, price: sel.price,
       label: S.selectionLabel(sel, g), marketLabel: S.marketLabel(sel, g), matchup: `${g.away.name} @ ${g.home.name}`,
@@ -445,7 +496,7 @@
   };
 
   /** Places a bet from bet-slip picks. Each pick carries the price the user accepted. */
-  function placeBet({ picks, stake, friend, boost, insure }, now = TO.now()) {
+  function placeBet({ picks, stake, boost, insure }, now = TO.now()) {
     rollover(now);
     const w = W();
     if (!picks.length) throw new AppError('empty', 'Add a pick to your bet slip.');
@@ -459,47 +510,38 @@
       return legFromSelection(cur.sel, now);
     });
     if (changed.length) throw new AppError('odds_changed', 'The odds changed. Review the new odds and confirm again.', { changed });
-
-    const isFriend = !!friend;
-    if (isFriend) {
-      const terms = String(friend.terms || '').trim();
-      if (!friend.with || !friend.with.length) throw new AppError('no_friend', 'Choose a friend to send this bet to.');
-      if (!terms) throw new AppError('no_terms', 'Add what\'s on the line, like "loser does the dishes".');
-      if (terms.length > RULES.friendLimit) throw new AppError('terms_long', `Keep it to ${RULES.friendLimit} characters.`);
-    } else {
-      if (w.lockedOut || w.balance <= 0) throw new AppError('locked', 'You\'re out of betting minutes for today. Betting reopens at midnight.');
-      if (!Number.isInteger(stake) || stake < 1) throw new AppError('stake', 'Enter a stake of at least 1 minute.');
-      if (stake > w.balance) throw new AppError('not_enough', `Not enough screentime. You have ${w.balance} min left to bet today.`, { remaining: w.balance });
+    if (legs.some((leg) => leg.kind === 'race') && legs.length !== 1) {
+      throw new AppError('race_single', 'Virtual race picks can only be placed as a single bet.');
     }
+
+    if (w.lockedOut || w.balance <= 0) throw new AppError('locked', 'You\'re out of betting minutes for today. Betting reopens at midnight.');
+    if (!Number.isInteger(stake) || stake < 1) throw new AppError('stake', 'Enter a stake of at least 1 minute.');
+    if (stake > w.balance) throw new AppError('not_enough', `Not enough screentime. You have ${w.balance} min left to bet today.`, { remaining: w.balance });
 
     const wl = wallet();
     const { decimal, american } = combine(legs);
     const bet = {
-      id: TO.uid('bet'), kind: 'sports', placedAt: now, dayKey: w.dayKey,
-      stake: isFriend ? 0 : stake, legs, decimal, american,
-      friend: isFriend ? { with: friend.with.slice(), terms: String(friend.terms).trim(), status: 'pending', acceptAt: now + 5000, direction: 'out' } : null,
+      id: TO.uid('bet'), kind: legs[0].kind === 'race' ? 'race' : 'sports', placedAt: now, dayKey: w.dayKey,
+      stake, legs, decimal, american,
       boosted: false, insured: false, multiplier: 1, status: 'open', payout: 0, settledAt: null,
     };
-    if (!isFriend) {
-      let mult = wl.multiplier;
-      if (boost && wl.boostsLeft > 0) {
-        bet.boosted = true;
-        mult *= 1 + RULES.boostPercent;
-        w.boostsByDay[w.dayKey] = (w.boostsByDay[w.dayKey] || 0) + 1;
-      }
-      if (insure && legs.length > 1 && wl.insuranceLeft > 0) {
-        bet.insured = true;
-        const wk = TO.weekKey(now);
-        w.insuranceByWeek[wk] = (w.insuranceByWeek[wk] || 0) + 1;
-      }
-      bet.multiplier = +mult.toFixed(4);
-      w.balance -= stake;
-      TO.data.lastStake = stake;
-      if (w.balance <= 0) { w.balance = 0; w.lockedOut = true; }
-    } else {
-      deliverChallenges(bet);
+    let mult = wl.multiplier;
+    if (boost && wl.boostsLeft > 0) {
+      bet.boosted = true;
+      mult *= 1 + RULES.boostPercent;
+      w.boostsByDay[w.dayKey] = (w.boostsByDay[w.dayKey] || 0) + 1;
     }
+    if (insure && legs.length > 1 && wl.insuranceLeft > 0) {
+      bet.insured = true;
+      const wk = TO.weekKey(now);
+      w.insuranceByWeek[wk] = (w.insuranceByWeek[wk] || 0) + 1;
+    }
+    bet.multiplier = +mult.toFixed(4);
+    w.balance -= stake;
+    TO.data.lastStake = stake;
+    if (w.balance <= 0) { w.balance = 0; w.lockedOut = true; }
     TO.data.bets.push(bet);
+    if (bet.kind === 'race') TO.races.startForBet(bet, now);
     save();
     return bet;
   }
@@ -520,7 +562,7 @@
       label: t.text, marketLabel: `To-do · ${t.difficulty}`, matchup: 'Finish before midnight', result: 'pending', final: null }));
     const { decimal, american } = combine(legs);
     const bet = { id: TO.uid('bet'), kind: 'todo', placedAt: now, dayKey: w.dayKey, deadline: TO.nextMidnight(now), stake, legs, decimal, american,
-      friend: null, boosted: false, insured: false, multiplier: wallet().multiplier, status: 'open', payout: 0, settledAt: null };
+      boosted: false, insured: false, multiplier: wallet().multiplier, status: 'open', payout: 0, settledAt: null };
     w.balance -= stake;
     if (w.balance <= 0) { w.balance = 0; w.lockedOut = true; }
     TO.data.bets.push(bet);
@@ -570,15 +612,13 @@
     const res = outcome(bet);
     if (res.status === 'open') return null;
     bet.status = res.status;
-    bet.payout = bet.friend ? 0 : res.payout;
+    bet.payout = res.payout;
     bet.insurancePaid = !!res.insurancePaid;
     bet.settledAt = now;
-    if (!bet.friend) {
-      const w = W();
-      w.netByDay[bet.dayKey] = (w.netByDay[bet.dayKey] || 0) + (bet.payout - bet.stake);
-      // Winnings and refunds return to today's betting balance if the bet was placed today.
-      if (bet.dayKey === w.dayKey) w.balance += bet.payout;
-    }
+    const w = W();
+    w.netByDay[bet.dayKey] = (w.netByDay[bet.dayKey] || 0) + (bet.payout - bet.stake);
+    // Voids and pushes return the stake; wins and losses only affect the next day's limit.
+    if (bet.dayKey === w.dayKey && (bet.status === 'void' || bet.status === 'push')) w.balance += bet.payout;
     return bet;
   }
 
@@ -597,6 +637,9 @@
         if (leg.kind === 'pred') {
           const p = S.prediction(leg.predId, now);
           leg.final = `Resolved ${p.outcome === 'yes' ? 'YES' : 'NO'}`;
+        } else if (leg.kind === 'race') {
+          const race = TO.races.get(leg.raceId);
+          leg.final = race && race.winnerId ? `Winner: ${TO.races.horse(race.winnerId).name}` : 'Race finished';
         } else {
           const g = S.game(leg.gameId, now);
           leg.final = g.state === 'postponed' ? 'Postponed' : `${g.away.abbr} ${g.awayScore} – ${g.home.abbr} ${g.homeScore}${g.ot ? ` (${g.ot.label === '10' ? '10 inn' : 'OT'})` : ''}`;
@@ -611,15 +654,13 @@
   // ---------- Record / stats ----------
   function statsFor(bets) {
     const settled = bets.filter((b) => b.status !== 'open');
-    const money = settled.filter((b) => !b.friend);
-    const won = money.filter((b) => b.status === 'won');
-    const lost = money.filter((b) => b.status === 'lost');
-    const voids = money.filter((b) => b.status === 'void' || b.status === 'push');
-    const net = money.reduce((s, b) => s + (b.payout - b.stake), 0);
-    const friendBets = settled.filter((b) => b.friend);
+    const won = settled.filter((b) => b.status === 'won');
+    const lost = settled.filter((b) => b.status === 'lost');
+    const voids = settled.filter((b) => b.status === 'void' || b.status === 'push');
+    const net = settled.reduce((s, b) => s + (b.payout - b.stake), 0);
     const bySport = {};
-    for (const b of money) {
-      const key = b.kind === 'todo' ? 'todo' : b.legs.length > 1 ? 'parlay' : b.legs[0].league;
+    for (const b of settled) {
+      const key = b.kind === 'todo' ? 'todo' : b.kind === 'race' ? 'race' : b.legs.length > 1 ? 'parlay' : b.legs[0].league;
       bySport[key] = bySport[key] || { w: 0, l: 0, net: 0 };
       if (b.status === 'won') bySport[key].w++;
       if (b.status === 'lost') bySport[key].l++;
@@ -629,10 +670,8 @@
       w: won.length, l: lost.length, v: voids.length, net,
       pct: won.length + lost.length ? Math.round((100 * won.length) / (won.length + lost.length)) : null,
       best: won.reduce((m, b) => Math.max(m, b.payout - b.stake), 0),
-      fw: friendBets.filter((b) => b.status === 'won').length,
-      fl: friendBets.filter((b) => b.status === 'lost').length,
       bySport,
-      recent: settled.filter((b) => !b.friend && (b.status === 'won' || b.status === 'lost')).sort((a, b) => b.settledAt - a.settledAt).slice(0, 5).map((b) => (b.status === 'won' ? 'W' : 'L')),
+      recent: settled.filter((b) => b.status === 'won' || b.status === 'lost').sort((a, b) => b.settledAt - a.settledAt).slice(0, 5).map((b) => (b.status === 'won' ? 'W' : 'L')),
     };
   }
   const myStats = () => statsFor(TO.data.bets);
@@ -646,7 +685,7 @@
     const d = acc.id === (TO.account && TO.account.id) ? TO.data : migrate(TO.store.get(dataKey(acc.id), null) || freshData(TO.now()));
     const st = statsFor(d.bets);
     return { username: acc.username, name: acc.username, photo: acc.photo, w: st.w, l: st.l, net: st.net, tier: tier(d).id, streak: d.wallet.streakDays,
-      share: d.settings.privacy, local: true, accountId: acc.id, openBets: d.bets.filter((b) => b.status === 'open' && !b.friend) };
+      share: d.settings.privacy, local: true, accountId: acc.id, openBets: d.bets.filter((b) => b.status === 'open') };
   }
 
   /** Open picks a friend has shared (fake friends pick from the live board). */
@@ -750,99 +789,7 @@
     save();
   }
 
-  // ---------- Challenges (friend bets) ----------
-  /** When I send a friend bet to a real local account, it shows up in their Requests with the other side. */
-  function deliverChallenges(bet) {
-    for (const u of bet.friend.with) {
-      const acc = findAccountByUsername(u);
-      if (!acc) continue;
-      bet.friend.acceptAt = null; // real people accept themselves
-      const leg = bet.legs[0];
-      mutateData(acc.id, (d) => {
-        d.challengesIn.push({ id: TO.uid('ch'), from: TO.account.username, betId: bet.id, fromAccount: TO.account.id, theirPick: bet.legs.map((l) => l.label).join(' + '),
-          matchup: bet.legs.length > 1 ? `${bet.legs.length}-pick parlay` : leg.matchup, legs: bet.legs.map((l) => ({ selId: l.selId, price: l.price, line: l.line, market: l.market, side: l.side, gameId: l.gameId, predId: l.predId, kind: l.kind })),
-          terms: bet.friend.terms, at: bet.placedAt, status: 'pending' });
-      });
-    }
-  }
-
-  function incomingChallenge(from, now = TO.now()) {
-    const games = S.board(now).filter((g) => g.state === 'scheduled' && !g.simulated && g.start - now > 3 * MIN);
-    const g = games[Math.floor(Math.random() * games.length)] || S.board(now).find((x) => x.state === 'scheduled');
-    if (!g) return null;
-    const o = S.odds(g.id, now);
-    const theirs = Math.random() < 0.5 ? o.moneyline.find((s) => s.side === 'home') : o.spread[0] || o.moneyline[0];
-    const terms = TERMS_EXAMPLES[Math.floor(Math.random() * TERMS_EXAMPLES.length)];
-    const ch = { id: TO.uid('ch'), from, theirPick: S.selectionLabel(theirs, g), matchup: `${g.away.name} @ ${g.home.name}`,
-      legs: [{ selId: theirs.id, price: theirs.price, line: theirs.line, market: theirs.market, side: theirs.side, gameId: g.id, kind: 'game' }], terms, at: now, status: 'pending' };
-    TO.data.challengesIn.push(ch);
-    save();
-    return ch;
-  }
-
-  /** Accepting takes the other side of every pick in the challenge. */
-  function acceptChallenge(id, now = TO.now()) {
-    const d = TO.data;
-    const ch = d.challengesIn.find((c) => c.id === id);
-    if (!ch) return null;
-    const legs = [];
-    for (const l of ch.legs) {
-      const opp = S.oppositeSelection({ id: l.selId, market: l.market, side: l.side, line: l.line, gameId: l.gameId, predId: l.predId, kind: l.kind });
-      const cur = S.currentSelection(opp.id, now);
-      if (!cur || !cur.sel || !cur.open) {
-        ch.status = 'expired';
-        save();
-        throw new AppError('closed', 'This game has already started or ended, so the challenge expired.');
-      }
-      // Keep the friend's line so both sides are betting on the same number.
-      legs.push(legFromSelection(Object.assign({}, cur.sel, { line: opp.line }), now));
-    }
-    const { decimal, american } = combine(legs);
-    const bet = { id: TO.uid('bet'), kind: 'sports', placedAt: now, dayKey: W().dayKey, stake: 0, legs, decimal, american,
-      friend: { with: [ch.from], terms: ch.terms, status: 'accepted', direction: 'in' }, boosted: false, insured: false, multiplier: 1, status: 'open', payout: 0, settledAt: null };
-    d.bets.push(bet);
-    d.challengesIn = d.challengesIn.filter((c) => c.id !== id);
-    if (ch.fromAccount) {
-      mutateData(ch.fromAccount, (o) => {
-        const b = o.bets.find((x) => x.id === ch.betId);
-        if (b && b.friend) b.friend.status = 'accepted';
-      });
-    }
-    save();
-    return bet;
-  }
-
-  function declineChallenge(id) {
-    const ch = TO.data.challengesIn.find((c) => c.id === id);
-    TO.data.challengesIn = TO.data.challengesIn.filter((c) => c.id !== id);
-    if (ch && ch.fromAccount) {
-      mutateData(ch.fromAccount, (o) => {
-        const b = o.bets.find((x) => x.id === ch.betId);
-        if (b && b.friend) b.friend.status = 'declined';
-      });
-    }
-    save();
-  }
-
-  /** Resends an existing pick to friends with a custom stake instead of minutes. */
-  function sendBetToFriends(betId, friends, terms, now = TO.now()) {
-    const src = TO.data.bets.find((b) => b.id === betId);
-    if (!src) return null;
-    terms = String(terms || '').trim();
-    if (!friends.length) throw new AppError('no_friend', 'Choose at least one friend.');
-    if (!terms) throw new AppError('no_terms', 'Add what\'s on the line, like "loser does the dishes".');
-    if (terms.length > RULES.friendLimit) throw new AppError('terms_long', `Keep it to ${RULES.friendLimit} characters.`);
-    if (src.status !== 'open') throw new AppError('closed', 'This bet is already settled. Send an open bet instead.');
-    const bet = JSON.parse(JSON.stringify(src));
-    Object.assign(bet, { id: TO.uid('bet'), placedAt: now, stake: 0, payout: 0, boosted: false, insured: false, multiplier: 1,
-      friend: { with: friends.slice(), terms, status: 'pending', acceptAt: now + 5000, direction: 'out' } });
-    deliverChallenges(bet);
-    TO.data.bets.push(bet);
-    save();
-    return bet;
-  }
-
-  /** Background social events: fake friends accept requests and challenges after a few seconds. */
+  /** Background social events: fake friends accept requests after a few seconds. */
   function socialTick(now = TO.now()) {
     const d = TO.data;
     const events = [];
@@ -852,18 +799,6 @@
         if (!d.friends.includes(r.to)) d.friends.push(r.to);
         events.push({ type: 'friend', username: r.to });
       }
-    }
-    for (const b of d.bets) {
-      if (b.friend && b.friend.status === 'pending' && b.friend.acceptAt && now >= b.friend.acceptAt) {
-        b.friend.status = 'accepted';
-        events.push({ type: 'challenge', bet: b });
-      }
-    }
-    // Expire challenges whose games already started.
-    for (const c of d.challengesIn) {
-      if (c.status !== 'pending') continue;
-      const open = c.legs.every((l) => { const cur = S.currentSelection(l.selId, now); return cur && cur.open; });
-      if (!open) c.status = 'expired';
     }
     if (events.length) save();
     return events;
@@ -886,7 +821,7 @@
       if (!p || p.local) {
         const bets = p ? migrate(TO.store.get(dataKey(p.accountId), null) || freshData(now)).bets : TO.data.bets;
         for (const b of bets) {
-          if (b.friend || b.status === 'open' || b.placedAt < start || b.placedAt >= end) continue;
+          if (b.status === 'open' || b.placedAt < start || b.placedAt >= end) continue;
           net += b.payout - b.stake;
           if (b.status === 'won') w++;
           if (b.status === 'lost') l++;
@@ -993,20 +928,13 @@
         if (!legs.length) continue;
         const stake = 5 + Math.floor(rand() * 3) * 5;
         const { decimal, american } = combine(legs);
-        const bet = { id: TO.uid('bet'), kind: 'sports', placedAt, dayKey: dk, stake, legs, decimal, american, friend: null,
+        const bet = { id: TO.uid('bet'), kind: 'sports', placedAt, dayKey: dk, stake, legs, decimal, american,
           boosted: false, insured: false, multiplier: 1, status: 'open', payout: 0, settledAt: null };
         const res = outcome(bet);
         bet.status = res.status; bet.payout = res.payout; bet.settledAt = Math.max(...legs.map((l) => (S.game(l.gameId, now) || {}).end || placedAt));
         w.netByDay[dk] = (w.netByDay[dk] || 0) + (bet.payout - bet.stake);
         d.bets.push(bet);
       }
-    }
-    // One settled friend bet so the history shows both kinds.
-    const fb = d.bets.find((b) => b.legs.length === 1 && b.status === 'won') || d.bets[0];
-    if (fb) {
-      const copy = JSON.parse(JSON.stringify(fb));
-      Object.assign(copy, { id: TO.uid('bet'), stake: 0, payout: 0, friend: { with: ['mike_t'], terms: 'Loser buys Cafe Rio', status: 'accepted', direction: 'out' } });
-      d.bets.push(copy);
     }
     w.streakDays = 4;
     w.usageByDay[day] = 22;
@@ -1030,20 +958,12 @@
       const sel = mk(live[1], (o) => o.total[1]);
       pushOpen(d, [legFromSelection(sel, now)], 5, now - MIN);
     }
-    // A pending challenge from a friend.
-    const chGame = upcoming[2] || upcoming[0];
-    if (chGame) {
-      const o = S.odds(chGame.id, now);
-      const theirs = o.moneyline.find((s) => s.side === 'home');
-      d.challengesIn.push({ id: TO.uid('ch'), from: 'mike_t', theirPick: S.selectionLabel(theirs, chGame), matchup: `${chGame.away.name} @ ${chGame.home.name}`,
-        legs: [{ selId: theirs.id, price: theirs.price, line: null, market: 'ml', side: 'home', gameId: chGame.id, kind: 'game' }], terms: 'Loser does the dishes tonight', at: now - 10 * MIN, status: 'pending' });
-    }
     return d;
   }
 
   function pushOpen(d, legs, stake, placedAt) {
     const { decimal, american } = combine(legs);
-    d.bets.push({ id: TO.uid('bet'), kind: 'sports', placedAt, dayKey: d.wallet.dayKey, stake, legs, decimal, american, friend: null,
+    d.bets.push({ id: TO.uid('bet'), kind: 'sports', placedAt, dayKey: d.wallet.dayKey, stake, legs, decimal, american,
       boosted: false, insured: false, multiplier: streakMultiplier(d.wallet.streakDays), status: 'open', payout: 0, settledAt: null });
     d.wallet.balance -= stake;
   }
@@ -1082,7 +1002,7 @@
   }
 
   TO.state = {
-    RULES, TIERS, LOCKABLE, PEOPLE, TERMS_EXAMPLES, DEMO, TODO_ODDS,
+    RULES, TIERS, LOCKABLE, PEOPLE, DEMO, TODO_ODDS,
     tierById, tierForPoints, tierPerks, streakMultiplier, nextStreakMilestone, fmtMult,
     accounts, findAccount, createAccount, login, logout, loadSession, startSession, updateAccount, deleteAccount, adoptServerUser,
     validateUsername, validateEmail, validatePassword,
@@ -1090,7 +1010,7 @@
     placeBet, placeTodoParlay, completeTodo, settle, outcome, combine, legFromSelection,
     myStats, statsFor, person, sharedPicks, searchPeople, relation,
     sendFriendRequest, acceptFriendRequest, declineFriendRequest, cancelFriendRequest, resendFriendRequest, resendWait, removeFriend,
-    incomingChallenge, acceptChallenge, declineChallenge, sendBetToFriends, socialTick,
+    socialTick,
     teamStatus, teamStandings, createTeam, leaveTeam, inviteToTeam, leaderboard,
     ensureDemoAccount, loginDemo, resetMyData, seedDemoData,
   };

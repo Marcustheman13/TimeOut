@@ -6,15 +6,13 @@
 <title>TimeOut</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 100 100%27%3E%3Crect width=%27100%27 height=%27100%27 rx=%2722.5%27 fill=%27%2322D66E%27/%3E%3Cg transform=%27translate(48 50) skewX(-10) translate(-50 -50)%27 fill=%27%2303140A%27%3E%3Crect x=%2719%27 y=%2723%27 width=%2762%27 height=%2716%27 rx=%278%27/%3E%3Crect x=%2742%27 y=%2744%27 width=%2716%27 height=%2733%27 rx=%278%27/%3E%3C/g%3E%3C/svg%3E">
 <link rel="apple-touch-icon" href="img/apple-touch-icon.png">
-<meta name="description" content="Clickable demo of TimeOut, a sportsbook where you bet screen time instead of money.">
+<meta name="description" content="TimeOut is a sportsbook where you bet screen time instead of money.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800&family=Barlow+Condensed:ital,wght@0,600;0,700;0,800;0,900;1,800;1,900&family=JetBrains+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800&family=Barlow+Condensed:ital,wght@0,600;0,700;0,800;0,900;1,800;1,900&display=swap">
 <style>
-/* Layout: one phone-sized sportsbook on a dark stage, with a tester console beside it on wide screens.
-   On a real phone the app fills the screen and the console moves into Settings > Tester tools. */
+/* TimeOut app layout. */
 :root {
-  --stage: #05070a;
   --bg: #0a0d12;
   --surface: #141922;
   --raised: #1d2430;
@@ -35,15 +33,11 @@
   --blue-soft: rgba(79, 179, 255, 0.13);
   --purple: #c58cff;
   --scrim: rgba(0, 0, 0, 0.6);
-  --console: #0d1117;
-  --console-line: #2b3340;
 
   --font-display: 'Barlow Condensed', 'Arial Narrow', 'Roboto Condensed', system-ui, sans-serif;
   --font-body: 'Barlow', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
 
   --tabbar-h: 70px;
-  --demo-h: 52px;
   color-scheme: dark;
 }
 
@@ -51,7 +45,7 @@
 html, body { height: 100%; }
 body {
   margin: 0;
-  background: var(--stage);
+  background: var(--bg);
   color: var(--text);
   font-family: var(--font-body);
   font-size: 15px;
@@ -68,82 +62,11 @@ button:disabled { cursor: not-allowed; }
 .display { font-family: var(--font-display); font-weight: 800; letter-spacing: 0.005em; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 
-/* ---------- Stage & device ---------- */
-.stage {
-  min-height: calc(100% - var(--demo-h));
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  gap: 36px;
-  padding-block: 24px;
-  padding-inline: 16px;
-  flex-wrap: wrap;
-  background:
-    radial-gradient(900px 600px at 30% 0%, rgba(34, 214, 110, 0.06), transparent 60%),
-    var(--stage);
-}
-.device-slot { flex: none; position: relative; }
-.device {
-  width: 393px;
-  height: 852px;
-  padding: 11px;
-  border-radius: 58px;
-  background: linear-gradient(145deg, #1c222b, #0c0f13);
-  box-shadow: 0 0 0 1.5px #343d4a, 0 0 0 6px #0b0e12, 0 40px 90px rgba(0, 0, 0, 0.65);
-  transform-origin: top left;
-}
-.screen {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  border-radius: 47px;
-  overflow: hidden;
-  background: var(--bg);
-  isolation: isolate;
-}
-.island {
-  position: absolute;
-  top: 11px;
-  left: 50%;
-  translate: -50% 0;
-  width: 122px;
-  height: 35px;
-  border-radius: 20px;
-  background: #000;
-  z-index: 60;
-  pointer-events: none;
-}
-
-@media (max-width: 560px) {
-  .stage { padding: 0; display: block; background: var(--bg); }
-  .device-slot { width: 100% !important; height: 100% !important; }
-  .device { width: 100%; height: 100%; padding: 0; border-radius: 0; box-shadow: none; background: var(--bg); transform: none !important; }
-  .screen { border-radius: 0; }
-  .island, .statusbar { display: none !important; }
-  .screen .app, .screen .layer, .screen .auth { top: 0; }
-  .screen .toasts { top: 8px; }
-  .tester { display: none !important; }
-  body:not(.web) .demo-bar { display: none; }
-  html, body { overflow: hidden; }
-  .net-banner { top: 58px; }
-  .stage, .device-slot { height: 100%; }
-}
+/* Full-viewport app surface; native app shells can provide their own safe areas. */
+.app-surface { position: relative; width: 100%; height: 100%; min-height: 100dvh; overflow: hidden; background: var(--bg); isolation: isolate; }
 
 /* ---------- App shell ---------- */
-.app { position: absolute; inset: 0; top: 50px; display: flex; flex-direction: column; }
-.statusbar {
-  position: absolute; top: 0; left: 0; right: 0; z-index: 55;
-  height: 50px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 4px 30px 0 38px;
-  font-weight: 600;
-  font-size: 15px;
-}
-.statusbar .sb-icons { display: flex; gap: 6px; align-items: center; }
-.statusbar .batt { width: 25px; height: 12px; border: 1.5px solid var(--text-2); border-radius: 4px; padding: 1.5px; }
-.statusbar .batt i { display: block; height: 100%; width: 72%; background: var(--text); border-radius: 1.5px; }
+.app { position: absolute; inset: 0; display: flex; flex-direction: column; }
 
 .topbar {
   flex: none;
@@ -610,7 +533,6 @@ label.list-row { cursor: pointer; }
 .stake-row span { font-size: 11px; font-weight: 700; color: var(--muted); }
 .bet-actions { display: flex; gap: 8px; }
 .bet-actions .btn { flex: 1; }
-.friend-terms { display: flex; gap: 8px; align-items: flex-start; padding: 10px 12px; border-radius: 12px; background: var(--warn-soft); color: var(--warn); font-weight: 700; font-size: 13.5px; }
 
 .record-card { margin: 0 16px; }
 .record-big { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
@@ -634,7 +556,6 @@ label.list-row { cursor: pointer; }
 .lb-row .val small { display: block; font-family: var(--font-body); font-size: 11px; font-weight: 700; color: var(--muted); }
 .person-row { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-top: 1px solid var(--stroke); }
 .person-row:first-child { border-top: 0; }
-.challenge-card { display: flex; flex-direction: column; gap: 10px; }
 .team-card { display: flex; flex-direction: column; gap: 10px; }
 .avatars { display: flex; }
 .avatars img { width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--surface); margin-left: -8px; object-fit: cover; }
@@ -645,7 +566,7 @@ label.list-row { cursor: pointer; }
 .pick-friend.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
 
 /* ---------- Overlays ---------- */
-.layer { position: absolute; inset: 0; top: 50px; z-index: 30; pointer-events: none; }
+.layer { position: absolute; inset: 0; z-index: 30; pointer-events: none; }
 .layer > * { pointer-events: auto; }
 .scrim { position: absolute; inset: 0; background: var(--scrim); animation: fade 0.2s ease; }
 .sheet {
@@ -696,10 +617,6 @@ label.list-row { cursor: pointer; }
 .drawer .dn:hover { background: var(--surface); }
 .drawer .dn .ic { color: var(--text-2); }
 .drawer .dn .sub { margin-left: auto; font-size: 12px; color: var(--muted); font-weight: 700; }
-.drawer .dn.dn-tester { color: var(--warn); }
-.drawer .dn.dn-tester .ic { color: var(--warn); }
-/* The tester console sits beside the phone here, so the menu doesn't repeat it. On a real phone it's the only way in. */
-@media (min-width: 561px) { .drawer .dn.dn-tester { display: none; } }
 
 .dialog-wrap { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; }
 .dialog {
@@ -715,7 +632,7 @@ label.list-row { cursor: pointer; }
 .dialog .acts .btn { flex: 1; }
 @keyframes pop { from { transform: scale(0.94); opacity: 0; } to { transform: none; opacity: 1; } }
 
-.toasts { position: absolute; left: 10px; right: 10px; top: 56px; z-index: 50; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+.toasts { position: absolute; left: 10px; right: 10px; top: 10px; z-index: 50; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
 .toast {
   pointer-events: auto;
   display: flex; gap: 12px; align-items: flex-start;
@@ -797,7 +714,7 @@ label.list-row { cursor: pointer; }
 .share-img { width: 100%; border-radius: 16px; border: 1px solid var(--stroke); display: block; background: var(--surface); }
 
 /* Auth */
-.auth { position: absolute; inset: 0; top: 50px; display: flex; flex-direction: column; overflow-y: auto; scrollbar-width: none; background: var(--bg); }
+.auth { position: absolute; inset: 0; display: flex; flex-direction: column; overflow-y: auto; scrollbar-width: none; background: var(--bg); }
 .auth::-webkit-scrollbar { display: none; }
 .auth-inner { flex: 1; display: flex; flex-direction: column; gap: 18px; padding: 16px 22px 30px; }
 .welcome-hero {
@@ -877,122 +794,54 @@ label.list-row { cursor: pointer; }
 }
 .net-banner[hidden] { display: none; }
 body.is-offline .toasts { margin-top: 56px; }
-
-/* ---------- Demo bar (above the app, not part of it) ---------- */
-.demo-bar {
-  position: relative; z-index: 100;
-  height: var(--demo-h);
-  display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 12px;
-  padding: 0 16px;
-  background: #07090c;
-  border-bottom: 1px dashed var(--console-line);
-  font-size: 13px;
-}
-.db-left { display: flex; align-items: center; gap: 9px; min-width: 0; color: var(--text-2); font-weight: 700; white-space: nowrap; }
-.db-tag { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--warn); border: 1px solid rgba(255, 201, 64, 0.4); border-radius: 6px; padding: 2px 6px; }
-.db-title { overflow: hidden; text-overflow: ellipsis; }
-.db-switch { display: flex; gap: 3px; padding: 3px; border-radius: 999px; background: var(--surface); border: 1px solid var(--stroke); }
-.db-switch a { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 15px; border-radius: 999px; color: var(--text-2); font-weight: 800; text-decoration: none; white-space: nowrap; }
-.db-switch a:hover { color: var(--text); }
-.db-switch a.on { background: var(--accent); color: var(--accent-ink); }
-.db-right { position: relative; display: flex; justify-content: flex-end; align-items: center; min-width: 0; }
-.db-hint { color: var(--muted); font-size: 12.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.db-btn { display: inline-flex; align-items: center; gap: 7px; height: 36px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--console-line); background: #121821; color: var(--warn); font-weight: 800; font-size: 13px; white-space: nowrap; }
-.db-btn:hover, .db-btn[aria-expanded="true"] { border-color: var(--warn); }
-.db-btn[aria-expanded="true"] svg:last-child { transform: rotate(180deg); }
-@media (max-width: 760px) { .db-title, .db-hint { display: none; } }
-@media (max-width: 600px) {
-  .demo-bar { grid-template-columns: auto minmax(0, 1fr); padding: 0 10px; }
-  .db-left { display: none; }
-  .db-switch a { padding: 0 11px; }
-}
-@media (max-width: 440px) { .db-btn-l { display: none; } .db-btn { padding: 0 9px; gap: 4px; } }
-
-/* ---------- Tester console ---------- */
-.tester {
-  width: 344px;
-  flex: none;
-  background: var(--console);
-  border: 1px dashed var(--console-line);
-  border-radius: 18px;
-  display: flex; flex-direction: column;
-  overflow: hidden;
-  font-size: 13.5px;
-}
-.tester-head { padding: 16px 16px 12px; border-bottom: 1px dashed var(--console-line); }
-.tester-head .k { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; color: var(--warn); text-transform: uppercase; }
-.tester-head h2 { margin: 4px 0 2px; font-size: 18px; font-weight: 800; }
-.tester-head p { margin: 0; color: var(--text-2); font-size: 12.5px; }
-.tester-body { flex: 1; overflow-y: auto; padding: 12px 16px 20px; display: flex; flex-direction: column; gap: 16px; scrollbar-width: thin; }
-.tgroup { display: flex; flex-direction: column; gap: 8px; }
-.tgroup h3 { margin: 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-2); font-weight: 500; }
-.tgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-.tbtn {
-  min-height: 36px; padding: 7px 10px;
-  border-radius: 10px;
-  border: 1px solid var(--console-line);
-  background: #121821;
-  font-size: 12.5px; font-weight: 700; text-align: left;
-  display: flex; align-items: center; gap: 7px;
-  line-height: 1.2;
-}
-.tbtn:hover:not(:disabled) { border-color: #475264; background: #161d28; }
-.tbtn.wide { grid-column: 1 / -1; }
-.tbtn.on { border-color: var(--warn); color: var(--warn); }
-.tbtn .ic { color: var(--text-2); }
-.clockface { font-family: var(--font-mono); font-size: 13px; padding: 9px 11px; border-radius: 10px; background: #121821; border: 1px solid var(--console-line); display: flex; justify-content: space-between; gap: 8px; }
-.clockface b { color: var(--warn); font-weight: 500; }
-.check-item { display: flex; gap: 9px; align-items: flex-start; text-align: left; font-size: 12.5px; color: var(--text-2); line-height: 1.35; padding: 3px 0; }
-.check-item .checkbox { width: 18px; height: 18px; border-radius: 5px; border-width: 1.5px; }
-.check-item.done { color: var(--muted); text-decoration: line-through; }
-.tester .creds { font-family: var(--font-mono); font-size: 12px; color: var(--text-2); padding: 8px 10px; border: 1px solid var(--console-line); border-radius: 10px; background: #121821; }
-.tester .creds b { color: var(--text); font-weight: 500; }
-
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
 }
 a.btn { text-decoration: none; }
 
+/* Virtual racing */
+.race-page { padding-bottom: 24px; }
+.race-page .page-head { padding-bottom: 4px; }
+.race-card { margin: 0 16px; }
+.race-card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.race-caption { margin-left: 5px; color: var(--text-2); font-size: 12px; font-weight: 700; }
+.race-clock { font-family: var(--font-display); font-weight: 900; color: var(--accent); white-space: nowrap; }
+.race-track-wrap { overflow: hidden; border: 1px solid var(--stroke); border-radius: 12px; background: #0a0d12; }
+.race-track { display: block; width: 100%; height: 250px; }
+.race-finish-line { display: none; }
+.race-caller { display: flex; align-items: flex-start; gap: 10px; color: var(--text-2); font-size: 12px; font-weight: 600; }
+.race-caller > span:first-child { display: inline-flex; flex: none; align-items: center; gap: 5px; color: var(--accent); }
+.race-heading { margin: 0 0 3px; font-size: 17px; }
+.race-roster { display: flex; flex-direction: column; }
+.race-entry { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--stroke); }
+.race-entry:last-child { border-bottom: 0; }
+.race-horse-info { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1; }
+.race-silk { display: grid; place-items: center; width: 38px; height: 38px; border: 1px solid color-mix(in srgb, var(--silk), transparent 35%); border-radius: 11px; background: color-mix(in srgb, var(--silk), transparent 88%); color: var(--silk); font-family: var(--font-display); font-size: 17px; font-weight: 900; flex: none; }
+.race-horse-copy { display: flex; flex-direction: column; min-width: 0; gap: 2px; }
+.race-horse-copy b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.race-horse-copy small { color: var(--text-2); font-size: 11px; }
+.race-odds { width: 106px; flex: none; }
+.race-odds .odds-btn { width: 100%; min-height: 48px; }
+.race-result { display: flex; flex-direction: column; gap: 5px; }
+.race-result > b { font-family: var(--font-display); font-size: 22px; }
+.race-winner { color: var(--accent); }
+
+@media (max-width: 360px) {
+  .race-card-head { align-items: flex-start; }
+  .race-caption { display: block; margin: 5px 0 0; }
+  .race-entry { gap: 8px; }
+  .race-silk { width: 34px; height: 34px; }
+  .race-odds { width: 88px; }
+}
+
 </style>
 </head>
 <body>
-<!-- Demo bar: sits above the app and isn't part of TimeOut. Switches views and holds the demo controls. -->
-<header class="demo-bar" id="demo-bar">
-  <div class="db-left"><span class="db-tag">Demo</span><span class="db-title">TimeOut prototype</span></div>
-  <nav class="db-switch" aria-label="Switch view">
-    <a href="TimeOut.html" class="on" aria-current="page"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M11 18h2"/></svg>Phone</a>
-    <a href="TimeOut-web.html"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>Computer</a>
-  </nav>
-  <div class="db-right"><span class="db-hint">Demo controls are beside the phone</span></div>
-</header>
-<div class="stage">
-  <div class="device-slot" id="device-slot">
-    <div class="device" id="device">
-      <div class="screen" id="screen">
-        <div class="island"></div>
-        <div class="statusbar" aria-hidden="true">
-          <span id="sb-time">9:41</span>
-          <span class="sb-icons">
-            <svg width="18" height="12" viewBox="0 0 18 12" fill="currentColor"><rect x="0" y="8" width="3" height="4" rx="1"/><rect x="5" y="5.5" width="3" height="6.5" rx="1"/><rect x="10" y="3" width="3" height="9" rx="1"/><rect x="15" y="0" width="3" height="12" rx="1"/></svg>
-            <svg width="16" height="12" viewBox="0 0 16 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M1 4.2a10 10 0 0 1 14 0"/><path d="M3.5 6.8a6.5 6.5 0 0 1 9 0"/><circle cx="8" cy="10" r="1.3" fill="currentColor" stroke="none"/></svg>
-            <span class="batt"><i></i></span>
-          </span>
-        </div>
-        <div id="app-body"></div>
-        <div class="layer" id="layer"></div>
-        <div class="toasts" id="toasts" aria-live="polite"></div>
-      </div>
-    </div>
-  </div>
-  <aside class="tester" id="tester" aria-label="Tester console">
-    <div class="tester-head">
-      <div class="k">Tester console</div>
-      <h2>Demo controls</h2>
-      <p>Not part of the app. Use these to trigger situations from the spec without waiting.</p>
-    </div>
-    <div class="tester-body" id="tester-body"></div>
-  </aside>
-</div>
+<main class="app-surface" id="screen">
+  <div id="app-body"></div>
+  <div class="layer" id="layer"></div>
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+</main>
 <script>
 /* TimeOut web demo — core helpers: storage, demo clock, hashing, formatting, odds math, icons. */
 window.TO = window.TO || {};
@@ -1019,16 +868,7 @@ window.TO = window.TO || {};
     },
   };
 
-  // ---------- Demo clock ----------
-  // Testers can move time forward (to see games end, midnight resets, etc). Everything reads TO.now().
-  let clockOffset = TO.store.get('timeout.clockOffset', 0);
-  TO.now = () => Date.now() + clockOffset;
-  TO.clock = {
-    get offset() { return clockOffset; },
-    add(ms) { clockOffset += ms; TO.store.set('timeout.clockOffset', clockOffset); },
-    set(ts) { clockOffset = ts - Date.now(); TO.store.set('timeout.clockOffset', clockOffset); },
-    reset() { clockOffset = 0; TO.store.set('timeout.clockOffset', 0); },
-  };
+  TO.now = () => Date.now();
 
   const MIN = 60 * 1000;
   const HOUR = 60 * MIN;
@@ -1247,7 +1087,7 @@ window.TO = window.TO || {};
     wifiOff: '<path d="M3 3l18 18"/><path d="M8.5 16.4a5 5 0 0 1 7 0M5 12.9a10 10 0 0 1 4.2-2.5M14.8 10.4A10 10 0 0 1 19 12.9M2 9.3a15 15 0 0 1 4.3-2.8M11 5.1A15 15 0 0 1 22 9.3"/><circle cx="12" cy="20" r="1" fill="currentColor"/>',
   };
   // ---------- Connection ----------
-  // Testers can fake a dropped connection from the demo controls; otherwise this follows the browser.
+  // Connectivity follows the browser; the app can still report offline state to its views.
   TO.net = {
     simulatedOffline: false,
     online: () => navigator.onLine !== false && !TO.net.simulatedOffline,
@@ -1343,14 +1183,6 @@ window.TO = window.TO || {};
     const s = strength(league, team);
     return Array.from({ length: 5 }, (_, i) => (TO.u01(`form-${league}-${team.abbr}-${i}`) < 0.5 + 0.3 * s ? 'W' : 'L'));
   }
-
-  // ---------- Overrides set by the tester panel ----------
-  const overrides = () => TO.store.get('timeout.gameOverrides', {});
-  const setOverride = (id, patch) => {
-    const all = overrides();
-    all[id] = Object.assign({}, all[id], patch);
-    TO.store.set('timeout.gameOverrides', all);
-  };
 
   // ---------- Scoring timeline ----------
   const timelines = new Map();
@@ -1478,16 +1310,15 @@ window.TO = window.TO || {};
     const home = L.teams[order[idx * 2]];
     const away = L.teams[order[idx * 2 + 1]];
     const start = slot * SLOT + L.offset + idx * L.stagger;
-    const ov = overrides()[id] || {};
     const S = SPORTS[L.sport];
     const g = {
       id, league, sport: L.sport, slot, idx, start, end: start + DURATION, home, away,
       state: 'scheduled', homeScore: 0, awayScore: 0, progress: 0, statusText: '', clock: '', ot: null,
       simulated: !!L.simulated,
     };
-    const elapsed = now - start + (ov.warp || 0);
+    const elapsed = now - start;
     const naturalPpd = !L.simulated && TO.hash(`ppd-${id}`) % 29 === 0;
-    if ((naturalPpd && now >= start - 8 * MIN) || ov.state === 'postponed') {
+    if (naturalPpd && now >= start - 8 * MIN) {
       g.state = 'postponed';
       g.statusText = 'Postponed';
       return g;
@@ -1504,7 +1335,7 @@ window.TO = window.TO || {};
       g.awayScore = tl.finalAway;
       g.ot = tl.extra;
       g.statusText = tl.extra ? `Final/${tl.extra.label}` : 'Final';
-      g.endedAt = start + DURATION - (ov.warp || 0);
+      g.endedAt = start + DURATION;
       return g;
     }
     const steps = Math.floor(elapsed / STEP);
@@ -1644,8 +1475,6 @@ window.TO = window.TO || {};
     const d = strength(g.league, g.home) - strength(g.league, g.away);
     let mu = S.perTeam * 0.12 * d + S.homeEdge;
     if (g.state === 'scheduled') mu += 0.05 * S.marginSigma * TO.unit(`drift-${g.id}-${Math.floor(now / ODDS_BUCKET_PRE)}`);
-    const ov = overrides()[g.id];
-    if (ov && ov.nudge) mu += ov.nudge * S.marginSigma;
     return mu;
   }
 
@@ -1697,8 +1526,7 @@ window.TO = window.TO || {};
     if (!g) return null;
     const bucketLen = g.state === 'live' ? ODDS_BUCKET_LIVE : ODDS_BUCKET_PRE;
     const bucket = Math.floor(now / bucketLen) * bucketLen;
-    const nudge = (overrides()[id] || {}).nudge || 0;
-    const key = `${id}|${bucket}|${nudge}|${g.state}`;
+    const key = `${id}|${bucket}|${g.state}`;
     if (!oddsCache.has(key)) {
       const gb = g.state === 'live' ? game(id, Math.max(bucket, g.start)) : g;
       const o = computeOdds(gb.state === 'live' || gb.state === 'scheduled' ? gb : g, bucket);
@@ -1768,6 +1596,7 @@ window.TO = window.TO || {};
   /** Current version of a selection (same pick, latest line and price). */
   function currentSelection(selId, now = TO.now()) {
     const [ref, market, side] = selId.split('|');
+    if (market === 'race') return TO.races ? TO.races.currentSelection(selId, now) : null;
     if (market === 'pred') {
       const p = prediction(ref, now);
       if (!p) return null;
@@ -1783,6 +1612,7 @@ window.TO = window.TO || {};
 
   /** e.g. "Chiefs −3.5", "Over 44.5", "Lakers ML", "Draw", "Yes". */
   function selectionLabel(sel, g) {
+    if (sel.market === 'race') return TO.races ? TO.races.selectionLabel(sel) : '';
     if (sel.market === 'pred') return sel.side === 'yes' ? 'Yes' : 'No';
     const team = g ? teamOf(g, sel.side) : null;
     switch (sel.market) {
@@ -1794,6 +1624,7 @@ window.TO = window.TO || {};
   }
 
   function marketLabel(sel, g) {
+    if (sel.market === 'race') return 'Race winner';
     if (sel.market === 'pred') return 'Prediction';
     if (sel.market === 'ml') return 'Moneyline';
     if (sel.market === 'spread') return g ? SPORTS[g.sport].spreadLabel : 'Spread';
@@ -1802,6 +1633,7 @@ window.TO = window.TO || {};
 
   /** Grades a pick against a game or prediction. Returns pending | won | lost | push | void. */
   function grade(sel, now = TO.now()) {
+    if (sel.market === 'race') return TO.races ? TO.races.grade(sel, now) : 'pending';
     if (sel.market === 'pred') {
       const p = prediction(sel.predId || sel.id.split('|')[0], now);
       if (!p || p.state !== 'resolved') return 'pending';
@@ -1855,20 +1687,10 @@ window.TO = window.TO || {};
     return r === 'won' ? 'winning' : 'losing';
   }
 
-  /** The other side of a pick, used when accepting a friend's challenge. */
-  function oppositeSelection(sel) {
-    const flip = { home: 'away', away: 'home', over: 'under', under: 'over', yes: 'no', no: 'yes' };
-    const side = flip[sel.side];
-    const [ref, market] = sel.id.split('|');
-    const line = sel.market === 'spread' ? -sel.line : sel.line;
-    return Object.assign({}, sel, { id: `${ref}|${market}|${side}`, side, line });
-  }
-
   TO.sim = {
     SLOT, DURATION, STEP, SPORTS, LEAGUES, REAL_LEAGUES, LEAGUE_ORDER, PREDICTIONS,
     game, board, odds, stats, research, record, form, strength,
-    prediction, predictions, currentSelection, selectionLabel, marketLabel, grade, gradeScore, liveStanding, oppositeSelection, teamOf,
-    overrides, setOverride,
+    prediction, predictions, currentSelection, selectionLabel, marketLabel, grade, gradeScore, liveStanding, teamOf,
   };
 })(window.TO);
 
@@ -1886,7 +1708,6 @@ window.TO = window.TO || {};
   const RULES = {
     daily: 60,
     maxLegs: 10,
-    friendLimit: 100,
     overrideMinutes: 15,
     overridePenalty: 30,
     maxOverrides: 2,
@@ -1948,8 +1769,6 @@ window.TO = window.TO || {};
     { username: 'maria.g', name: 'Maria Garcia', color: '#DB2777', w: 20, l: 21, net: -3, tier: 'starter', streak: 2, share: { record: true, minutes: true, bets: false } },
   ];
   PEOPLE.forEach((p) => { p.photo = TO.initialsAvatar(p.name, p.color); p.fake = true; });
-
-  const TERMS_EXAMPLES = ['Loser does the dishes', 'Loser buys lunch', 'Winner picks the movie', 'Loser folds the laundry', 'Loser posts a shoutout'];
 
   // ---------- Events ----------
   const listeners = {};
@@ -2036,8 +1855,42 @@ window.TO = window.TO || {};
         const preferences = remoteHasPreferences
           ? Object.assign({}, cached.settings || {}, remoteState.settings || {})
           : Object.assign({}, remoteState.settings || {}, cached.settings || {});
+        const savedSports = [
+          ...(Array.isArray(cached.settings?.sports) ? cached.settings.sports : []),
+          ...(Array.isArray(remoteState.settings?.sports) ? remoteState.settings.sports : []),
+        ].filter((league) => S.REAL_LEAGUES.includes(league));
+        if (savedSports.length) preferences.sports = [...new Set(savedSports)];
         remoteState = Object.assign({}, cached, remoteState, { bets: [...mergedBets.values()], settings: preferences });
         if (hasUnsyncedBets || !remoteState.wallet) remoteState.wallet = cached.wallet;
+        else if (cached.wallet) {
+          // Supabase currently owns the balance fields, while clean-day history is local-only.
+          // Keep those local streak and usage ledgers when refreshing the server wallet.
+          const serverWallet = remoteState.wallet;
+          const localWallet = cached.wallet;
+          remoteState.wallet = Object.assign({}, localWallet, serverWallet);
+          for (const key of ['streakDays', 'netByDay', 'penaltyByDay', 'overridesByDay', 'usageByDay', 'bonusDay', 'bonusGranted', 'warned']) {
+            if (localWallet[key] !== undefined) remoteState.wallet[key] = localWallet[key];
+          }
+          for (const key of ['boostsByDay', 'insuranceByWeek']) {
+            const serverCounts = serverWallet[key] || {};
+            const localCounts = localWallet[key] || {};
+            remoteState.wallet[key] = Object.fromEntries([...new Set([...Object.keys(serverCounts), ...Object.keys(localCounts)])]
+              .map((day) => [day, Math.max(Number(serverCounts[day] || 0), Number(localCounts[day] || 0))]));
+          }
+          // The server may not have credited today's local tier bonus yet. Keep
+          // that uncredited portion in the visible balance; the bet RPC applies
+          // the same amount atomically before it checks the stake.
+          const serverDay = serverWallet.dayKey;
+          const localBonus = localWallet.bonusDay === serverDay ? Number(localWallet.bonusGranted || 0) : 0;
+          const serverBonus = serverWallet.bonusDay === serverDay ? Number(serverWallet.bonusGranted || 0) : 0;
+          const uncreditedBonus = Math.max(localBonus - serverBonus, 0);
+          remoteState.wallet.balance = Number(serverWallet.balance || 0) + uncreditedBonus;
+          if (uncreditedBonus > 0 && remoteState.wallet.balance > 0) remoteState.wallet.lockedOut = false;
+          if (localBonus || serverBonus) {
+            remoteState.wallet.bonusDay = serverDay;
+            remoteState.wallet.bonusGranted = Math.max(localBonus, serverBonus);
+          }
+        }
       }
       delete remoteState.appPreferencesReady;
       TO.store.set(dataKey(id), remoteState);
@@ -2141,14 +1994,13 @@ window.TO = window.TO || {};
         lockedApps: [],
         minLimit: 0,
         lowWarn: 10,
-        notify: { settled: true, odds: true, friends: true, challenges: true, lowTime: true },
+        notify: { settled: true, friends: true, lowTime: true },
         privacy: { record: true, minutes: true, bets: true },
       },
       onboarded: false,
       friends: [],
       requestsIn: [],
       requestsOut: [],
-      challengesIn: [],
       teams: [],
     };
   }
@@ -2158,7 +2010,21 @@ window.TO = window.TO || {};
     for (const k of Object.keys(f)) if (d[k] === undefined) d[k] = f[k];
     for (const k of Object.keys(f.wallet)) if (d.wallet[k] === undefined) d.wallet[k] = f.wallet[k];
     for (const k of Object.keys(f.settings)) if (d.settings[k] === undefined) d.settings[k] = f.settings[k];
+    if (!Array.isArray(d.settings.sports) || d.settings.sports.length === 0) d.settings.sports = S.REAL_LEAGUES.slice();
+    d.bets = (d.bets || []).filter((bet) => !bet.friend);
+    // Server wallets don't store the daily bet-result ledger. Rebuild it from settled bets
+    // so previous-day results continue to determine today's screen-time balance after sync.
+    const settledNetByDay = {};
+    for (const bet of d.bets || []) {
+      if (bet.status === 'open') continue;
+      const day = bet.dayKey || (Number.isFinite(Number(bet.placedAt)) ? TO.dayKey(Number(bet.placedAt)) : null);
+      if (!day) continue;
+      settledNetByDay[day] = (settledNetByDay[day] || 0) + (Number(bet.payout || 0) - Number(bet.stake || 0));
+    }
+    Object.assign(d.wallet.netByDay, settledNetByDay);
     if (!d.settings.lockedApps.length) d.settings.enforce = false; // nothing to block, so limits can't be on
+    delete d.challengesIn;
+    if (d.settings.notify) delete d.settings.notify.challenges;
     return d;
   }
 
@@ -2206,7 +2072,7 @@ window.TO = window.TO || {};
       overridesUsed: w.overridesByDay[day] || 0,
       used, phoneLeft: Math.max(todayLimit - used, 0),
       appsLocked: TO.data.settings.enforce && used >= todayLimit,
-      atRisk: open.filter((b) => !b.friend).reduce((s, b) => s + b.stake, 0),
+      atRisk: open.reduce((s, b) => s + b.stake, 0),
       openCount: open.length,
       tier: t, points: lockPoints(),
       streak: w.streakDays, multiplier: streakMultiplier(w.streakDays),
@@ -2220,9 +2086,10 @@ window.TO = window.TO || {};
     const w = W(), day = today();
     if (w.bonusDay !== day) { w.bonusDay = day; w.bonusGranted = 0; }
     const owed = tier().bonus - w.bonusGranted;
-    if (owed > 0 && !w.lockedOut) {
+    if (owed > 0) {
       w.balance += owed;
       w.bonusGranted = tier().bonus;
+      if (w.balance > 0) w.lockedOut = false;
     }
   }
 
@@ -2231,7 +2098,7 @@ window.TO = window.TO || {};
     const w = W();
     const target = TO.dayKey(now);
     if (w.dayKey === target) return false;
-    if (w.dayKey > target) { w.dayKey = target; return false; } // clock moved back (tester reset)
+    if (w.dayKey > target) { w.dayKey = target; return false; } // The local date moved backward.
     let guard = 0;
     while (w.dayKey < target && guard++ < 400) {
       const day = w.dayKey;
@@ -2309,6 +2176,12 @@ window.TO = window.TO || {};
       return { selId: sel.id, kind: 'pred', predId: sel.predId, market: 'pred', side: sel.side, line: null, price: sel.price,
         label: S.selectionLabel(sel), marketLabel: 'Prediction', matchup: p.q, league: 'pred', start: p.resolves, result: 'pending', final: null };
     }
+    if (sel.kind === 'race' || sel.market === 'race') {
+      const race = TO.races.get(sel.raceId);
+      const horse = TO.races.horse(sel.horseId || sel.side);
+      return { selId: sel.id, kind: 'race', raceId: sel.raceId, horseId: horse.id, market: 'race', side: String(horse.id), price: sel.price,
+        label: horse.name, marketLabel: 'Race winner', matchup: `Virtual Race #${race.number}`, league: 'race', start: race.startedAt || now, result: 'pending', final: null };
+    }
     const g = S.game(sel.gameId, now);
     return { selId: sel.id, kind: 'game', gameId: sel.gameId, market: sel.market, side: sel.side, line: sel.line, price: sel.price,
       label: S.selectionLabel(sel, g), marketLabel: S.marketLabel(sel, g), matchup: `${g.away.name} @ ${g.home.name}`,
@@ -2321,7 +2194,7 @@ window.TO = window.TO || {};
   };
 
   /** Places a bet from bet-slip picks. Each pick carries the price the user accepted. */
-  function placeBet({ picks, stake, friend, boost, insure }, now = TO.now()) {
+  function placeBet({ picks, stake, boost, insure }, now = TO.now()) {
     rollover(now);
     const w = W();
     if (!picks.length) throw new AppError('empty', 'Add a pick to your bet slip.');
@@ -2335,47 +2208,38 @@ window.TO = window.TO || {};
       return legFromSelection(cur.sel, now);
     });
     if (changed.length) throw new AppError('odds_changed', 'The odds changed. Review the new odds and confirm again.', { changed });
-
-    const isFriend = !!friend;
-    if (isFriend) {
-      const terms = String(friend.terms || '').trim();
-      if (!friend.with || !friend.with.length) throw new AppError('no_friend', 'Choose a friend to send this bet to.');
-      if (!terms) throw new AppError('no_terms', 'Add what\'s on the line, like "loser does the dishes".');
-      if (terms.length > RULES.friendLimit) throw new AppError('terms_long', `Keep it to ${RULES.friendLimit} characters.`);
-    } else {
-      if (w.lockedOut || w.balance <= 0) throw new AppError('locked', 'You\'re out of betting minutes for today. Betting reopens at midnight.');
-      if (!Number.isInteger(stake) || stake < 1) throw new AppError('stake', 'Enter a stake of at least 1 minute.');
-      if (stake > w.balance) throw new AppError('not_enough', `Not enough screentime. You have ${w.balance} min left to bet today.`, { remaining: w.balance });
+    if (legs.some((leg) => leg.kind === 'race') && legs.length !== 1) {
+      throw new AppError('race_single', 'Virtual race picks can only be placed as a single bet.');
     }
+
+    if (w.lockedOut || w.balance <= 0) throw new AppError('locked', 'You\'re out of betting minutes for today. Betting reopens at midnight.');
+    if (!Number.isInteger(stake) || stake < 1) throw new AppError('stake', 'Enter a stake of at least 1 minute.');
+    if (stake > w.balance) throw new AppError('not_enough', `Not enough screentime. You have ${w.balance} min left to bet today.`, { remaining: w.balance });
 
     const wl = wallet();
     const { decimal, american } = combine(legs);
     const bet = {
-      id: TO.uid('bet'), kind: 'sports', placedAt: now, dayKey: w.dayKey,
-      stake: isFriend ? 0 : stake, legs, decimal, american,
-      friend: isFriend ? { with: friend.with.slice(), terms: String(friend.terms).trim(), status: 'pending', acceptAt: now + 5000, direction: 'out' } : null,
+      id: TO.uid('bet'), kind: legs[0].kind === 'race' ? 'race' : 'sports', placedAt: now, dayKey: w.dayKey,
+      stake, legs, decimal, american,
       boosted: false, insured: false, multiplier: 1, status: 'open', payout: 0, settledAt: null,
     };
-    if (!isFriend) {
-      let mult = wl.multiplier;
-      if (boost && wl.boostsLeft > 0) {
-        bet.boosted = true;
-        mult *= 1 + RULES.boostPercent;
-        w.boostsByDay[w.dayKey] = (w.boostsByDay[w.dayKey] || 0) + 1;
-      }
-      if (insure && legs.length > 1 && wl.insuranceLeft > 0) {
-        bet.insured = true;
-        const wk = TO.weekKey(now);
-        w.insuranceByWeek[wk] = (w.insuranceByWeek[wk] || 0) + 1;
-      }
-      bet.multiplier = +mult.toFixed(4);
-      w.balance -= stake;
-      TO.data.lastStake = stake;
-      if (w.balance <= 0) { w.balance = 0; w.lockedOut = true; }
-    } else {
-      deliverChallenges(bet);
+    let mult = wl.multiplier;
+    if (boost && wl.boostsLeft > 0) {
+      bet.boosted = true;
+      mult *= 1 + RULES.boostPercent;
+      w.boostsByDay[w.dayKey] = (w.boostsByDay[w.dayKey] || 0) + 1;
     }
+    if (insure && legs.length > 1 && wl.insuranceLeft > 0) {
+      bet.insured = true;
+      const wk = TO.weekKey(now);
+      w.insuranceByWeek[wk] = (w.insuranceByWeek[wk] || 0) + 1;
+    }
+    bet.multiplier = +mult.toFixed(4);
+    w.balance -= stake;
+    TO.data.lastStake = stake;
+    if (w.balance <= 0) { w.balance = 0; w.lockedOut = true; }
     TO.data.bets.push(bet);
+    if (bet.kind === 'race') TO.races.startForBet(bet, now);
     save();
     return bet;
   }
@@ -2396,7 +2260,7 @@ window.TO = window.TO || {};
       label: t.text, marketLabel: `To-do · ${t.difficulty}`, matchup: 'Finish before midnight', result: 'pending', final: null }));
     const { decimal, american } = combine(legs);
     const bet = { id: TO.uid('bet'), kind: 'todo', placedAt: now, dayKey: w.dayKey, deadline: TO.nextMidnight(now), stake, legs, decimal, american,
-      friend: null, boosted: false, insured: false, multiplier: wallet().multiplier, status: 'open', payout: 0, settledAt: null };
+      boosted: false, insured: false, multiplier: wallet().multiplier, status: 'open', payout: 0, settledAt: null };
     w.balance -= stake;
     if (w.balance <= 0) { w.balance = 0; w.lockedOut = true; }
     TO.data.bets.push(bet);
@@ -2446,15 +2310,13 @@ window.TO = window.TO || {};
     const res = outcome(bet);
     if (res.status === 'open') return null;
     bet.status = res.status;
-    bet.payout = bet.friend ? 0 : res.payout;
+    bet.payout = res.payout;
     bet.insurancePaid = !!res.insurancePaid;
     bet.settledAt = now;
-    if (!bet.friend) {
-      const w = W();
-      w.netByDay[bet.dayKey] = (w.netByDay[bet.dayKey] || 0) + (bet.payout - bet.stake);
-      // Winnings and refunds return to today's betting balance if the bet was placed today.
-      if (bet.dayKey === w.dayKey) w.balance += bet.payout;
-    }
+    const w = W();
+    w.netByDay[bet.dayKey] = (w.netByDay[bet.dayKey] || 0) + (bet.payout - bet.stake);
+    // Voids and pushes return the stake; wins and losses only affect the next day's limit.
+    if (bet.dayKey === w.dayKey && (bet.status === 'void' || bet.status === 'push')) w.balance += bet.payout;
     return bet;
   }
 
@@ -2473,6 +2335,9 @@ window.TO = window.TO || {};
         if (leg.kind === 'pred') {
           const p = S.prediction(leg.predId, now);
           leg.final = `Resolved ${p.outcome === 'yes' ? 'YES' : 'NO'}`;
+        } else if (leg.kind === 'race') {
+          const race = TO.races.get(leg.raceId);
+          leg.final = race && race.winnerId ? `Winner: ${TO.races.horse(race.winnerId).name}` : 'Race finished';
         } else {
           const g = S.game(leg.gameId, now);
           leg.final = g.state === 'postponed' ? 'Postponed' : `${g.away.abbr} ${g.awayScore} – ${g.home.abbr} ${g.homeScore}${g.ot ? ` (${g.ot.label === '10' ? '10 inn' : 'OT'})` : ''}`;
@@ -2487,15 +2352,13 @@ window.TO = window.TO || {};
   // ---------- Record / stats ----------
   function statsFor(bets) {
     const settled = bets.filter((b) => b.status !== 'open');
-    const money = settled.filter((b) => !b.friend);
-    const won = money.filter((b) => b.status === 'won');
-    const lost = money.filter((b) => b.status === 'lost');
-    const voids = money.filter((b) => b.status === 'void' || b.status === 'push');
-    const net = money.reduce((s, b) => s + (b.payout - b.stake), 0);
-    const friendBets = settled.filter((b) => b.friend);
+    const won = settled.filter((b) => b.status === 'won');
+    const lost = settled.filter((b) => b.status === 'lost');
+    const voids = settled.filter((b) => b.status === 'void' || b.status === 'push');
+    const net = settled.reduce((s, b) => s + (b.payout - b.stake), 0);
     const bySport = {};
-    for (const b of money) {
-      const key = b.kind === 'todo' ? 'todo' : b.legs.length > 1 ? 'parlay' : b.legs[0].league;
+    for (const b of settled) {
+      const key = b.kind === 'todo' ? 'todo' : b.kind === 'race' ? 'race' : b.legs.length > 1 ? 'parlay' : b.legs[0].league;
       bySport[key] = bySport[key] || { w: 0, l: 0, net: 0 };
       if (b.status === 'won') bySport[key].w++;
       if (b.status === 'lost') bySport[key].l++;
@@ -2505,10 +2368,8 @@ window.TO = window.TO || {};
       w: won.length, l: lost.length, v: voids.length, net,
       pct: won.length + lost.length ? Math.round((100 * won.length) / (won.length + lost.length)) : null,
       best: won.reduce((m, b) => Math.max(m, b.payout - b.stake), 0),
-      fw: friendBets.filter((b) => b.status === 'won').length,
-      fl: friendBets.filter((b) => b.status === 'lost').length,
       bySport,
-      recent: settled.filter((b) => !b.friend && (b.status === 'won' || b.status === 'lost')).sort((a, b) => b.settledAt - a.settledAt).slice(0, 5).map((b) => (b.status === 'won' ? 'W' : 'L')),
+      recent: settled.filter((b) => b.status === 'won' || b.status === 'lost').sort((a, b) => b.settledAt - a.settledAt).slice(0, 5).map((b) => (b.status === 'won' ? 'W' : 'L')),
     };
   }
   const myStats = () => statsFor(TO.data.bets);
@@ -2522,7 +2383,7 @@ window.TO = window.TO || {};
     const d = acc.id === (TO.account && TO.account.id) ? TO.data : migrate(TO.store.get(dataKey(acc.id), null) || freshData(TO.now()));
     const st = statsFor(d.bets);
     return { username: acc.username, name: acc.username, photo: acc.photo, w: st.w, l: st.l, net: st.net, tier: tier(d).id, streak: d.wallet.streakDays,
-      share: d.settings.privacy, local: true, accountId: acc.id, openBets: d.bets.filter((b) => b.status === 'open' && !b.friend) };
+      share: d.settings.privacy, local: true, accountId: acc.id, openBets: d.bets.filter((b) => b.status === 'open') };
   }
 
   /** Open picks a friend has shared (fake friends pick from the live board). */
@@ -2626,99 +2487,7 @@ window.TO = window.TO || {};
     save();
   }
 
-  // ---------- Challenges (friend bets) ----------
-  /** When I send a friend bet to a real local account, it shows up in their Requests with the other side. */
-  function deliverChallenges(bet) {
-    for (const u of bet.friend.with) {
-      const acc = findAccountByUsername(u);
-      if (!acc) continue;
-      bet.friend.acceptAt = null; // real people accept themselves
-      const leg = bet.legs[0];
-      mutateData(acc.id, (d) => {
-        d.challengesIn.push({ id: TO.uid('ch'), from: TO.account.username, betId: bet.id, fromAccount: TO.account.id, theirPick: bet.legs.map((l) => l.label).join(' + '),
-          matchup: bet.legs.length > 1 ? `${bet.legs.length}-pick parlay` : leg.matchup, legs: bet.legs.map((l) => ({ selId: l.selId, price: l.price, line: l.line, market: l.market, side: l.side, gameId: l.gameId, predId: l.predId, kind: l.kind })),
-          terms: bet.friend.terms, at: bet.placedAt, status: 'pending' });
-      });
-    }
-  }
-
-  function incomingChallenge(from, now = TO.now()) {
-    const games = S.board(now).filter((g) => g.state === 'scheduled' && !g.simulated && g.start - now > 3 * MIN);
-    const g = games[Math.floor(Math.random() * games.length)] || S.board(now).find((x) => x.state === 'scheduled');
-    if (!g) return null;
-    const o = S.odds(g.id, now);
-    const theirs = Math.random() < 0.5 ? o.moneyline.find((s) => s.side === 'home') : o.spread[0] || o.moneyline[0];
-    const terms = TERMS_EXAMPLES[Math.floor(Math.random() * TERMS_EXAMPLES.length)];
-    const ch = { id: TO.uid('ch'), from, theirPick: S.selectionLabel(theirs, g), matchup: `${g.away.name} @ ${g.home.name}`,
-      legs: [{ selId: theirs.id, price: theirs.price, line: theirs.line, market: theirs.market, side: theirs.side, gameId: g.id, kind: 'game' }], terms, at: now, status: 'pending' };
-    TO.data.challengesIn.push(ch);
-    save();
-    return ch;
-  }
-
-  /** Accepting takes the other side of every pick in the challenge. */
-  function acceptChallenge(id, now = TO.now()) {
-    const d = TO.data;
-    const ch = d.challengesIn.find((c) => c.id === id);
-    if (!ch) return null;
-    const legs = [];
-    for (const l of ch.legs) {
-      const opp = S.oppositeSelection({ id: l.selId, market: l.market, side: l.side, line: l.line, gameId: l.gameId, predId: l.predId, kind: l.kind });
-      const cur = S.currentSelection(opp.id, now);
-      if (!cur || !cur.sel || !cur.open) {
-        ch.status = 'expired';
-        save();
-        throw new AppError('closed', 'This game has already started or ended, so the challenge expired.');
-      }
-      // Keep the friend's line so both sides are betting on the same number.
-      legs.push(legFromSelection(Object.assign({}, cur.sel, { line: opp.line }), now));
-    }
-    const { decimal, american } = combine(legs);
-    const bet = { id: TO.uid('bet'), kind: 'sports', placedAt: now, dayKey: W().dayKey, stake: 0, legs, decimal, american,
-      friend: { with: [ch.from], terms: ch.terms, status: 'accepted', direction: 'in' }, boosted: false, insured: false, multiplier: 1, status: 'open', payout: 0, settledAt: null };
-    d.bets.push(bet);
-    d.challengesIn = d.challengesIn.filter((c) => c.id !== id);
-    if (ch.fromAccount) {
-      mutateData(ch.fromAccount, (o) => {
-        const b = o.bets.find((x) => x.id === ch.betId);
-        if (b && b.friend) b.friend.status = 'accepted';
-      });
-    }
-    save();
-    return bet;
-  }
-
-  function declineChallenge(id) {
-    const ch = TO.data.challengesIn.find((c) => c.id === id);
-    TO.data.challengesIn = TO.data.challengesIn.filter((c) => c.id !== id);
-    if (ch && ch.fromAccount) {
-      mutateData(ch.fromAccount, (o) => {
-        const b = o.bets.find((x) => x.id === ch.betId);
-        if (b && b.friend) b.friend.status = 'declined';
-      });
-    }
-    save();
-  }
-
-  /** Resends an existing pick to friends with a custom stake instead of minutes. */
-  function sendBetToFriends(betId, friends, terms, now = TO.now()) {
-    const src = TO.data.bets.find((b) => b.id === betId);
-    if (!src) return null;
-    terms = String(terms || '').trim();
-    if (!friends.length) throw new AppError('no_friend', 'Choose at least one friend.');
-    if (!terms) throw new AppError('no_terms', 'Add what\'s on the line, like "loser does the dishes".');
-    if (terms.length > RULES.friendLimit) throw new AppError('terms_long', `Keep it to ${RULES.friendLimit} characters.`);
-    if (src.status !== 'open') throw new AppError('closed', 'This bet is already settled. Send an open bet instead.');
-    const bet = JSON.parse(JSON.stringify(src));
-    Object.assign(bet, { id: TO.uid('bet'), placedAt: now, stake: 0, payout: 0, boosted: false, insured: false, multiplier: 1,
-      friend: { with: friends.slice(), terms, status: 'pending', acceptAt: now + 5000, direction: 'out' } });
-    deliverChallenges(bet);
-    TO.data.bets.push(bet);
-    save();
-    return bet;
-  }
-
-  /** Background social events: fake friends accept requests and challenges after a few seconds. */
+  /** Background social events: fake friends accept requests after a few seconds. */
   function socialTick(now = TO.now()) {
     const d = TO.data;
     const events = [];
@@ -2728,18 +2497,6 @@ window.TO = window.TO || {};
         if (!d.friends.includes(r.to)) d.friends.push(r.to);
         events.push({ type: 'friend', username: r.to });
       }
-    }
-    for (const b of d.bets) {
-      if (b.friend && b.friend.status === 'pending' && b.friend.acceptAt && now >= b.friend.acceptAt) {
-        b.friend.status = 'accepted';
-        events.push({ type: 'challenge', bet: b });
-      }
-    }
-    // Expire challenges whose games already started.
-    for (const c of d.challengesIn) {
-      if (c.status !== 'pending') continue;
-      const open = c.legs.every((l) => { const cur = S.currentSelection(l.selId, now); return cur && cur.open; });
-      if (!open) c.status = 'expired';
     }
     if (events.length) save();
     return events;
@@ -2762,7 +2519,7 @@ window.TO = window.TO || {};
       if (!p || p.local) {
         const bets = p ? migrate(TO.store.get(dataKey(p.accountId), null) || freshData(now)).bets : TO.data.bets;
         for (const b of bets) {
-          if (b.friend || b.status === 'open' || b.placedAt < start || b.placedAt >= end) continue;
+          if (b.status === 'open' || b.placedAt < start || b.placedAt >= end) continue;
           net += b.payout - b.stake;
           if (b.status === 'won') w++;
           if (b.status === 'lost') l++;
@@ -2869,20 +2626,13 @@ window.TO = window.TO || {};
         if (!legs.length) continue;
         const stake = 5 + Math.floor(rand() * 3) * 5;
         const { decimal, american } = combine(legs);
-        const bet = { id: TO.uid('bet'), kind: 'sports', placedAt, dayKey: dk, stake, legs, decimal, american, friend: null,
+        const bet = { id: TO.uid('bet'), kind: 'sports', placedAt, dayKey: dk, stake, legs, decimal, american,
           boosted: false, insured: false, multiplier: 1, status: 'open', payout: 0, settledAt: null };
         const res = outcome(bet);
         bet.status = res.status; bet.payout = res.payout; bet.settledAt = Math.max(...legs.map((l) => (S.game(l.gameId, now) || {}).end || placedAt));
         w.netByDay[dk] = (w.netByDay[dk] || 0) + (bet.payout - bet.stake);
         d.bets.push(bet);
       }
-    }
-    // One settled friend bet so the history shows both kinds.
-    const fb = d.bets.find((b) => b.legs.length === 1 && b.status === 'won') || d.bets[0];
-    if (fb) {
-      const copy = JSON.parse(JSON.stringify(fb));
-      Object.assign(copy, { id: TO.uid('bet'), stake: 0, payout: 0, friend: { with: ['mike_t'], terms: 'Loser buys Cafe Rio', status: 'accepted', direction: 'out' } });
-      d.bets.push(copy);
     }
     w.streakDays = 4;
     w.usageByDay[day] = 22;
@@ -2906,20 +2656,12 @@ window.TO = window.TO || {};
       const sel = mk(live[1], (o) => o.total[1]);
       pushOpen(d, [legFromSelection(sel, now)], 5, now - MIN);
     }
-    // A pending challenge from a friend.
-    const chGame = upcoming[2] || upcoming[0];
-    if (chGame) {
-      const o = S.odds(chGame.id, now);
-      const theirs = o.moneyline.find((s) => s.side === 'home');
-      d.challengesIn.push({ id: TO.uid('ch'), from: 'mike_t', theirPick: S.selectionLabel(theirs, chGame), matchup: `${chGame.away.name} @ ${chGame.home.name}`,
-        legs: [{ selId: theirs.id, price: theirs.price, line: null, market: 'ml', side: 'home', gameId: chGame.id, kind: 'game' }], terms: 'Loser does the dishes tonight', at: now - 10 * MIN, status: 'pending' });
-    }
     return d;
   }
 
   function pushOpen(d, legs, stake, placedAt) {
     const { decimal, american } = combine(legs);
-    d.bets.push({ id: TO.uid('bet'), kind: 'sports', placedAt, dayKey: d.wallet.dayKey, stake, legs, decimal, american, friend: null,
+    d.bets.push({ id: TO.uid('bet'), kind: 'sports', placedAt, dayKey: d.wallet.dayKey, stake, legs, decimal, american,
       boosted: false, insured: false, multiplier: streakMultiplier(d.wallet.streakDays), status: 'open', payout: 0, settledAt: null });
     d.wallet.balance -= stake;
   }
@@ -2958,7 +2700,7 @@ window.TO = window.TO || {};
   }
 
   TO.state = {
-    RULES, TIERS, LOCKABLE, PEOPLE, TERMS_EXAMPLES, DEMO, TODO_ODDS,
+    RULES, TIERS, LOCKABLE, PEOPLE, DEMO, TODO_ODDS,
     tierById, tierForPoints, tierPerks, streakMultiplier, nextStreakMilestone, fmtMult,
     accounts, findAccount, createAccount, login, logout, loadSession, startSession, updateAccount, deleteAccount, adoptServerUser,
     validateUsername, validateEmail, validatePassword,
@@ -2966,7 +2708,7 @@ window.TO = window.TO || {};
     placeBet, placeTodoParlay, completeTodo, settle, outcome, combine, legFromSelection,
     myStats, statsFor, person, sharedPicks, searchPeople, relation,
     sendFriendRequest, acceptFriendRequest, declineFriendRequest, cancelFriendRequest, resendFriendRequest, resendWait, removeFriend,
-    incomingChallenge, acceptChallenge, declineChallenge, sendBetToFriends, socialTick,
+    socialTick,
     teamStatus, teamStandings, createTeam, leaveTeam, inviteToTeam, leaderboard,
     ensureDemoAccount, loginDemo, resetMyData, seedDemoData,
   };
@@ -3208,9 +2950,9 @@ window.TO = window.TO || {};
   }
 
   function selectedGroup() { return cfbGroup; }
-  async function fetchLeague(league, group = '80', now = TO.now(), days = scoreboardDays(now)) {
+  async function fetchLeague(league, group = '80', now = TO.now(), dates = scoreboardDays(now)) {
     const [path] = LEAGUES[league];
-    const responses = await Promise.all(days.map(async (date) => {
+    const results = await Promise.allSettled(dates.map(async (date) => {
       const params = new URLSearchParams({ dates: date });
       if (league === 'ncaaf') {
         if (group !== 'all') params.set('groups', group);
@@ -3220,9 +2962,43 @@ window.TO = window.TO || {};
       if (!response.ok) throw new Error(`ESPN returned ${response.status}`);
       return response.json();
     }));
+    const payloads = results.filter((result) => result.status === 'fulfilled').map((result) => result.value);
+    if (!payloads.length) throw new Error(`All ESPN scoreboard requests failed for ${league}.`);
     const events = new Map();
-    responses.forEach((payload) => (payload.events || []).forEach((event) => events.set(event.id, event)));
+    payloads.forEach((payload) => (payload.events || []).forEach((event) => events.set(event.id, event)));
     return [...events.values()].map((event) => gameFrom(event, league, LEAGUES[league][1])).filter(Boolean);
+  }
+
+  // Keep old unresolved tickets gradeable after their games fall out of the current scoreboard cache.
+  async function loadOldBetGames(now) {
+    const wantedByGroup = new Map();
+    for (const bet of TO.data?.bets || []) {
+      if (bet.status !== 'open') continue;
+      for (const leg of bet.legs || []) {
+        if (leg.result !== 'pending' || !leg.gameId || !LEAGUES[leg.league] || byId(leg.gameId)) continue;
+        const day = TO.dayKey(bet.placedAt);
+        const key = `${leg.league}|${day}`;
+        if (!wantedByGroup.has(key)) wantedByGroup.set(key, { league: leg.league, day, ids: new Set() });
+        wantedByGroup.get(key).ids.add(String(leg.gameId));
+      }
+    }
+    const jobs = [...wantedByGroup.values()];
+    let loaded = false;
+    const results = await Promise.allSettled(jobs.map(({ league, day, ids }) =>
+      fetchLeague(league, cfbGroup, TO.dayStart(day) + 12 * TO.HOUR).then((games) => games.filter((game) =>
+        ids.has(String(game.id)) || ids.has(String(game.eventID)) || [...ids].some((id) => id.endsWith(`-${game.eventID}`))))));
+    results.forEach((result) => {
+      if (result.status !== 'fulfilled') return;
+      for (const game of result.value) {
+        game.odds = { moneyline: [], spread: [], total: [], all: [], suspended: true };
+        const games = cache.get(game.league) || [];
+        if (!games.some((item) => item.id === game.id)) {
+          cache.set(game.league, [...games, game]);
+          loaded = true;
+        }
+      }
+    });
+    return loaded;
   }
 
   async function resolveOddsItem(item) {
@@ -3321,17 +3097,19 @@ window.TO = window.TO || {};
     });
   }
 
-  async function refresh(now = TO.now()) {
+  async function refresh(now = TO.now(), force = false) {
     const requestedDay = localDayKey(now);
     if (loading) {
-      if (requestedDay !== loadingDayKey) refreshQueued = true;
+      if (force || requestedDay !== loadingDayKey) refreshQueued = true;
       return;
     }
-    if (requestedDay === updatedDayKey && now - updatedAt < 25000) return;
+    if (!force && requestedDay === updatedDayKey && now - updatedAt < 25000) return;
     loading = true;
     loadingDayKey = requestedDay;
     loadError = false;
-    const leagues = TO.data?.settings?.sports?.filter((key) => LEAGUES[key]) || Object.keys(LEAGUES);
+    TO.emit('live:updated');
+    const selectedLeagues = TO.data?.settings?.sports?.filter((key) => LEAGUES[key]) || [];
+    const leagues = selectedLeagues.length ? selectedLeagues : Object.keys(LEAGUES);
     const results = await Promise.allSettled(leagues.map((league) => fetchLeague(league, cfbGroup, now)));
     const completedAt = TO.now();
     if (localDayKey(completedAt) !== requestedDay) {
@@ -3352,8 +3130,13 @@ window.TO = window.TO || {};
       const fetched = league === 'ncaaf' && cfbGroup === '80'
         ? relevantGames.filter((game) => game.home.rank || game.away.rank)
         : relevantGames;
-      const keepRecentFinals = (cache.get(league) || []).filter((game) => game.state === 'final' && game.start >= dayStart - TO.DAY);
+      const previousGames = cache.get(league) || [];
+      const fetchedIds = new Set(fetched.map((game) => game.id));
+      const keepCurrentGames = previousGames.filter((game) => game.start >= dayStart && game.start < dayEnd
+        && ['scheduled', 'live'].includes(game.state) && !fetchedIds.has(game.id));
+      const keepRecentFinals = previousGames.filter((game) => game.state === 'final' && game.start >= dayStart - TO.DAY);
       const gamesById = new Map(keepRecentFinals.map((game) => [game.id, game]));
+      keepCurrentGames.forEach((game) => gamesById.set(game.id, game));
       fetched.forEach((game) => gamesById.set(game.id, game));
       const games = [...gamesById.values()];
       games.forEach((game) => { game.odds = makeOdds(game, now); });
@@ -3366,7 +3149,10 @@ window.TO = window.TO || {};
     loading = false;
     loadingDayKey = '';
     TO.emit('live:updated');
-    const todaysGames = [...cache.values()].flat();
+    loadOldBetGames(completedAt).then((loaded) => {
+      if (loaded) TO.emit('live:updated');
+    }).catch((error) => console.warn('Could not load scores for an old open bet:', error));
+    const todaysGames = [...cache.values()].flat().filter((game) => game.start >= dayStart - TO.DAY);
     loadOdds(todaysGames, completedAt);
     if (refreshQueued) {
       refreshQueued = false;
@@ -3510,9 +3296,50 @@ window.TIMEOUT_SUPABASE = {
   let lastSaveAt = 0;
   let lastSettingsSnapshot = '';
   let supportsAppPreferences = true;
+  let supportsTierBonusColumns = null;
+  let supportsTierPerkColumns = null;
   let lastSyncAlertAt = 0;
+  let lastOutOfMinutesAlertAt = 0;
+  let lastTierBonusMigrationAlertAt = 0;
+  let lastTierPerkMigrationAlertAt = 0;
   const placing = new Set();
   const settling = new Set();
+  const isPersistableGameLeg = (leg) => leg?.kind === 'game' || (leg?.kind === 'sports' && !!leg.gameId);
+
+  function isOutOfBettingMinutes(error) {
+    return /insufficient|not enough|out of (betting )?(minutes|balance)|betting minutes/i.test(String(error?.message || ''));
+  }
+  function isTierSystemRpcUnavailable(error) {
+    const message = String(error?.message || '');
+    return /timeout_place_bet_with_tiers/i.test(message) && /schema cache|function.*(not found|does not exist|could not find)/i.test(message);
+  }
+  function isTierPerkRpcUnavailable(error) {
+    const message = String(error?.message || '');
+    return /timeout_place_bet_with_perks/i.test(message) && /schema cache|function.*(not found|does not exist|could not find)/i.test(message);
+  }
+  function isTierPerkLimitError(error) {
+    return /no odds boosts left|no parlay insurance left/i.test(String(error?.message || ''));
+  }
+  function notifyOutOfBettingMinutes() {
+    if (Date.now() - lastOutOfMinutesAlertAt < 15000 || !TO.ui?.toast) return;
+    lastOutOfMinutesAlertAt = Date.now();
+    TO.ui.toast({ kind: 'loss', title: 'Out of betting minutes', msg: 'Betting reopens at midnight.' });
+  }
+  function notifyTierBonusMigrationRequired() {
+    if (Date.now() - lastTierBonusMigrationAlertAt < 15000 || !TO.ui?.toast) return;
+    lastTierBonusMigrationAlertAt = Date.now();
+    TO.ui.toast({ kind: 'loss', title: 'Tier setup needed in Supabase', msg: 'This parlay was not saved. Run the tier system migration in Supabase SQL Editor, then reload the app.' });
+  }
+  function notifyTierPerkMigrationRequired() {
+    if (Date.now() - lastTierPerkMigrationAlertAt < 15000 || !TO.ui?.toast) return;
+    lastTierPerkMigrationAlertAt = Date.now();
+    TO.ui.toast({ kind: 'loss', title: 'Tier perks need Supabase setup', msg: 'This bet was not saved with its boost or insurance. Run the updated tier system migration, then reload the app.' });
+  }
+  function notifyTierPerkAlreadyUsed() {
+    if (Date.now() - lastTierPerkMigrationAlertAt < 15000 || !TO.ui?.toast) return;
+    lastTierPerkMigrationAlertAt = Date.now();
+    TO.ui.toast({ kind: 'warn', title: 'Tier perk already used', msg: 'This boost or insurance was already used on another device.' });
+  }
 
   const config = window.TIMEOUT_SUPABASE || {};
   api.configured = !!(config.url && config.publishableKey);
@@ -3576,7 +3403,7 @@ window.TIMEOUT_SUPABASE = {
     return api.configured;
   };
 
-  /** Where the confirmation email sends people back to: the page they signed up on (phone or computer view).
+  /** Where the confirmation email sends people back to: the app or browser page they signed up on.
    *  Supabase only allows it if it matches a Redirect URL in Authentication > URL Configuration. */
   const returnUrl = () => `${location.origin}${location.pathname}`;
 
@@ -3639,10 +3466,25 @@ window.TIMEOUT_SUPABASE = {
     const id = tokenUserId();
     if (!id) return null;
     const safeId = encodeURIComponent(id);
+    let hasTierBonusColumns = true;
+    let hasTierPerkColumns = true;
+    const baseWalletFields = `balance_minutes,current_day,is_locked,streak`;
+    const bonusWalletFields = `${baseWalletFields},tier_bonus_day,tier_bonus_minutes`;
+    const walletRequest = rest(`wallets?select=${bonusWalletFields},tier_boosts_by_day,tier_insurance_by_week&user_id=eq.${safeId}&limit=1`).catch((error) => {
+      if (!/tier_boosts_by_day|tier_insurance_by_week|column .*does not exist/i.test(error.message || '')) throw error;
+      hasTierPerkColumns = false;
+      return rest(`wallets?select=${bonusWalletFields}&user_id=eq.${safeId}&limit=1`).catch((bonusError) => {
+        if (!/tier_bonus_day|tier_bonus_minutes|column .*does not exist/i.test(bonusError.message || '')) throw bonusError;
+        hasTierBonusColumns = false;
+        return rest(`wallets?select=${baseWalletFields}&user_id=eq.${safeId}&limit=1`);
+      });
+    });
     const [betRows, walletRows] = await Promise.all([
       rest(`bets?select=*,bet_legs(*)&user_id=eq.${safeId}&order=placed_at.desc`),
-      rest(`wallets?select=balance_minutes,current_day,is_locked,streak&user_id=eq.${safeId}&limit=1`),
+      walletRequest,
     ]);
+    supportsTierBonusColumns = hasTierBonusColumns;
+    supportsTierPerkColumns = hasTierPerkColumns;
     let settingsRows;
     try {
       settingsRows = await rest(`user_settings?select=followed_sports,timezone,notifications_enabled,app_preferences&user_id=eq.${safeId}&limit=1`);
@@ -3661,17 +3503,35 @@ window.TIMEOUT_SUPABASE = {
         marketLabel: leg.market, matchup: leg.matchup, result: result[leg.result] || 'pending', final: null,
       }));
       const decimal = Number(row.combined_odds);
-      return { id: `supabase-${row.id}`, supabaseId: row.id, kind: 'sports', placedAt: Date.parse(row.placed_at), dayKey: row.placed_at.slice(0, 10),
-        stake: Number(row.stake_minutes), legs, decimal, american: TO.odds.fromDecimal(decimal), friend: null, boosted: false, insured: false,
-        multiplier: 1, status: status[row.status] || 'open', payout: Number(row.actual_payout_minutes || 0), potentialPayout: Number(row.potential_payout_minutes || 0),
+      const placedAt = Date.parse(row.placed_at);
+      return { id: `supabase-${row.id}`, supabaseId: row.id, kind: 'sports', placedAt, dayKey: TO.dayKey(placedAt),
+        stake: Number(row.stake_minutes), legs, decimal, american: TO.odds.fromDecimal(decimal), boosted: !!row.boosted, insured: !!row.insured,
+        multiplier: Number(row.multiplier || 1), status: status[row.status] || 'open', payout: Number(row.actual_payout_minutes || 0), potentialPayout: Number(row.potential_payout_minutes || 0),
         settledAt: row.settled_at ? Date.parse(row.settled_at) : null, supabaseSynced: row.status !== 'pending' };
     });
     const wallet = walletRows[0];
     const settings = settingsRows[0];
+    const walletState = wallet ? { balance: Number(wallet.balance_minutes), dayKey: wallet.current_day, lockedOut: !!wallet.is_locked, streakDays: Number(wallet.streak || 0) } : null;
+    if (walletState && hasTierBonusColumns) {
+      walletState.bonusDay = wallet.tier_bonus_day;
+      walletState.bonusGranted = Number(wallet.tier_bonus_minutes || 0);
+    }
+    if (walletState && hasTierPerkColumns) {
+      walletState.boostsByDay = wallet.tier_boosts_by_day || {};
+      walletState.insuranceByWeek = wallet.tier_insurance_by_week || {};
+    }
+    const appPreferences = settings?.app_preferences || {};
+    const storedSports = [
+      ...(Array.isArray(settings?.followed_sports) ? settings.followed_sports : []),
+      ...(Array.isArray(appPreferences.sports) ? appPreferences.sports : []),
+    ];
+    const followedSports = [...new Set(storedSports.filter((league) => TO.sim.REAL_LEAGUES.includes(league)))];
+    const remotePreferences = { ...appPreferences };
+    if (followedSports.length) remotePreferences.sports = followedSports;
     return {
       bets,
-      ...(wallet ? { wallet: { balance: Number(wallet.balance_minutes), dayKey: wallet.current_day, lockedOut: !!wallet.is_locked, streakDays: Number(wallet.streak || 0) } } : {}),
-      ...(settings ? { settings: { ...(settings.app_preferences || {}), sports: settings.followed_sports || [] }, appPreferencesReady: supportsAppPreferences } : {}),
+      ...(walletState ? { wallet: walletState } : {}),
+      ...(settings ? { settings: remotePreferences, appPreferencesReady: supportsAppPreferences } : {}),
     };
   };
   api.queueStateSave = (data) => {
@@ -3680,6 +3540,10 @@ window.TIMEOUT_SUPABASE = {
     if (!saveTimer) saveTimer = setTimeout(() => {
       saveTimer = null;
       api.flushState().catch((e) => {
+        if (e.outOfBettingMinutes || isOutOfBettingMinutes(e)) {
+          notifyOutOfBettingMinutes();
+          return;
+        }
         console.warn('Could not sync TimeOut data to Supabase:', e.message);
         if (Date.now() - lastSyncAlertAt > 15000 && TO.ui?.toast) {
           lastSyncAlertAt = Date.now();
@@ -3704,16 +3568,70 @@ window.TIMEOUT_SUPABASE = {
         lastSettingsSnapshot = settingsSnapshot;
       }
       for (const bet of data.bets || []) {
-        if (bet.kind !== 'sports' || bet.friend || !Number(bet.stake) || !bet.legs?.length || bet.legs.some((leg) => leg.kind !== 'game' || !leg.gameId)) continue;
+        if (bet.kind !== 'sports' || !Number(bet.stake) || !bet.legs?.length || bet.legs.some((leg) => !isPersistableGameLeg(leg) || !leg.gameId)) continue;
         if (!bet.supabaseId && !placing.has(bet.id)) {
           placing.add(bet.id);
           try {
-            const payout = Number(bet.payout) > 0 ? Number(bet.payout) : Math.max(0, Math.round(Number(bet.stake) * Number(bet.decimal) * Number(bet.multiplier || 1)));
-            const saved = await rest('rpc/timeout_place_bet', { method: 'POST', body: JSON.stringify({
+            const payout = Number(bet.payout) > 0 ? Number(bet.payout) : Math.max(0,
+              Number(bet.stake) + Math.round((Math.round(Number(bet.stake) * Number(bet.decimal)) - Number(bet.stake)) * Number(bet.multiplier || 1)));
+            const bonusToday = data.wallet?.bonusDay === (data.wallet?.dayKey || bet.dayKey) ? Number(data.wallet?.bonusGranted || 0) : 0;
+            const betArgs = {
               p_stake_minutes: Number(bet.stake), p_combined_odds: Number(bet.decimal), p_potential_payout: payout,
               p_current_day: data.wallet?.dayKey || bet.dayKey,
+              p_use_boost: !!bet.boosted, p_use_insurance: !!bet.insured,
+              p_multiplier: Number(bet.multiplier || 1),
               p_legs: bet.legs.map((leg) => ({ espn_event_id: String(leg.gameId), league: leg.league || 'unknown', matchup: leg.matchup || '', market: leg.market || 'moneyline', side: leg.side || '', line: leg.line, accepted_odds: Number(leg.price) })),
-            }) });
+            };
+            const legacyBetArgs = {
+              p_stake_minutes: betArgs.p_stake_minutes, p_combined_odds: betArgs.p_combined_odds,
+              p_potential_payout: betArgs.p_potential_payout, p_current_day: betArgs.p_current_day, p_legs: betArgs.p_legs,
+            };
+            let saved;
+            try {
+              if ((bet.boosted || bet.insured) && supportsTierPerkColumns === false) {
+                const migrationError = new Error('The tier perk migration is not installed.');
+                migrationError.tierPerkMigrationMissing = true;
+                migrationError.failedBetId = bet.id;
+                throw migrationError;
+              }
+              saved = await rest('rpc/timeout_place_bet_with_perks', { method: 'POST', body: JSON.stringify(betArgs) });
+            } catch (error) {
+              if (error.tierPerkMigrationMissing) throw error;
+              if (isTierPerkRpcUnavailable(error)) {
+                if (bet.boosted || bet.insured) {
+                  error.tierPerkMigrationMissing = true;
+                  error.failedBetId = bet.id;
+                  throw error;
+                }
+                const fallbackRpc = bonusToday > 0 ? 'timeout_place_bet_with_tiers' : 'timeout_place_bet';
+                try {
+                  saved = await rest(`rpc/${fallbackRpc}`, { method: 'POST', body: JSON.stringify(legacyBetArgs) });
+                } catch (fallbackError) {
+                  if (isOutOfBettingMinutes(fallbackError)) {
+                    fallbackError.outOfBettingMinutes = true;
+                    if (supportsTierBonusColumns === false && bonusToday > 0) fallbackError.tierBonusMigrationMissing = true;
+                  }
+                  fallbackError.failedBetId = bet.id;
+                  throw fallbackError;
+                }
+              } else if (isTierSystemRpcUnavailable(error) && !(bet.boosted || bet.insured)) {
+                const fallbackRpc = 'timeout_place_bet';
+                try {
+                  saved = await rest(`rpc/${fallbackRpc}`, { method: 'POST', body: JSON.stringify(legacyBetArgs) });
+                } catch (fallbackError) {
+                  if (isOutOfBettingMinutes(fallbackError)) fallbackError.outOfBettingMinutes = true;
+                  if (isOutOfBettingMinutes(fallbackError) && supportsTierBonusColumns === false && bonusToday > 0) fallbackError.tierBonusMigrationMissing = true;
+                  fallbackError.failedBetId = bet.id;
+                  throw fallbackError;
+                }
+              } else {
+                if (isOutOfBettingMinutes(error)) error.outOfBettingMinutes = true;
+                if (isOutOfBettingMinutes(error) && supportsTierBonusColumns === false && bonusToday > 0) error.tierBonusMigrationMissing = true;
+                if (isTierPerkLimitError(error)) error.tierPerkExhausted = true;
+                error.failedBetId = bet.id;
+                throw error;
+              }
+            }
             const betId = typeof saved === 'string' ? saved : saved.id;
             if (!betId) throw new Error('Supabase did not return the saved bet ID.');
             bet.supabaseId = betId;
@@ -3738,7 +3656,34 @@ window.TIMEOUT_SUPABASE = {
       }
       lastSaveAt = Date.now();
       api.syncError = null;
-    } catch (e) { pendingState = data; throw e; }
+    } catch (e) {
+      if (e.outOfBettingMinutes || e.tierBonusMigrationMissing || e.tierPerkMigrationMissing || e.tierPerkExhausted) {
+        const rejectedId = e.failedBetId;
+        const rejected = (data.bets || []).find((bet) => bet.id === rejectedId);
+        pendingState = null;
+        data.bets = (data.bets || []).filter((bet) => bet.id !== rejectedId);
+        if (rejected && data.wallet) {
+          data.wallet.balance = Math.max(0, Number(data.wallet.balance || 0) + Number(rejected.stake || 0));
+          data.wallet.lockedOut = data.wallet.balance <= 0;
+        }
+        if (TO.data) {
+          TO.data.bets = TO.data.bets.filter((bet) => bet.id !== rejectedId);
+          if (rejected && TO.data.wallet) {
+            TO.data.wallet.balance = Math.max(0, Number(TO.data.wallet.balance || 0) + Number(rejected.stake || 0));
+            TO.data.wallet.lockedOut = TO.data.wallet.balance <= 0;
+          }
+          if (TO.account) TO.store.set(`timeout.data.${TO.account.id}`, TO.data);
+        }
+        if (e.tierPerkMigrationMissing) notifyTierPerkMigrationRequired();
+        else if (e.tierPerkExhausted) notifyTierPerkAlreadyUsed();
+        else if (e.tierBonusMigrationMissing) notifyTierBonusMigrationRequired();
+        else notifyOutOfBettingMinutes();
+        TO.app?.render?.();
+        return;
+      }
+      pendingState = data;
+      throw e;
+    }
   };
   api.updateProfile = async (patch) => {
     await ensureFreshSession();
@@ -4011,10 +3956,7 @@ window.TIMEOUT_SUPABASE = {
   const slip = (TO.slip = {
     legs: [],
     parlayMode: false, // picks stack up only in parlay mode; otherwise a new pick replaces the old one
-    mode: 'minutes',
     stake: null,
-    friends: [],
-    terms: '',
     boost: false,
     insure: false,
     error: null,
@@ -4022,11 +3964,11 @@ window.TIMEOUT_SUPABASE = {
     notifiedChange: '',
     has(id) { return this.legs.some((l) => l.selId === id); },
     clear() {
-      Object.assign(this, { legs: [], parlayMode: false, mode: 'minutes', stake: null, friends: [], terms: '', boost: false, insure: false, error: null, capped: false, notifiedChange: '' });
+      Object.assign(this, { legs: [], parlayMode: false, stake: null, boost: false, insure: false, error: null, capped: false, notifiedChange: '' });
     },
   });
 
-  const refOf = (sel) => sel.gameId || sel.predId;
+  const refOf = (sel) => sel.gameId || sel.predId || sel.raceId;
 
   /** Tap on an odds button. Outside parlay mode the pick replaces whatever is on the slip and opens it;
    *  in parlay mode (Build parlay on Home, or Add another pick) it's added, or swapped for a second pick on the same game. */
@@ -4039,6 +3981,11 @@ window.TIMEOUT_SUPABASE = {
     const cur = S.currentSelection(selId);
     if (!cur || !cur.sel || !cur.open) { ui.toast({ kind: 'warn', title: 'Betting is closed on this pick' }); return; }
     const sel = cur.sel;
+    const hasRace = slip.legs.some((l) => String(l.ref).startsWith('race-'));
+    if (slip.parlayMode && (sel.kind === 'race' || hasRace)) {
+      ui.toast({ kind: 'warn', title: 'Virtual races are single picks', msg: 'Place a virtual race bet on its own, outside a parlay.' });
+      return;
+    }
     const sameGame = slip.legs.findIndex((l) => l.ref === refOf(sel));
     const leg = { selId: sel.id, price: sel.price, line: sel.line, ref: refOf(sel) };
     if (!slip.parlayMode) {
@@ -4118,7 +4065,14 @@ window.TIMEOUT_SUPABASE = {
       const { cur, closed, changed } = st.states[i];
       const sel = cur && cur.sel;
       let title, sub, liveLine = '';
-      if (leg.ref.startsWith('pm-')) {
+      if (String(leg.ref).startsWith('race-')) {
+        const race = TO.races.get(leg.ref);
+        const runner = sel && TO.races.horse(sel.horseId || sel.side);
+        title = runner ? runner.name : 'Virtual race pick';
+        sub = `Virtual Racing · Race #${esc(String(leg.ref).replace('race-', ''))}`;
+        if (race && race.status === 'running') liveLine = `<div class="row-s tiny" style="margin-top:4px"><span class="live">LIVE</span><span class="muted bold">Race in progress</span></div>`;
+        if (race && race.status === 'final') liveLine = `<div class="tiny muted bold" style="margin-top:4px">Race finished</div>`;
+      } else if (leg.ref.startsWith('pm-')) {
         const p = S.prediction(leg.ref);
         title = sel ? S.selectionLabel(sel) : '';
         sub = `Prediction · ${esc(p.q)}`;
@@ -4149,10 +4103,6 @@ window.TIMEOUT_SUPABASE = {
   }
 
   function summaryHtml() {
-    if (slip.mode === 'friend') {
-      const len = slip.terms.length;
-      return `<div class="spread tiny"><span class="faint">No screen time at stake. Your friend has to accept.</span><span class="${len > TO.RULES.friendLimit ? 'red' : 'faint'} bold">${len}/${TO.RULES.friendLimit}</span></div>${slip.error ? `<div class="form-error">${esc(slip.error)}</div>` : ''}`;
-    }
     const n = numbers();
     const { wl } = n;
     if (wl.lockedOut || wl.balance <= 0) return '';
@@ -4178,10 +4128,6 @@ window.TIMEOUT_SUPABASE = {
     if (!TO.net.online()) return `<div class="note red">${icon('wifiOff', 16)}<span><b>No internet connection.</b> Betting is paused until you're back online, because odds can't update.</span></div><button class="btn full" disabled>${icon('wifiOff', 18)} Waiting for connection</button>`;
     if (st.closed) return `<button class="btn primary full" disabled>Remove unavailable picks to continue</button>`;
     if (st.changed) return `<button class="btn warn full" data-act="slip-accept">Accept new odds</button>`;
-    if (slip.mode === 'friend') {
-      const ok = slip.friends.length && slip.terms.trim() && slip.terms.length <= TO.RULES.friendLimit;
-      return `<button class="btn primary full" data-act="slip-place" ${ok ? '' : 'disabled'}>${icon('send', 18)} Send friend bet</button>${more}`;
-    }
     const n = numbers();
     if (n.wl.lockedOut || n.wl.balance <= 0) return `<button class="btn full" disabled>${icon('lock', 18)} Betting locked until midnight</button>`;
     return `<button class="btn primary full" data-act="slip-place" ${n.valid ? '' : 'disabled'}>Place bet${n.valid ? ` · ${n.stake} min` : ''}</button>${more}`;
@@ -4191,22 +4137,11 @@ window.TIMEOUT_SUPABASE = {
     const wl = TO.state.wallet();
     if (slip.stake === null) slip.stake = String(Math.max(1, Math.min(TO.data.lastStake || 5, wl.balance || 1)));
     let controls;
-    if (slip.mode === 'friend') {
-      const friends = TO.data.friends;
-      const picker = friends.length
-        ? `<div class="pick-friends">${friends.map((u) => { const p = TO.state.person(u); return p ? `<button class="pick-friend ${slip.friends.includes(u) ? 'on' : ''}" data-act="slip-friend" data-u="${esc(u)}"><img src="${esc(p.photo)}" alt="">${esc(u)}</button>` : ''; }).join('')}</div>`
-        : `<div class="note">${icon('users', 16)}<span>You don't have friends on TimeOut yet. <button class="link-btn" data-act="goto-social">Find friends in Social</button></span></div>`;
-      controls = `
-        <div class="field"><span class="label">Send to</span>${picker}</div>
-        <div class="field"><label for="slip-terms">What's on the line?</label>
-          <textarea class="textarea" id="slip-terms" maxlength="${TO.RULES.friendLimit}" placeholder="Loser does the dishes">${esc(slip.terms)}</textarea>
-          <div class="hscroll" style="padding:0">${TO.state.TERMS_EXAMPLES.map((t) => `<button class="chip sm" data-act="slip-term" data-t="${esc(t)}">${esc(t)}</button>`).join('')}</div>
-        </div>`;
-    } else if (wl.lockedOut || wl.balance <= 0) {
+    if (wl.lockedOut || wl.balance <= 0) {
       controls = `<div class="card" style="border-color:rgba(255,90,95,.4)"><div class="row-s red tiny bold" style="letter-spacing:.06em">${icon('lock', 14)} OUT OF BETTING MINUTES</div>
         <div class="bold" style="margin-top:6px">New bets are blocked until midnight.</div>
         <div class="display" style="font-size:36px;margin-top:4px">${ui.countdownEl(TO.nextMidnight())}</div>
-        <div class="small muted">You can still send this as a friend bet with a custom stake.</div></div>`;
+        <div class="small muted">Your betting balance resets at midnight.</div></div>`;
     } else {
       const quick = [5, 10, 15, 30].map((v) => `<button data-act="slip-quick" data-v="${v}" class="${String(v) === String(slip.stake) ? 'on' : ''}" ${v > wl.balance ? 'disabled style="opacity:.35"' : ''}>${v}</button>`).join('');
       const perks = [];
@@ -4226,20 +4161,11 @@ window.TIMEOUT_SUPABASE = {
         ${perks.join('')}`;
     }
     return `<div class="stack-s" id="slip-legs">${legsHtml()}</div>
-      <div class="seg" role="tablist">
-        <button class="${slip.mode === 'minutes' ? 'on' : ''}" data-act="slip-mode" data-m="minutes">${icon('hourglass', 15)} Screen time</button>
-        <button class="${slip.mode === 'friend' ? 'on' : ''}" data-act="slip-mode" data-m="friend">${icon('users', 15)} Friend bet</button>
-      </div>
       ${controls}
       <div class="stack-s" id="slip-summary">${summaryHtml()}</div>`;
   }
 
   function open() {
-    if (TO.pendingChallenge) {
-      slip.mode = 'friend';
-      slip.friends = [TO.pendingChallenge];
-      TO.pendingChallenge = null;
-    }
     if (ui.sheetOpen('slip')) { ui.refreshSheet('slip'); return; }
     ui.sheet('slip', {
       render: () => ({
@@ -4308,7 +4234,6 @@ window.TIMEOUT_SUPABASE = {
     TO.app.renderChrome();
   };
   A['open-slip'] = () => open();
-  A['slip-mode'] = (el) => { slip.mode = el.dataset.m; slip.error = null; ui.refreshSheet('slip'); };
   A['slip-quick'] = (el) => { slip.stake = el.dataset.v; slip.error = null; slip.capped = false; ui.refreshSheet('slip', ['body', 'foot']); };
   A['slip-step'] = (el) => {
     const v = (parseInt(slip.stake, 10) || 0) + Number(el.dataset.d);
@@ -4320,18 +4245,6 @@ window.TIMEOUT_SUPABASE = {
     slip.error = null;
     slip.update();
   };
-  A['slip-friend'] = (el) => {
-    const u = el.dataset.u;
-    slip.friends = slip.friends.includes(u) ? slip.friends.filter((x) => x !== u) : [...slip.friends, u];
-    el.classList.toggle('on');
-    slip.update();
-  };
-  A['slip-term'] = (el) => {
-    slip.terms = el.dataset.t;
-    const ta = document.getElementById('slip-terms');
-    if (ta) ta.value = slip.terms;
-    slip.update();
-  };
   A['slip-accept'] = () => {
     for (const leg of slip.legs) {
       const cur = S.currentSelection(leg.selId);
@@ -4339,31 +4252,20 @@ window.TIMEOUT_SUPABASE = {
     }
     slip.error = null;
     ui.refreshSheet('slip');
-    TO.tester.mark('odds');
   };
   A['slip-place'] = () => {
     if (!TO.net.online()) { ui.refreshSheet('slip'); return; }
-    const friend = slip.mode === 'friend' ? { with: slip.friends, terms: slip.terms } : null;
     const n = numbers();
     try {
-      const bet = TO.state.placeBet({ picks: slip.legs, stake: n.stake, friend, boost: slip.boost, insure: slip.insure });
+      const bet = TO.state.placeBet({ picks: slip.legs, stake: n.stake, boost: slip.boost, insure: slip.insure });
       const label = bet.legs.length > 1 ? `${bet.legs.length}-pick parlay` : bet.legs[0].label;
-      if (friend) {
-        ui.toast({ kind: 'win', title: `Friend bet sent to ${friend.with.join(', ')}`, msg: `"${bet.friend.terms}" · ${label}` });
-        TO.tester.mark('friend');
-      } else {
-        ui.toast({ kind: 'win', title: 'Bet placed', msg: `${label} · ${bet.stake} min to win ${Math.round((Math.round(bet.stake * bet.decimal) - bet.stake) * bet.multiplier)} min. It's in My Bets.` });
-        TO.tester.mark('place');
-        if (bet.legs.some((l) => l.kind === 'pred')) TO.tester.mark('pred');
-        if (TO.state.wallet().lockedOut) TO.tester.mark('zero');
-      }
+      ui.toast({ kind: 'win', title: 'Bet placed', msg: `${label} · ${bet.stake} min to win ${Math.round((Math.round(bet.stake * bet.decimal) - bet.stake) * bet.multiplier)} min. It's in My Bets.` });
       slip.clear();
       ui.closeSheet('slip');
       ui.closePage('parlay', true);
       TO.app.render();
     } catch (e) {
       if (!(e instanceof TO.AppError)) throw e;
-      if (e.code === 'not_enough') TO.tester.mark('overstake');
       slip.error = e.code === 'odds_changed' ? null : e.message;
       if (e.code === 'odds_changed') ui.toast({ kind: 'warn', title: 'Odds changed', msg: 'Review the new odds and confirm again.' });
       ui.refreshSheet('slip');
@@ -4375,16 +4277,261 @@ window.TIMEOUT_SUPABASE = {
     const max = TO.state.wallet().balance;
     const n = parseInt(el.value, 10);
     slip.capped = Number.isFinite(n) && n > max;
-    if (slip.capped) { el.value = String(max); TO.tester.mark('overstake'); }
+    if (slip.capped) el.value = String(max);
     slip.stake = el.value;
     slip.error = null;
     el.classList.remove('bad');
     document.querySelectorAll('.quick button').forEach((b) => b.classList.toggle('on', b.dataset.v === el.value && b.textContent !== 'Max'));
     slip.update();
   };
-  TO.inputs['slip-terms'] = (el) => { slip.terms = el.value; slip.error = null; slip.update(); };
   TO.changes['slip-boost'] = (el) => { slip.boost = el.checked; slip.update(); };
   TO.changes['slip-insure'] = (el) => { slip.insure = el.checked; slip.update(); };
+})(window.TO);
+
+</script>
+<script>
+/* TimeOut virtual horse racing: track animation and screen-time race selections. */
+(function (TO) {
+  'use strict';
+  const { esc, icon } = TO;
+
+  const horses = [
+    { id: 1, number: 1, name: 'Midnight Surge', americanOdds: 180, form: '2-1-2', jockey: 'R. Vance', color: '#4fb3ff', speed: 1.025, variance: 0.18 },
+    { id: 2, number: 2, name: 'Silicon Sprint', americanOdds: 220, form: '1-3-1', jockey: 'K. Chen', color: '#22d66e', speed: 1.018, variance: 0.19 },
+    { id: 3, number: 3, name: 'Digital Blitz', americanOdds: 260, form: '3-2-1', jockey: 'T. Hayes', color: '#ffc940', speed: 1.010, variance: 0.20 },
+    { id: 4, number: 4, name: 'Golden Hour', americanOdds: 310, form: '2-1-4', jockey: 'L. Moreno', color: '#ff718d', speed: 1.002, variance: 0.21 },
+    { id: 5, number: 5, name: 'Circuit Breaker', americanOdds: 380, form: '1-4-2', jockey: 'D. Sterling', color: '#c58cff', speed: 0.995, variance: 0.22 },
+  ];
+  const KEY = 'timeout.virtualRaces';
+  const saved = TO.store.get(KEY, null) || { next: 48, current: null, history: [] };
+  let data = saved;
+  let mounted = null;
+  let frame = 0;
+  let lastComment = 0;
+
+  function persist() { TO.store.set(KEY, data); }
+  function current() {
+    if (!data.current) data.current = { number: data.next || 48, status: 'open' };
+    return data.current;
+  }
+  function get(raceId) {
+    const number = Number(String(raceId).replace(/^race-/, ''));
+    const active = current();
+    if (active.number === number) return active;
+    return data.history.find((race) => race.number === number) || null;
+  }
+  const horse = (id) => horses.find((item) => item.id === Number(id)) || horses[0];
+  const selectionId = (race, runner) => `race-${race.number}|race|${runner.id}`;
+  function selection(race, runner) {
+    return { id: selectionId(race, runner), raceId: `race-${race.number}`, horseId: runner.id, kind: 'race', market: 'race', side: String(runner.id), line: null, price: runner.americanOdds };
+  }
+  function currentSelection(selId) {
+    const [ref, market, side] = String(selId).split('|');
+    if (market !== 'race') return null;
+    const race = get(ref);
+    const runner = horse(side);
+    return { sel: selection(race || { number: Number(ref.replace(/^race-/, '')) }, runner), open: !!race && race.status === 'open' };
+  }
+  function selectionLabel(sel) { return horse(sel.horseId || sel.side).name; }
+  function implied(american) { return american > 0 ? 100 / (american + 100) : Math.abs(american) / (Math.abs(american) + 100); }
+  function weightedWinner(seed) {
+    const rng = TO.rng(seed);
+    const total = horses.reduce((sum, h) => sum + implied(h.americanOdds), 0);
+    let roll = rng() * total;
+    for (const h of horses) { roll -= implied(h.americanOdds); if (roll <= 0) return h.id; }
+    return horses[0].id;
+  }
+  function beginRace(race, seed, now = TO.now(), betId = null) {
+    const winnerId = weightedWinner(`${race.number}-${seed}-${now}`);
+    const rest = horses.filter((h) => h.id !== winnerId).sort((a, b) => {
+      const ra = TO.u01(`${seed}-${a.id}`) * a.speed;
+      const rb = TO.u01(`${seed}-${b.id}`) * b.speed;
+      return rb - ra;
+    });
+    race.status = 'running';
+    race.startedAt = now;
+    race.finishAt = now + 12000;
+    race.winnerId = winnerId;
+    race.order = [winnerId, ...rest.map((h) => h.id)];
+    race.betId = betId;
+    persist();
+  }
+  function startForBet(bet, now = TO.now()) {
+    const race = current();
+    const leg = bet.legs[0];
+    if (race.status !== 'open' || leg.raceId !== `race-${race.number}`) throw new TO.AppError('closed', 'That race is no longer taking bets.');
+    beginRace(race, bet.id, now, bet.id);
+  }
+  function startForViewing() {
+    const race = current();
+    if (race.status !== 'open') return;
+    beginRace(race, `watch-${TO.uid('race')}`);
+  }
+  function finalize(race, now) {
+    if (!race || race.status !== 'running' || now < race.finishAt) return;
+    race.status = 'final';
+    race.finishedAt = race.finishAt;
+    data.history.unshift({ ...race });
+    data.history = data.history.slice(0, 20);
+    data.next = race.number + 1;
+    data.current = { number: data.next, status: 'open' };
+    persist();
+  }
+  function grade(sel, now = TO.now()) {
+    const race = get(sel.raceId || sel.id.split('|')[0]);
+    if (!race) return 'void';
+    finalize(race, now);
+    if (race.status !== 'final') return 'pending';
+    return race.winnerId === Number(sel.horseId || sel.side) ? 'won' : 'lost';
+  }
+
+  function statusText(race) {
+    if (race.status === 'running') return 'Race in progress';
+    return race.status === 'final' ? `Race #${race.number} finished` : 'Bets open';
+  }
+  function latestResultHtml(race) {
+    return race ? `<div class="card race-card race-result"><span class="eyebrow">Last result · Race #${race.number}</span><b>${esc(horse(race.winnerId).name)} won</b><span class="small muted">${race.order.map((id, i) => `${i + 1}. ${esc(horse(id).name)}`).join(' · ')}</span></div>` : '';
+  }
+  function rosterHtml(race) {
+    return horses.map((runner) => {
+      const sel = selection(race, runner);
+      const isWinner = race.status === 'final' && race.winnerId === runner.id;
+      return `<div class="race-entry ${isWinner ? 'race-winner' : ''}">
+        <div class="race-horse-info"><span class="race-silk" style="--silk:${runner.color}">#${runner.number}</span><span class="race-horse-copy"><b>${esc(runner.name)}</b><small>Form ${runner.form} · ${esc(runner.jockey)}</small></span></div>
+        <div class="race-odds">${TO.ui.oddsBtn(sel, { suspended: race.status !== 'open', big: true, label: runner.name })}</div>
+      </div>`;
+    }).join('');
+  }
+  function render() {
+    const race = current();
+    const latest = data.history[0];
+    return `<div class="stack race-page" data-race-id="${race.number}" data-race-status="${race.status}">
+      <div class="page-head"><h1>Virtual Racing</h1><p>Pick a winner and stake screen-time minutes using your regular bet slip.</p></div>
+      <div class="card race-card">
+        <div class="race-card-head"><div><span id="race-status" class="tag ${race.status === 'running' ? 'red' : 'green'}">${esc(statusText(race))}</span><span class="race-caption">· 1,200m Cyber Turf Classic #${race.number}</span></div><span class="race-clock" id="race-clock">12 sec</span></div>
+        <div class="race-track-wrap"><canvas class="race-track" id="race-track" aria-label="Animated virtual horse race"></canvas><div class="race-finish-line" aria-hidden="true"></div></div>
+        <div class="race-caller"><span>${icon('radio', 14)} Caller</span><span id="race-commentary">${race.status === 'running' ? 'The field is underway!' : 'Welcome to Silicon Downs. Select a horse to add it to your bet slip.'}</span></div>
+        <button class="btn primary full" id="race-start" data-act="race-start" ${race.status === 'open' ? '' : 'disabled'}>${race.status === 'open' ? 'Start race now' : race.status === 'running' ? 'Race in progress' : 'Race finished'}</button>
+      </div>
+      <div class="card race-card stack-s">
+        <div class="spread"><div><h2 class="race-heading">Field odds</h2><div class="small muted">Tap a price to open your standard screen-time bet slip.</div></div><span class="tag">5 runners</span></div>
+        <div id="race-roster" class="race-roster">${rosterHtml(race)}</div>
+        <div class="note blue">${icon('info', 16)}<span>Place a bet to start the race with your pick, or start it now to watch without a bet. Bets use your regular screen-time balance.</span></div>
+      </div>
+      ${latestResultHtml(latest)}
+    </div>`;
+  }
+
+  function drawHorse(ctx, x, y, runner, elapsed) {
+    const phase = elapsed / 90 + runner.id;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.strokeStyle = runner.color; ctx.lineWidth = 3; ctx.lineCap = 'round';
+    ctx.fillStyle = runner.color;
+    ctx.beginPath(); ctx.ellipse(0, 0, 13, 7, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(8, -2); ctx.lineTo(17, -13); ctx.lineTo(22, -10); ctx.lineTo(19, -1); ctx.fill();
+    ctx.fillStyle = '#f2f5f9'; ctx.beginPath(); ctx.arc(0, -10, 3, 0, Math.PI * 2); ctx.fill();
+    const swing = Math.sin(phase) * 7;
+    for (const [ax, dir] of [[-8, -1], [-3, 1], [6, -1], [10, 1]]) {
+      ctx.beginPath(); ctx.moveTo(ax, 4); ctx.lineTo(ax + swing * dir, 15); ctx.stroke();
+    }
+    ctx.fillStyle = '#080d14'; ctx.beginPath(); ctx.roundRect(-5, -4, 10, 8, 2); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.font = '700 7px system-ui'; ctx.textAlign = 'center'; ctx.fillText(String(runner.number), 0, 2);
+    ctx.restore();
+  }
+  function paint(canvas, race, now) {
+    if (!canvas || !canvas.isConnected) return;
+    const box = canvas.getBoundingClientRect();
+    if (!box.width) return;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    if (canvas.width !== Math.round(box.width * dpr) || canvas.height !== Math.round(250 * dpr)) {
+      canvas.width = Math.round(box.width * dpr);
+      canvas.height = Math.round(250 * dpr);
+    }
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const w = box.width, h = 250;
+    ctx.fillStyle = '#0a0d12'; ctx.fillRect(0, 0, w, h);
+    const top = 20, lane = 42, start = 40, finish = w - 36;
+    for (let i = 0; i < horses.length; i++) {
+      const y = top + i * lane;
+      ctx.fillStyle = i % 2 ? '#111720' : '#151d27'; ctx.fillRect(0, y, w, lane);
+      ctx.strokeStyle = '#283141'; ctx.setLineDash([5, 6]); ctx.beginPath(); ctx.moveTo(0, y + lane); ctx.lineTo(w, y + lane); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle = '#5e687a'; ctx.font = '11px system-ui'; ctx.fillText(String(i + 1), 12, y + 24);
+    }
+    ctx.strokeStyle = '#8c96a8'; ctx.globalAlpha = 0.6; ctx.beginPath(); ctx.moveTo(start, top); ctx.lineTo(start, top + lane * horses.length); ctx.stroke(); ctx.globalAlpha = 1;
+    ctx.fillStyle = '#f2f5f9';
+    for (let y = top; y < top + lane * horses.length; y += 9) ctx.fillRect(finish - 3, y, 5, 5);
+    const elapsed = race.status === 'running' ? Math.max(0, now - race.startedAt) : race.status === 'final' ? 12000 : 0;
+    const order = race.order || horses.map((h) => h.id);
+    const ranks = new Map(order.map((id, i) => [id, i]));
+    horses.forEach((runner, idx) => {
+      let progress = 0;
+      if (race.status === 'running' || race.status === 'final') {
+        const rank = ranks.get(runner.id) || 0;
+        const duration = 9400 + rank * 450;
+        progress = Math.min(1, elapsed / duration);
+      }
+      const x = start + progress * (finish - start - 12);
+      const y = top + idx * lane + lane / 2;
+      drawHorse(ctx, x, y, runner, elapsed);
+    });
+  }
+  function updateMounted() {
+    if (!mounted || !mounted.isConnected) { mounted = null; return; }
+    const race = current();
+    const page = mounted.querySelector('.race-page');
+    if (page && page.dataset.raceId !== String(race.number)) {
+      page.dataset.raceId = race.number;
+      page.dataset.raceStatus = race.status;
+      const statusTag = mounted.querySelector('#race-status');
+      if (statusTag) statusTag.outerHTML = `<span id="race-status" class="tag green">Bets open</span>`;
+      const caption = mounted.querySelector('.race-caption');
+      if (caption) caption.textContent = `· 1,200m Cyber Turf Classic #${race.number}`;
+      const roster = mounted.querySelector('#race-roster');
+      if (roster) roster.innerHTML = rosterHtml(race);
+      const result = mounted.querySelector('.race-result');
+      if (result) result.outerHTML = latestResultHtml(data.history[0]);
+      else if (data.history[0]) page.insertAdjacentHTML('beforeend', latestResultHtml(data.history[0]));
+      const comment = mounted.querySelector('#race-commentary');
+      if (comment) comment.textContent = 'The previous race is official. Place your next screen-time bet.';
+    } else if (page && page.dataset.raceStatus !== race.status) {
+      page.dataset.raceStatus = race.status;
+      const roster = mounted.querySelector('#race-roster');
+      if (roster) roster.innerHTML = rosterHtml(race);
+    }
+    const statusTag = mounted.querySelector('#race-status');
+    if (statusTag && race.status === 'running') { statusTag.textContent = 'Race in progress'; statusTag.className = 'tag red'; }
+    const startButton = mounted.querySelector('#race-start');
+    if (startButton) {
+      startButton.disabled = race.status !== 'open';
+      startButton.textContent = race.status === 'open' ? 'Start race now' : race.status === 'running' ? 'Race in progress' : 'Race finished';
+    }
+    const clock = mounted.querySelector('#race-clock');
+    if (clock) clock.textContent = race.status === 'running' ? `${Math.max(0, Math.ceil((race.finishAt - TO.now()) / 1000))} sec` : '12 sec';
+    const canvas = mounted.querySelector('#race-track');
+    paint(canvas, race, TO.now());
+    if (race.status === 'running' && TO.now() >= race.finishAt) {
+      finalize(race, TO.now());
+      TO.app.tick(true);
+    }
+    if (race.status === 'running' && TO.now() - lastComment > 2200) {
+      lastComment = TO.now();
+      const leader = (race.order || []).find((id, index) => (TO.now() - race.startedAt) / (9400 + index * 450) < 1) || race.order[0];
+      const comment = mounted.querySelector('#race-commentary');
+      if (comment) comment.textContent = `#${horse(leader).number} ${horse(leader).name} is driving for the lead.`;
+    }
+    if (mounted) frame = requestAnimationFrame(updateMounted);
+  }
+  function mount(page) {
+    mounted = page;
+    cancelAnimationFrame(frame);
+    updateMounted();
+  }
+
+  TO.races = { horses, current, get, horse, currentSelection, selectionLabel, startForBet, grade, mount };
+  TO.actions['race-start'] = startForViewing;
+  TO.views.races = { render };
 })(window.TO);
 
 </script>
@@ -4398,10 +4545,10 @@ window.TIMEOUT_SUPABASE = {
 
   const prevScores = {};
 
-  const followed = () => TO.data.settings.sports;
+  const followed = () => TO.data.settings.sports?.length ? TO.data.settings.sports : S.REAL_LEAGUES;
   const offDay = () => TO.store.get('timeout.offDay', false);
   const activeFilter = () => ['pred', 'todo', 'sim'].includes(TO.data.feedFilter) ? 'all' : (TO.data.feedFilter || 'all');
-  const sportsOnly = (bet) => bet.kind === 'sports' && bet.legs.every((leg) => leg.gameId && S.game(leg.gameId)?.league !== 'sim');
+  const sportsOnly = (bet) => bet.kind === 'race' || (bet.kind === 'sports' && bet.legs.every((leg) => leg.gameId && S.game(leg.gameId)?.league !== 'sim'));
 
   // Which day the board shows: 0 = today, 1 = tomorrow. Live games are always today.
   let feedDay = 0;
@@ -4432,7 +4579,7 @@ window.TIMEOUT_SUPABASE = {
   }
 
   function myOpenBetOn(ref) {
-    return TO.data.bets.filter((b) => b.status === 'open' && b.legs.some((l) => l.gameId === ref || l.predId === ref));
+    return TO.data.bets.filter((b) => b.status === 'open' && b.legs.some((l) => l.gameId === ref || l.predId === ref || l.raceId === ref));
   }
 
   // ---------- Wallet header (PRD: screen time + current bets always at the top) ----------
@@ -4450,7 +4597,7 @@ window.TIMEOUT_SUPABASE = {
     return `<div class="card wallet">
       <div class="spread" style="align-items:flex-end">
         <div>
-          <div class="eyebrow">Betting balance today</div>
+          <div class="spread" style="justify-content:flex-start;gap:8px"><div class="eyebrow">Betting balance today</div>${wl.bonusToday ? `<span class="tiny green bold">+${wl.bonusToday} min ${esc(wl.tier.title)} bonus included</span>` : ''}</div>
           <div class="big" style="margin-top:4px">${wl.balance}<small>min</small></div>
         </div>
         <div style="text-align:right">
@@ -4489,15 +4636,18 @@ window.TIMEOUT_SUPABASE = {
     const leg = bet.legs.find((l) => l.result === 'pending') || bet.legs[0];
     if (bet.kind === 'todo') line = `${bet.legs.filter((l) => l.result === 'won').length}/${bet.legs.length} done · due midnight`;
     else if (leg.kind === 'pred') line = `Resolves in ${TO.fmtIn(leg.start - TO.now())}`;
+    else if (leg.kind === 'race') {
+      const race = TO.races.get(leg.raceId);
+      line = race && race.status === 'running' ? `<span class="live">LIVE</span> Virtual Race #${race.number}` : `Virtual Race #${String(leg.raceId).replace('race-', '')} · ${race && race.status === 'final' ? 'Finished' : 'Starting soon'}`;
+    }
     else {
       const g = S.game(leg.gameId);
-      if (g.state === 'live') line = `<span class="live">LIVE</span> ${g.away.abbr} ${g.awayScore} – ${g.home.abbr} ${g.homeScore} · ${esc(g.clock)}`;
+      if (!g) line = 'Loading the latest score…';
+      else if (g.state === 'live') line = `<span class="live">LIVE</span> ${g.away.abbr} ${g.awayScore} – ${g.home.abbr} ${g.homeScore} · ${esc(g.clock)}`;
       else if (g.state === 'scheduled') line = `${g.away.abbr} @ ${g.home.abbr} · ${TO.fmtTime(g.start)}`;
       else line = `${g.away.abbr} ${g.awayScore} – ${g.home.abbr} ${g.homeScore} · ${esc(g.statusText)}`;
     }
-    const bottom = bet.friend
-      ? `<div class="row-s yellow small bold ellipsis">${icon('users', 14)}${esc(bet.friend.terms)}</div>`
-      : `<div class="row-s small bold"><span class="muted">${bet.stake} min</span>${icon('chevR', 12)}<span class="green">${Math.round(bet.stake * bet.decimal) - bet.stake > 0 ? `win ${Math.round((Math.round(bet.stake * bet.decimal) - bet.stake) * (bet.multiplier || 1))} min` : ''}</span></div>`;
+    const bottom = `<div class="row-s small bold"><span class="muted">${bet.stake} min</span>${icon('chevR', 12)}<span class="green">${Math.round(bet.stake * bet.decimal) - bet.stake > 0 ? `win ${Math.round((Math.round(bet.stake * bet.decimal) - bet.stake) * (bet.multiplier || 1))} min` : ''}</span></div>`;
     return `<button class="card tight mini-bet" data-act="tab" data-tab="bets">
       <div class="spread"><span class="t ellipsis">${esc(title)}</span><span class="display muted" style="font-size:15px">${TO.odds.fmt(bet.american)}</span></div>
       <div class="small muted row-s ellipsis" style="font-weight:600">${line}</div>
@@ -4616,6 +4766,9 @@ window.TIMEOUT_SUPABASE = {
     const loading = day > 0 && TO.live.upcomingLoading;
     const title = f === 'live' ? 'No live games right now' : loading ? 'Loading the schedule…' : `Sorry, no games are happening for this sport ${when}.`;
     const next = f !== 'live' && !loading ? Array.from({ length: TO.live.days + 1 }, (_, i) => i).find((i) => i !== day && boardGames(i, true).some((g) => f === 'all' || g.league === f)) : null;
+    if (TO.live.failed) {
+      return `<div class="empty">${icon('alert', 40)}<h3>Sports couldn’t load</h3><p>Check your connection and try again.</p><button class="btn primary" data-act="refresh-live">Try again</button></div>`;
+    }
     return `<div class="empty">
       ${icon(loading ? 'clock' : 'target', 40)}
       <h3>${title}</h3>
@@ -4709,11 +4862,11 @@ window.TIMEOUT_SUPABASE = {
     if (fb && v.scrollTop > fb.offsetTop) v.scrollTop = fb.offsetTop;
   };
   A.filter = (el) => { TO.data.feedFilter = el.dataset.f; TO.state.save(); TO.app.render(); const v = document.getElementById('view'); const fb = v.querySelector('.filterbar'); if (fb && v.scrollTop > fb.offsetTop) v.scrollTop = fb.offsetTop; };
+  A['refresh-live'] = () => TO.live.refresh(TO.now(), true);
   A['go-sim'] = () => {
     if (!followed().includes('sim')) TO.state.setSetting('sports', [...followed(), 'sim']);
     TO.data.feedFilter = 'sim';
     TO.state.save();
-    TO.tester.mark('offday');
     TO.app.render();
   };
   A.how = () => TO.views.settings.howItWorks();
@@ -4843,7 +4996,7 @@ window.TIMEOUT_SUPABASE = {
 
 </script>
 <script>
-/* TimeOut web demo — My Bets (Screen 4), bet sharing, friend sends and to-do parlays. */
+/* TimeOut web demo — My Bets (Screen 4), bet sharing and to-do parlays. */
 (function (TO) {
   'use strict';
   const { esc, icon } = TO;
@@ -4858,6 +5011,12 @@ window.TIMEOUT_SUPABASE = {
   function legStanding(leg) {
     if (leg.result !== 'pending') return leg.result;
     if (leg.kind === 'todo') return 'upcoming';
+    if (leg.kind === 'race') {
+      const race = TO.races.get(leg.raceId);
+      if (!race || race.status === 'open') return 'upcoming';
+      if (race.status === 'running') return race.winnerId === Number(leg.horseId) ? 'winning' : 'losing';
+      return 'even';
+    }
     return S.liveStanding(leg);
   }
 
@@ -4877,6 +5036,13 @@ window.TIMEOUT_SUPABASE = {
 
   /** Live score + key stats for a leg, so users can follow a bet without leaving My Bets. */
   function liveBox(leg) {
+    if (leg.kind === 'race') {
+      const race = TO.races.get(leg.raceId);
+      const horse = TO.races.horse(leg.horseId);
+      const status = !race ? 'Race result unavailable' : race.status === 'open' ? 'Bets open' : race.status === 'running' ? 'Race in progress' : `Race #${race.number} finished`;
+      const leader = race && race.status === 'running' ? TO.races.horse(race.winnerId).name : '';
+      return `<div class="livebox"><div class="spread small"><b>${esc(horse.name)} · ${esc(leg.matchup)}</b><span class="${race && race.status === 'running' ? 'live' : 'muted'}">${esc(status)}</span></div>${leader ? `<div class="small muted" style="margin-top:4px">Current leader: ${esc(leader)}</div>` : ''}</div>`;
+    }
     if (leg.kind === 'pred') {
       const p = S.prediction(leg.predId);
       const chance = Math.round((leg.side === 'yes' ? p.pYes : 1 - p.pYes) * 100);
@@ -4908,17 +5074,6 @@ window.TIMEOUT_SUPABASE = {
     return `<span class="tag ${better ? 'green' : 'red'}">Odds now ${cur.sel.market === 'spread' || cur.sel.market === 'total' ? `${TO.odds.fmtLine(cur.sel.line, cur.sel.market === 'spread')} ` : ''}${TO.odds.fmt(cur.sel.price)}</span>`;
   }
 
-  function friendBox(bet) {
-    const f = bet.friend;
-    const who = f.with.join(', ');
-    let status = f.status === 'accepted' ? `Accepted by ${esc(who)}` : f.status === 'declined' ? `${esc(who)} declined` : `Waiting for ${esc(who)} to accept`;
-    if (f.direction === 'in') status = `Challenge from ${esc(who)} · you took the other side`;
-    if (bet.status === 'won') status = `You won · ${esc(who)} owes you`;
-    if (bet.status === 'lost') status = `You lost · you owe ${esc(who)}`;
-    if (bet.status === 'void' || bet.status === 'push') status = 'No winner · bet voided';
-    return `<div class="friend-terms">${icon('users', 16)}<div><div>"${esc(f.terms)}"</div><div class="tiny" style="opacity:.8;margin-top:2px">${status}</div></div></div>`;
-  }
-
   function openCard(bet, opts) {
     const single = bet.legs.length === 1;
     const st = bet.kind === 'todo' ? null : overallStanding(bet);
@@ -4939,11 +5094,10 @@ window.TIMEOUT_SUPABASE = {
       }).join('') + `<div class="spread">${standingTag(st)}${bet.insured ? '<span class="tag" style="color:var(--purple)">Insured</span>' : ''}</div>`;
     }
     const sub = bet.kind === 'todo' ? 'Bet on yourself' : single ? `${esc(bet.legs[0].marketLabel)} · ${esc(bet.legs[0].matchup)}` : 'Every pick must win';
-    const stakeRow = bet.friend ? friendBox(bet) : `<div class="stake-row"><div><b>${bet.stake}</b><span>Min staked</span></div><div><b class="green">+${toWin(bet)}</b><span>Min to win</span></div><div><b>${TO.fmtTime(bet.placedAt)}</b><span>Placed ${TO.fmtDay(bet.placedAt).toLowerCase()}</span></div></div>`;
+    const stakeRow = `<div class="stake-row"><div><b>${bet.stake}</b><span>Min staked</span></div><div><b class="green">+${toWin(bet)}</b><span>Min to win</span></div><div><b>${TO.fmtTime(bet.placedAt)}</b><span>Placed ${TO.fmtDay(bet.placedAt).toLowerCase()}</span></div></div>`;
     const perks = [bet.boosted ? `<span class="tag blue">${icon('bolt', 10)} Boosted</span>` : '', bet.multiplier > 1 && !bet.boosted ? `<span class="tag green">${TO.state.fmtMult(bet.multiplier)} streak</span>` : ''].join('');
     const actions = opts && opts.compact ? '' : `<div class="bet-actions">
       ${bet.kind !== 'todo' ? `<button class="btn sm ghost" data-act="share" data-bet="${bet.id}">${icon('share', 16)} Share</button>` : ''}
-      ${!bet.friend && bet.kind !== 'todo' ? `<button class="btn sm ghost" data-act="send-friend" data-bet="${bet.id}">${icon('send', 16)} Send to friend</button>` : ''}
     </div>`;
     return `<div class="card bet-card">
       <div class="bet-top"><div class="grow"><div class="t">${esc(betTitle(bet))}</div><div class="small muted" style="margin-top:2px">${sub}</div></div><div class="odds">${TO.odds.fmt(bet.american)}</div></div>
@@ -4957,24 +5111,23 @@ window.TIMEOUT_SUPABASE = {
   function historyCard(bet, opts) {
     const single = bet.legs.length === 1;
     let result;
-    if (bet.friend) result = '';
-    else if (bet.status === 'won') result = `<span class="display green" style="font-size:22px">+${bet.payout - bet.stake} min</span>`;
+    if (bet.status === 'won') result = `<span class="display green" style="font-size:22px">+${bet.payout - bet.stake} min</span>`;
     else if (bet.status === 'lost') result = `<span class="display red" style="font-size:22px">−${bet.stake} min</span>`;
     else result = `<span class="small bold muted">${bet.insurancePaid ? 'Insurance refund' : 'Stake returned'} · ${bet.stake} min</span>`;
     const legs = bet.legs.map((l) => `<div class="leg"><span class="leg-dot ${l.result}">${icon({ won: 'check', lost: 'x' }[l.result] || 'minus', 12)}</span><div class="grow"><div class="lt">${esc(l.label)} <span class="faint" style="font-weight:600">${TO.odds.fmt(l.price)}</span></div><div class="lm">${esc(l.kind === 'todo' ? l.marketLabel : l.matchup)}${l.final ? ` · <b>${esc(l.final)}</b>` : ''}</div></div></div>`).join('');
     const why = bet.status === 'void' ? `<div class="note warn">${icon('info', 15)}<span>${bet.kind === 'todo' ? '' : 'The game was postponed or cancelled, so this bet was voided and your full stake came back.'}</span></div>` : '';
     return `<div class="card bet-card">
-      <div class="bet-top"><div class="grow"><div class="row-s" style="margin-bottom:4px">${ui.statusPill(bet.status)}${bet.friend ? '<span class="tag yellow">Friend bet</span>' : ''}${single ? '' : `<span class="tag">${bet.kind === 'todo' ? 'To-do' : 'Parlay'}</span>`}</div><div class="t">${esc(betTitle(bet))}</div></div><div style="text-align:right"><div class="odds" style="font-size:16px">${TO.odds.fmt(bet.american)}</div>${result}</div></div>
+      <div class="bet-top"><div class="grow"><div class="row-s" style="margin-bottom:4px">${ui.statusPill(bet.status)}${single ? '' : `<span class="tag">${bet.kind === 'todo' ? 'To-do' : 'Parlay'}</span>`}</div><div class="t">${esc(betTitle(bet))}</div></div><div style="text-align:right"><div class="odds" style="font-size:16px">${TO.odds.fmt(bet.american)}</div>${result}</div></div>
       ${legs}
       ${why}
-      ${bet.friend ? friendBox(bet) : `<div class="spread tiny faint bold"><span>${bet.stake} min staked · placed ${TO.fmtDay(bet.placedAt)} ${TO.fmtTime(bet.placedAt)}</span><span>Settled ${TO.ago(bet.settledAt)}</span></div>`}
+      <div class="spread tiny faint bold"><span>${bet.stake} min staked · placed ${TO.fmtDay(bet.placedAt)} ${TO.fmtTime(bet.placedAt)}</span><span>Settled ${TO.ago(bet.settledAt)}</span></div>
       ${opts && opts.compact ? '' : bet.kind !== 'todo' ? `<div class="bet-actions"><button class="btn sm ghost" data-act="share" data-bet="${bet.id}">${icon('share', 16)} Share</button></div>` : ''}
     </div>`;
   }
 
   const betCard = (bet, opts) => (bet.status === 'open' ? openCard(bet, opts) : historyCard(bet, opts));
-  const gameLeg = (leg) => leg.kind === 'game' || (leg.kind === 'sports' && !!leg.gameId);
-  const isLiveBet = (bet) => bet.legs.some((leg) => leg.result === 'pending' && gameLeg(leg) && S.game(leg.gameId)?.state === 'live');
+  const gameLeg = (leg) => leg.kind === 'race' || leg.kind === 'game' || (leg.kind === 'sports' && !!leg.gameId);
+  const isLiveBet = (bet) => bet.legs.some((leg) => leg.result === 'pending' && (leg.kind === 'race' ? TO.races.get(leg.raceId)?.status === 'running' : gameLeg(leg) && S.game(leg.gameId)?.state === 'live'));
 
   function recordCard() {
     const st = TO.state.myStats();
@@ -4989,12 +5142,12 @@ window.TIMEOUT_SUPABASE = {
         <div><b class="${st.net > 0 ? 'green' : st.net < 0 ? 'red' : ''}">${TO.signed(st.net)}</b><span>Total minutes</span></div>
       </div>
       ${sports.length ? `<div class="sport-bars">${sports.map(([k, v]) => `<div class="sport-bar"><span class="muted">${esc(ui.leagueShort(k))}</span><div class="bar"><i class="${v.net < 0 ? 'neg' : ''}" style="width:${(Math.abs(v.net) / maxAbs) * 100}%"></i></div><span style="text-align:right" class="${v.net > 0 ? 'green' : v.net < 0 ? 'red' : 'muted'}">${TO.signedMin(v.net)}</span></div>`).join('')}</div>` : ''}
-      <div class="spread small muted"><span>Today: <b class="${wl.todayNet > 0 ? 'green' : wl.todayNet < 0 ? 'red' : ''}">${TO.signedMin(wl.todayNet)}</b> so far</span><span>Friend bets: <b style="color:var(--text)">${st.fw}-${st.fl}</b></span></div>
+      <div class="spread small muted"><span>Today: <b class="${wl.todayNet > 0 ? 'green' : wl.todayNet < 0 ? 'red' : ''}">${TO.signedMin(wl.todayNet)}</b> so far</span></div>
     </div>`;
   }
 
   function render() {
-    const bets = TO.data.bets.filter((b) => b.kind === 'sports' && b.legs.length && b.legs.every(gameLeg));
+    const bets = TO.data.bets.filter((b) => (b.kind === 'sports' || b.kind === 'race') && b.legs.length && b.legs.every(gameLeg));
     const open = bets.filter((b) => b.status === 'open').sort((a, b) => b.placedAt - a.placedAt);
     const liveNow = open.filter(isLiveBet);
     const otherOpen = open.filter((b) => !isLiveBet(b));
@@ -5066,7 +5219,7 @@ window.TIMEOUT_SUPABASE = {
     const tw = ctx.measureText('Time').width;
     ctx.fillStyle = '#22d66e'; ctx.fillText('Out', 80 + tw, 150);
     ctx.font = `700 30px ${B}`; ctx.fillStyle = '#8c96a8';
-    ctx.fillText(`@${TO.account.username}'s ${bet.friend ? 'friend bet' : 'bet'}`, 80, 200);
+    ctx.fillText(`@${TO.account.username}'s bet`, 80, 200);
 
     // Status pill
     const status = bet.status.toUpperCase();
@@ -5125,17 +5278,11 @@ window.TIMEOUT_SUPABASE = {
       ctx.font = `900 76px ${D}`; ctx.fillStyle = color; ctx.fillText(value, x, by + 100);
     };
     col('ODDS', TO.odds.fmt(bet.american), 110, '#f2f5f9');
-    if (bet.friend) {
-      ctx.font = `700 26px ${B}`; ctx.fillStyle = '#8c96a8'; ctx.fillText('ON THE LINE', 420, by + 20);
-      ctx.font = `800 40px ${B}`; ctx.fillStyle = '#ffc940';
-      wrapText(ctx, `"${bet.friend.terms}"`, 420, by + 72, W - 530, 46, 3);
-    } else {
-      col('STAKE', `${bet.stake} min`, 420, '#f2f5f9');
-      col(bet.status === 'lost' ? 'LOST' : bet.status === 'won' ? 'WON' : 'TO WIN', bet.status === 'lost' ? `−${bet.stake}` : `+${bet.status === 'won' ? bet.payout - bet.stake : toWin(bet)}`, 730, bet.status === 'lost' ? '#ff5a5f' : '#22d66e');
-    }
+    col('STAKE', `${bet.stake} min`, 420, '#f2f5f9');
+    col(bet.status === 'lost' ? 'LOST' : bet.status === 'won' ? 'WON' : 'TO WIN', bet.status === 'lost' ? `−${bet.stake}` : `+${bet.status === 'won' ? bet.payout - bet.stake : toWin(bet)}`, 730, bet.status === 'lost' ? '#ff5a5f' : '#22d66e');
 
     ctx.font = `600 30px ${B}`; ctx.fillStyle = '#8c96a8'; ctx.textAlign = 'center';
-    ctx.fillText(bet.friend ? 'A friendly bet. No money, just bragging rights.' : 'Betting screen time, not money.', W / 2, 1160);
+    ctx.fillText('Betting screen time, not money.', W / 2, 1160);
     ctx.font = `italic 900 40px ${D}`; ctx.fillStyle = '#22d66e';
     ctx.fillText('TimeOut', W / 2, 1230);
     ctx.textAlign = 'left';
@@ -5144,7 +5291,7 @@ window.TIMEOUT_SUPABASE = {
 
   function shareText(bet) {
     const picks = bet.legs.map((l) => `${l.label} (${TO.odds.fmt(l.price)}) · ${l.matchup}`).join('\n');
-    const stake = bet.friend ? `On the line: "${bet.friend.terms}"` : `${bet.stake} min of screen time to win ${toWin(bet)} min`;
+    const stake = `${bet.stake} min of screen time to win ${toWin(bet)} min`;
     return `My TimeOut ${bet.legs.length > 1 ? 'parlay' : 'bet'}:\n${picks}\nOdds ${TO.odds.fmt(bet.american)} · ${stake}`;
   }
 
@@ -5156,75 +5303,20 @@ window.TIMEOUT_SUPABASE = {
       render: () => ({
         title: 'Share bet',
         body: `${url ? `<img class="share-img" src="${url}" alt="Bet card image showing the teams, pick, odds and stake">` : '<div class="card muted small">Creating image…</div>'}
-          <div class="small muted">${ui.embedded ? 'To save the image, right-click it or press and hold it.' : 'Save the image and post it anywhere, or send the bet to a friend with a custom stake.'}</div>
+          <div class="small muted">${ui.embedded ? 'To save the image, right-click it or press and hold it.' : 'Save the image and post it anywhere.'}</div>
           <textarea class="textarea sr" id="share-text" readonly>${esc(shareText(bet))}</textarea>`,
         foot: `${!ui.embedded && url ? `<a class="btn primary full" href="${url}" download="timeout-bet.png" data-act="share-saved">${icon('share', 18)} Save image</a>` : ''}
-          <div class="row"><button class="btn ghost grow" data-act="share-copy">${icon('copy', 16)} Copy bet text</button>${bet.status === 'open' && !bet.friend ? `<button class="btn ghost grow" data-act="send-friend" data-bet="${bet.id}">${icon('send', 16)} Send to friend</button>` : ''}</div>`,
+          <div class="row"><button class="btn ghost grow" data-act="share-copy">${icon('copy', 16)} Copy bet text</button></div>`,
       }),
     });
     url = await drawShare(bet);
     ui.refreshSheet('share');
-    TO.tester.mark('share');
   };
   TO.actions['share-copy'] = async () => {
     const ok = await ui.copy(document.getElementById('share-text').value);
     ui.toast({ kind: ok ? 'win' : 'info', title: ok ? 'Bet copied' : 'Copy the text manually', msg: ok ? 'Paste it into any chat.' : '' });
   };
   TO.actions['share-saved'] = () => { /* default link behavior downloads the image */ };
-
-  // ---------- Send to friend ----------
-  const sendDraft = { friends: [], terms: '' };
-  TO.actions['send-friend'] = (el) => {
-    const bet = TO.data.bets.find((b) => b.id === el.dataset.bet);
-    if (!bet) return;
-    ui.closeSheet('share', true);
-    sendDraft.friends = []; sendDraft.terms = '';
-    let error = '';
-    const friends = TO.data.friends;
-    ui.sheet('send', {
-      render: () => ({
-        title: 'Send to a friend',
-        body: `<div class="card tight"><div class="bold">${esc(betTitle(bet))} <span class="muted">${TO.odds.fmt(bet.american)}</span></div><div class="small muted">${esc(bet.legs.map((l) => l.matchup).join(' · '))}</div></div>
-          <div class="small muted">Your friend takes the other side. Instead of screen time, you play for whatever you write below.</div>
-          ${friends.length ? `<div class="field"><span class="label">Choose friends</span><div class="pick-friends">${friends.map((u) => { const p = TO.state.person(u); return p ? `<button class="pick-friend ${sendDraft.friends.includes(u) ? 'on' : ''}" data-act="send-pick" data-u="${esc(u)}"><img src="${esc(p.photo)}" alt="">${esc(u)}</button>` : ''; }).join('')}</div></div>` : `<div class="note">${icon('users', 16)}<span>Add friends in Social first. <button class="link-btn" data-act="goto-social">Go to Social</button></span></div>`}
-          <div class="field"><label for="send-terms">Reward or punishment</label><textarea class="textarea" id="send-terms" maxlength="${TO.RULES.friendLimit}" placeholder="Loser does the dishes">${esc(sendDraft.terms)}</textarea>
-          <div class="spread tiny"><span class="faint">Up to ${TO.RULES.friendLimit} characters</span><span class="faint bold" id="send-count">${sendDraft.terms.length}/${TO.RULES.friendLimit}</span></div>
-          <div class="hscroll" style="padding:0">${TO.state.TERMS_EXAMPLES.map((t) => `<button class="chip sm" data-act="send-term" data-t="${esc(t)}">${esc(t)}</button>`).join('')}</div></div>
-          ${error ? `<div class="form-error">${esc(error)}</div>` : ''}`,
-        foot: `<button class="btn primary full" data-act="send-go" data-bet="${bet.id}">${icon('send', 18)} Send challenge</button>`,
-      }),
-    });
-    TO.actions['send-go'] = () => {
-      try {
-        TO.state.sendBetToFriends(bet.id, sendDraft.friends, sendDraft.terms);
-        ui.closeSheet('send');
-        ui.toast({ kind: 'win', title: `Sent to ${sendDraft.friends.join(', ')}`, msg: `"${sendDraft.terms.trim()}"` });
-        TO.tester.mark('friend');
-        TO.app.render();
-      } catch (e) {
-        if (!(e instanceof TO.AppError)) throw e;
-        error = e.message;
-        ui.refreshSheet('send', ['body']);
-      }
-    };
-  };
-  TO.actions['send-pick'] = (el) => {
-    const u = el.dataset.u;
-    sendDraft.friends = sendDraft.friends.includes(u) ? sendDraft.friends.filter((x) => x !== u) : [...sendDraft.friends, u];
-    el.classList.toggle('on');
-  };
-  TO.actions['send-term'] = (el) => {
-    sendDraft.terms = el.dataset.t;
-    const ta = document.getElementById('send-terms');
-    if (ta) ta.value = sendDraft.terms;
-    const c = document.getElementById('send-count');
-    if (c) c.textContent = `${sendDraft.terms.length}/${TO.RULES.friendLimit}`;
-  };
-  TO.inputs['send-terms'] = (el) => {
-    sendDraft.terms = el.value;
-    const c = document.getElementById('send-count');
-    if (c) c.textContent = `${el.value.length}/${TO.RULES.friendLimit}`;
-  };
 
   // ---------- My Bets actions ----------
   TO.actions['bets-tab'] = (el) => { view.tab = el.dataset.t; TO.app.render(); };
@@ -5276,7 +5368,6 @@ window.TIMEOUT_SUPABASE = {
       ui.closeSheet('todo');
       ui.toast({ kind: 'win', title: 'To-do parlay placed', msg: 'Check off each task in My Bets before midnight.' });
       todo.tasks = [{ text: '', difficulty: 'easy' }]; todo.stake = '10'; todo.error = '';
-      TO.tester.mark('todo');
       view.tab = 'open';
       TO.app.render();
     } catch (e) {
@@ -5299,7 +5390,7 @@ window.TIMEOUT_SUPABASE = {
 
 </script>
 <script>
-/* TimeOut web demo — Social (Screen 5): friends, leaderboard, requests & challenges, teams. */
+/* TimeOut web demo — Social: friends, leaderboard, requests and teams. */
 (function (TO) {
   'use strict';
   const { esc, icon } = TO;
@@ -5350,7 +5441,7 @@ window.TIMEOUT_SUPABASE = {
 
   function leaderboard() {
     if (!TO.data.friends.length) {
-      return `<div class="empty">${icon('users', 40)}<h3>Bet against your friends</h3><p>Social is where you compare records with friends, send each other bet challenges, and form teams that compete for a week or a season. Add your first friend to get started.</p><button class="btn primary" data-act="copy-invite">${icon('link', 16)} Invite a friend</button><button class="btn quiet sm" data-act="focus-search">Search usernames instead</button></div>`;
+      return `<div class="empty">${icon('users', 40)}<h3>Keep up with your friends</h3><p>Compare screen-time records and build teams that compete for a week or a season. Add your first friend to get started.</p><button class="btn primary" data-act="copy-invite">${icon('link', 16)} Invite a friend</button><button class="btn quiet sm" data-act="focus-search">Search usernames instead</button></div>`;
     }
     const rows = St.leaderboard();
     return `<div class="stack-s pad"><div class="spread"><span class="eyebrow">Leaderboard · minutes won or lost</span><button class="link-btn tiny" data-act="settings" data-section="privacy">What friends see</button></div>
@@ -5364,20 +5455,7 @@ window.TIMEOUT_SUPABASE = {
 
   function requests() {
     const d = TO.data;
-    const pendingCh = d.challengesIn.filter((c) => c.status === 'pending');
-    const expired = d.challengesIn.filter((c) => c.status === 'expired');
     const parts = [];
-    if (pendingCh.length || expired.length) {
-      parts.push(`<div class="eyebrow">Bet challenges</div>` + [...pendingCh, ...expired].map((c) => {
-        const p = St.person(c.from);
-        return `<div class="card challenge-card">
-          <div class="row">${ui.avatar(p ? p.photo : TO.initialsAvatar(c.from))}<div class="grow"><b>@${esc(c.from)}</b> challenged you<div class="tiny faint">${TO.ago(c.at)}</div></div>${c.status === 'expired' ? '<span class="tag">Expired</span>' : ''}</div>
-          <div class="livebox"><div class="small muted">${esc(c.matchup)}</div><div class="spread"><span class="small">They picked <b>${esc(c.theirPick)}</b></span></div><div class="small">You'd take <b class="green">the other side</b></div></div>
-          <div class="friend-terms">${icon('users', 16)}<span>"${esc(c.terms)}"</span></div>
-          ${c.status === 'pending' ? `<div class="bet-actions"><button class="btn sm ghost" data-act="decline-ch" data-id="${c.id}">Decline</button><button class="btn sm primary" data-act="accept-ch" data-id="${c.id}">Accept bet</button></div>` : `<div class="bet-actions"><button class="btn sm ghost" data-act="decline-ch" data-id="${c.id}">Dismiss</button></div>`}
-        </div>`;
-      }).join(''));
-    }
     if (d.requestsIn.length) {
       parts.push(`<div class="eyebrow">Friend requests</div><div class="list">${d.requestsIn.map((r) => {
         const p = St.person(r.from);
@@ -5394,7 +5472,7 @@ window.TIMEOUT_SUPABASE = {
         return `<div class="person-row">${ui.avatar(p ? p.photo : TO.initialsAvatar(r.to))}<div class="grow" style="min-width:0"><b>@${esc(r.to)}</b><div class="tiny faint">Sent ${TO.ago(r.at)} · ${wait ? `send again in ${TO.fmtIn(wait)}` : 'waiting for them to accept'}</div></div><div class="row-s">${resend}<button class="btn xs quiet" data-act="cancel-request" data-u="${esc(r.to)}">Cancel</button></div></div>`;
       }).join('')}</div>`);
     }
-    if (!parts.length) return `<div class="empty">${icon('bell', 36)}<h3>You're all caught up</h3><p>Friend requests and bet challenges from friends show up here.</p></div>`;
+    if (!parts.length) return `<div class="empty">${icon('bell', 36)}<h3>You're all caught up</h3><p>Friend requests show up here.</p></div>`;
     return `<div class="stack-s pad">${parts.join('')}</div>`;
   }
 
@@ -5420,13 +5498,13 @@ window.TIMEOUT_SUPABASE = {
 
   function render() {
     const d = TO.data;
-    const reqCount = d.requestsIn.length + d.challengesIn.filter((c) => c.status === 'pending').length;
+    const reqCount = d.requestsIn.length;
     const tab = (k, label, n) => `<button class="${view.tab === k ? 'on' : ''}" data-act="social-tab" data-t="${k}">${label}${n ? ` <span class="count-pill" style="background:var(--live);color:#fff">${n}</span>` : ''}</button>`;
     let body;
     if (view.tab === 'requests') body = requests();
     else if (view.tab === 'teams') body = teams();
     else body = leaderboard();
-    return `<div class="page-head"><h1>Social</h1><p>Compete with friends: compare records, send bet challenges, and join teams.</p></div>
+    return `<div class="page-head"><h1>Social</h1><p>Compete with friends: compare screen-time records and join teams.</p></div>
       <div class="stack social-cols">
         <div class="stack social-side">
           ${meCard()}
@@ -5439,7 +5517,7 @@ window.TIMEOUT_SUPABASE = {
       </div>`;
   }
 
-  TO.views.social = { render, view, badge: () => TO.data.requestsIn.length + TO.data.challengesIn.filter((c) => c.status === 'pending').length };
+  TO.views.social = { render, view, badge: () => TO.data.requestsIn.length };
 
   // ---------- Profile sheet ----------
   function profile(username) {
@@ -5459,7 +5537,7 @@ window.TIMEOUT_SUPABASE = {
         const picks = !isMe && showAll ? St.sharedPicks(p) : [];
         const stat = (label, val, ok) => `<div><b>${ok ? val : '<span class="faint" style="font-size:16px">Private</span>'}</b><span>${label}</span></div>`;
         let actions = '';
-        if (rel === 'friend') actions = `<button class="btn primary full" data-act="challenge-friend" data-u="${esc(username)}">${icon('target', 18)} Challenge to a bet</button><button class="btn quiet sm" data-act="remove-friend" data-u="${esc(username)}">Remove friend</button>`;
+        if (rel === 'friend') actions = `<button class="btn quiet sm" data-act="remove-friend" data-u="${esc(username)}">Remove friend</button>`;
         else if (rel === 'requested') actions = `<button class="btn ghost full" data-act="cancel-request" data-u="${esc(username)}">Friend request sent · Cancel</button>`;
         else if (rel === 'incoming' || rel === 'none') actions = `<button class="btn primary full" data-act="add-friend" data-u="${esc(username)}">${icon('userPlus', 18)} ${rel === 'incoming' ? 'Accept friend request' : 'Add friend'}</button>`;
         return {
@@ -5518,7 +5596,6 @@ window.TIMEOUT_SUPABASE = {
   A['copy-invite'] = async () => {
     const ok = await ui.copy(inviteLink());
     ui.toast({ kind: ok ? 'win' : 'info', title: ok ? 'Invite link copied' : 'Your invite link', msg: ok ? inviteLink() : `Copy this: ${inviteLink()}`, ms: 5000 });
-    TO.tester.mark('search');
   };
   A['focus-search'] = () => { const i = document.getElementById('social-search'); if (i) i.focus(); };
   A['add-friend'] = (el) => {
@@ -5548,26 +5625,6 @@ window.TIMEOUT_SUPABASE = {
     ui.closeSheet('profile');
     TO.app.render();
   };
-  A['accept-ch'] = (el) => {
-    if (!TO.net.guard()) return;
-    try {
-      const bet = St.acceptChallenge(el.dataset.id);
-      ui.toast({ kind: 'win', title: 'Challenge accepted', msg: `${bet.legs[0].label} · "${bet.friend.terms}". It's in My Bets.` });
-      TO.tester.mark('friend');
-    } catch (e) {
-      if (!(e instanceof TO.AppError)) throw e;
-      ui.toast({ kind: 'warn', title: 'Challenge expired', msg: e.message });
-    }
-    TO.app.render();
-  };
-  A['decline-ch'] = (el) => { St.declineChallenge(el.dataset.id); TO.app.render(); };
-  A['challenge-friend'] = (el) => {
-    const u = el.dataset.u;
-    TO.pendingChallenge = u;
-    ui.closeAllSheets();
-    TO.app.go('home');
-    ui.toast({ kind: 'info', title: `Pick a game to challenge @${u}`, msg: 'Tap any odds. The slip opens as a friend bet with them already selected.', ms: 5000 });
-  };
   A['goto-social'] = () => { ui.closeAllSheets(); ui.closeAllPages(); TO.app.go('social'); };
   A.team = (el) => teamSheet(el.dataset.id);
   A['team-new'] = () => newTeamSheet();
@@ -5584,7 +5641,6 @@ window.TIMEOUT_SUPABASE = {
       const t = St.createTeam(draft);
       ui.closeSheet('team-new');
       ui.toast({ kind: 'win', title: `${t.name} created`, msg: `${t.members.length - 1} friend${t.members.length === 2 ? '' : 's'} invited.` });
-      TO.tester.mark('team');
       view.tab = 'teams';
       TO.app.render();
     } catch (e) {
@@ -5610,7 +5666,6 @@ window.TIMEOUT_SUPABASE = {
     view.query = el.value;
     const box = document.getElementById('search-results');
     if (box) box.innerHTML = searchResults();
-    if (el.value.trim() && !St.searchPeople(el.value).length) TO.tester.mark('search');
   };
 })(window.TO);
 
@@ -5626,12 +5681,12 @@ window.TIMEOUT_SUPABASE = {
 
   const SECTIONS = {
     screentime: { title: 'Screen time', icon: 'hourglass' },
+    races: { title: 'Virtual Racing', icon: 'target' },
     status: { title: 'Tier & streak', icon: 'trophy' },
     sports: { title: 'Sports on Home', icon: 'grid' },
     notifications: { title: 'Notifications', icon: 'bell' },
     privacy: { title: 'What friends can see', icon: 'eye' },
     account: { title: 'Account', icon: 'user' },
-    tester: { title: 'Tester tools', icon: 'flask' },
   };
 
   // ---------- Drawer ----------
@@ -5641,19 +5696,18 @@ window.TIMEOUT_SUPABASE = {
     const wrap = document.createElement('div');
     wrap.dataset.drawer = '1';
     wrap.style.cssText = 'position:absolute;inset:0';
-    const item = (key, sub) => `<button class="dn ${key === 'tester' ? 'dn-tester' : ''}" data-act="settings" data-section="${key}">${icon(SECTIONS[key].icon, 20)}${SECTIONS[key].title}${sub ? `<span class="sub">${sub}</span>` : ''}</button>`;
+    const item = (key, sub) => `<button class="dn" data-act="settings" data-section="${key}">${icon(SECTIONS[key].icon, 20)}${SECTIONS[key].title}${sub ? `<span class="sub">${sub}</span>` : ''}</button>`;
     wrap.innerHTML = `<div class="scrim" data-act="close-drawer"></div><aside class="drawer" aria-label="Menu">
       <div class="drawer-head">${ui.avatar(TO.account.photo, 'lg')}<div class="grow" style="min-width:0"><b class="ellipsis" style="display:block;font-size:17px">@${esc(TO.account.username)}</b><div class="small muted ellipsis">${esc(TO.account.email)}</div>${TO.account.server ? `<div class="tiny faint ellipsis">Login #${TO.account.server.loginCount} · from the database</div>` : ''}<div style="margin-top:6px">${ui.tierBadge(wl.tier.id, true)}</div></div></div>
       <nav>
         ${item('screentime', `${wl.phoneLeft} min left`)}
+        ${item('races')}
         ${item('status', wl.streak ? `${wl.streak}-day streak` : '')}
         ${item('sports')}
         ${item('notifications')}
         ${item('privacy')}
         ${item('account')}
         <button class="dn" data-act="how">${icon('help', 20)}How TimeOut works</button>
-        <div class="divider" style="margin:8px 12px"></div>
-        ${item('tester')}
         <button class="dn" data-act="logout">${icon('logout', 20)}Log out</button>
       </nav></aside>`;
     ui.layer().appendChild(wrap);
@@ -5754,9 +5808,7 @@ window.TIMEOUT_SUPABASE = {
     const row = (k, t, sub, ic) => listRow(ic, t, sub, ui.switchEl(`nt-${k}`, n[k], `data-change="set-notify" data-k="${k}"`), `for="nt-${k}"`);
     return `<div class="small muted">In the demo these show as banners at the top of the screen.</div><div class="list">
       ${row('settled', 'Bet results', 'When a bet wins, loses or is voided', 'ticket')}
-      ${row('odds', 'Odds changes', 'When odds move on a pick in your bet slip', 'trend')}
       ${row('friends', 'Friend requests', 'When someone adds or accepts you', 'userPlus')}
-      ${row('challenges', 'Bet challenges', 'When a friend challenges or accepts a bet', 'target')}
       ${row('lowTime', 'Low phone time', 'Before your locked apps close', 'phone')}
     </div>`;
   }
@@ -5822,15 +5874,14 @@ window.TIMEOUT_SUPABASE = {
   }
 
   function render(section) {
-    const map = { screentime, status, sports, notifications, privacy, account, tester: () => TO.tester.panelHtml(true) };
+    const map = { screentime, races: () => TO.views.races.render(), status, sports, notifications, privacy, account };
     return { title: SECTIONS[section].title, body: map[section]() };
   }
 
   function openSection(section) {
     closeDrawer();
     acctErr = {};
-    ui.openPage('settings', { render: () => render(section) });
-    if (section === 'status') TO.tester.mark('tier');
+    ui.openPage('settings', { render: () => render(section), after: section === 'races' ? (el) => TO.races.mount(el) : undefined });
   }
 
   // ---------- How it works ----------
@@ -5842,7 +5893,7 @@ window.TIMEOUT_SUPABASE = {
           <div class="how-card"><span class="n">2</span><div><h3>Winning buys you phone time</h3><p>Win a bet and the minutes you win are added to tomorrow's phone time. Lose and they come off it.</p></div></div>
           <div class="how-card"><span class="n">3</span><div><h3>Bets settle on their own</h3><p>When a game ends, your bet pays out within minutes. Postponed games are voided and you get your stake back.</p></div></div>
           <div class="how-card"><span class="n">4</span><div><h3>Out of minutes? Wait for midnight</h3><p>At 0 minutes, betting locks until the reset. Emergency unlocks exist, but they cost you tomorrow.</p></div></div>
-          <div class="how-card"><span class="n">5</span><div><h3>Play friends for anything</h3><p>Send a bet to a friend and put something else on the line, like "loser does the dishes".</p></div></div>`,
+          `,
         foot: `<button class="btn primary full" data-act="close-sheet" data-name="how">Got it</button>`,
       }),
     });
@@ -5908,7 +5959,6 @@ window.TIMEOUT_SUPABASE = {
     try {
       St.useEmergencyUnlock();
       ui.toast({ kind: 'warn', title: `+${TO.RULES.overrideMinutes} min unlocked`, msg: `Tomorrow's limit dropped by ${TO.RULES.overridePenalty} min.` });
-      TO.tester.mark('emergency');
     } catch (e) {
       if (!(e instanceof TO.AppError)) throw e;
       ui.toast({ kind: 'loss', title: 'No unlocks left', msg: e.message });
@@ -5987,8 +6037,7 @@ window.TIMEOUT_SUPABASE = {
     const id = el.dataset.id;
     const cur = TO.data.settings.sports;
     St.setSetting('sports', el.checked ? S.LEAGUE_ORDER.filter((l) => l !== 'sim' && (cur.includes(l) || l === id)) : cur.filter((l) => l !== id && l !== 'sim'));
-    if (!el.checked && TO.data.feedFilter === id) TO.data.feedFilter = 'all';
-    TO.tester.mark('sports');
+    TO.data.feedFilter = 'all';
     TO.app.render();
   };
   C['set-notify'] = (el) => St.setSetting(`notify.${el.dataset.k}`, el.checked);
@@ -6042,7 +6091,7 @@ window.TIMEOUT_SUPABASE = {
         <div class="welcome-points">
           <div>${icon('hourglass', 18)}<span>60 betting minutes a day. Win and you get more phone time tomorrow.</span></div>
           <div>${icon('radio', 18)}<span>Live scores and odds for NFL, NBA, MLB, NHL, college football and soccer.</span></div>
-          <div>${icon('users', 18)}<span>Challenge friends and play for anything but cash.</span></div>
+          <div>${icon('users', 18)}<span>Compare screen-time records and compete on teams.</span></div>
         </div>
       </div>
       <div class="auth-inner" style="flex:none;gap:10px">
@@ -6107,7 +6156,7 @@ window.TIMEOUT_SUPABASE = {
       body = `<h1>Here's the deal, @${esc(TO.account.username)}</h1>
         <div class="how-card"><span class="n">1</span><div><h3>You get 60 betting minutes a day</h3><p>They reset every night at midnight.</p></div></div>
         <div class="how-card"><span class="n">2</span><div><h3>You're betting tomorrow's phone time</h3><p>Win and tomorrow's limit goes up. Lose and it goes down.</p></div></div>
-        <div class="how-card"><span class="n">3</span><div><h3>No money, ever</h3><p>Not now, not later. Just minutes, bragging rights, and whatever you bet your friends.</p></div></div>`;
+        <div class="how-card"><span class="n">3</span><div><h3>No money, ever</h3><p>Not now, not later. Bet screen time and build a clean streak.</p></div></div>`;
       next = `<button class="btn primary full" data-act="ob-next">Next</button>`;
     } else if (step === 2) {
       const sel = av.sports;
@@ -6183,7 +6232,6 @@ window.TIMEOUT_SUPABASE = {
     St.adoptServerUser(user, await TO.api.loadState());
     av.values = {}; av.photo = null;
     av.screen = 'onboard';
-    TO.tester.mark('signup');
     TO.app.boot(); // new accounts land in onboarding
     ui.toast({ kind: 'win', title: 'Email verified', msg: `Welcome to TimeOut, @${user.username}.` });
   }
@@ -6246,7 +6294,6 @@ window.TIMEOUT_SUPABASE = {
     const { user } = await TO.api.login(email, password);
     St.adoptServerUser(user, await TO.api.loadState());
     av.values = {};
-    TO.tester.mark('login');
     TO.app.boot();
     ui.toast({
       kind: 'win',
@@ -6287,7 +6334,6 @@ window.TIMEOUT_SUPABASE = {
         const { user, state } = result;
         St.adoptServerUser(user, state);
         av.values = {}; av.photo = null;
-        TO.tester.mark('signup');
         startOnboarding();
       } catch (e) { showError(e); }
       return;
@@ -6302,7 +6348,6 @@ window.TIMEOUT_SUPABASE = {
       const acc = St.createAccount({ username: v['su-user'] || '', email: v['su-email'] || '', password: v['su-pw'] || '', photo: av.photo });
       St.startSession(acc.id);
       av.values = {}; av.photo = null;
-      TO.tester.mark('signup');
       startOnboarding();
     } catch (e) { showError(e); }
   }
@@ -6329,7 +6374,7 @@ window.TIMEOUT_SUPABASE = {
   A['auth-demo'] = async (el) => {
     if (TO.api.configured) return;
     if (!TO.net.online()) { ui.toast({ kind: 'loss', title: 'No internet connection', msg: 'Check your Wi-Fi or data and try again.' }); return; }
-    if (!TO.api.online) { St.loginDemo(); TO.tester.mark('login'); TO.app.boot(); return; }
+    if (!TO.api.online) { St.loginDemo(); TO.app.boot(); return; }
     el.disabled = true;
     try {
       await serverLogin(St.DEMO.username, St.DEMO.password);
@@ -6372,232 +6417,6 @@ window.TIMEOUT_SUPABASE = {
 
 </script>
 <script>
-/* TimeOut web demo — tester console. Not part of the app: it lets testers trigger situations from the PRD on demand. */
-(function (TO) {
-  'use strict';
-  const { esc, icon } = TO;
-  const S = TO.sim;
-  const ui = TO.ui;
-
-  const CHECKLIST = [
-    ['login', 'Log in (demo account or your own)'],
-    ['signup', 'Create an account with a photo'],
-    ['place', 'Place a bet from Home in 3 taps or fewer'],
-    ['odds', 'See odds change on your slip and accept the new odds'],
-    ['overstake', 'Try to stake more minutes than you have'],
-    ['settle', 'Watch a bet settle (finish a live game)'],
-    ['void', 'See a postponed game void a bet'],
-    ['zero', 'Run your balance to 0 and see the midnight countdown'],
-    ['midnight', 'Jump to midnight and check tomorrow\'s limit'],
-    ['share', 'Share a bet as an image'],
-    ['friend', 'Send or accept a friend bet with a custom stake'],
-    ['search', 'Search a username that doesn\'t exist'],
-    ['team', 'Create a team with start and end dates'],
-    ['emergency', 'Use an emergency unlock'],
-    ['todo', 'Place a to-do parlay'],
-    ['pred', 'Bet on a prediction market'],
-    ['sports', 'Change which sports show on Home'],
-    ['offday', 'Turn on "no real games" and find the Sim League'],
-    ['tier', 'Check your tier and clean streak'],
-  ];
-  const KEY = 'timeout.checklist';
-  const done = () => TO.store.get(KEY, {});
-
-  function mark(k) {
-    const d = done();
-    if (d[k]) return;
-    d[k] = TO.now();
-    TO.store.set(KEY, d);
-    render();
-  }
-
-  function panelHtml(inApp) {
-    const loggedIn = !!TO.account;
-    const d = done();
-    const off = TO.store.get('timeout.offDay', false);
-    const now = new Date(TO.now());
-    const shifted = Math.round(TO.clock.offset / TO.MIN);
-    const dis = loggedIn ? '' : 'disabled';
-    const b = (act, ic, label, extra = '') => `<button class="tbtn ${extra}" data-act="${act}" ${dis}>${icon(ic, 15)}<span>${label}</span></button>`;
-    return `${inApp ? `<div class="note warn">${icon('flask', 16)}<span>These tools aren't part of TimeOut. They let testers trigger situations from the spec without waiting.</span></div>` : ''}
-      <div class="tgroup"><h3>Demo clock</h3>
-        <div class="clockface"><span>${now.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })} <b>${now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' })}</b></span><span class="faint">${shifted ? `+${TO.fmtIn(TO.clock.offset)}` : 'real time'}</span></div>
-        <div class="tgrid">
-          ${b('t-skip', 'ff', 'Skip 5 min')}${b('t-skip15', 'ff', 'Skip 15 min')}
-          ${b('t-1159', 'moon', 'Jump to 11:59 PM')}${b('t-midnight', 'moon', 'Jump past midnight')}
-          <button class="tbtn wide" data-act="t-real">${icon('refresh', 15)}<span>Back to real time</span></button>
-        </div>
-      </div>
-      <div class="tgroup"><h3>Games & odds</h3>
-        <div class="tgrid">
-          ${b('t-finish', 'check', 'Finish games I bet on', 'wide')}
-          ${b('t-postpone', 'alert', 'Postpone a game I bet on', 'wide')}
-          ${b('t-odds', 'trend', 'Move odds on my bet slip', 'wide')}
-          <button class="tbtn wide ${off ? 'on' : ''}" data-act="t-offday">${icon('moon', 15)}<span>${off ? 'No real games today: ON' : 'Simulate a day with no real games'}</span></button>
-        </div>
-      </div>
-      <div class="tgroup"><h3>Screen time</h3>
-        <div class="tgrid">
-          ${b('t-use', 'phone', 'Use phone +10 min')}${b('t-use30', 'phone', 'Use phone +30 min')}
-          ${b('t-zero', 'lock', 'Set betting balance to 0', 'wide')}
-        </div>
-      </div>
-      <div class="tgroup"><h3>Connection</h3>
-        <div class="tgrid">
-          <button class="tbtn wide ${TO.net.simulatedOffline ? 'on' : ''}" data-act="t-offline">${icon('wifiOff', 15)}<span>${TO.net.simulatedOffline ? 'No internet: ON (tap to reconnect)' : 'Simulate losing internet'}</span></button>
-        </div>
-      </div>
-      <div class="tgroup"><h3>Friends</h3>
-        <div class="tgrid">
-          ${b('t-fr', 'userPlus', 'Get a friend request')}${b('t-ch', 'target', 'Get a bet challenge')}
-        </div>
-      </div>
-      <div class="tgroup"><h3>Data</h3>
-        <div class="tgrid">
-          ${b('t-reset', 'refresh', 'Reset my bets & wallet', 'wide')}
-          <button class="tbtn wide" data-act="t-wipe">${icon('trash', 15)}<span>Erase every account on this device</span></button>
-        </div>
-        <div class="creds">Demo login: <b>${esc(TO.state.DEMO.username)}</b> / <b>${esc(TO.state.DEMO.password)}</b></div>
-      </div>
-      <div class="tgroup"><h3>Test checklist · ${Object.keys(d).length}/${CHECKLIST.length}</h3>
-        ${CHECKLIST.map(([k, t]) => `<button class="check-item ${d[k] ? 'done' : ''}" data-act="t-check" data-k="${k}"><span class="checkbox ${d[k] ? 'on' : ''}">${icon('check', 12)}</span><span>${esc(t)}</span></button>`).join('')}
-        <button class="tbtn" data-act="t-check-clear">${icon('x', 15)}<span>Clear checklist</span></button>
-      </div>`;
-  }
-
-  function render() {
-    const host = document.getElementById('tester-body');
-    if (host) {
-      const st = host.scrollTop;
-      host.innerHTML = panelHtml(false);
-      host.scrollTop = st;
-    }
-    if (ui.pageOpen('settings') && document.querySelector('[data-page="settings"] .page-top .t').textContent === 'Tester tools') ui.refreshPage('settings');
-  }
-
-  function myGames() {
-    const ids = new Set();
-    TO.data.bets.filter((b) => b.status === 'open').forEach((b) => b.legs.forEach((l) => { if (l.gameId && l.result === 'pending') ids.add(l.gameId); }));
-    return [...ids];
-  }
-
-  function after(msg) {
-    TO.app.tick(true);
-    if (msg) ui.toast(Object.assign({ kind: 'info' }, msg));
-    render();
-  }
-
-  const A = TO.actions;
-  A['t-skip'] = () => { TO.clock.add(5 * TO.MIN); after({ title: 'Skipped ahead 5 minutes' }); };
-  A['t-skip15'] = () => { TO.clock.add(15 * TO.MIN); after({ title: 'Skipped ahead 15 minutes' }); };
-  A['t-1159'] = () => {
-    const target = TO.nextMidnight() - 60 * 1000;
-    if (target > TO.now()) TO.clock.set(target);
-    after({ title: 'It\'s 11:59 PM', msg: 'Watch the countdown hit zero.' });
-  };
-  A['t-midnight'] = () => {
-    TO.clock.set(TO.nextMidnight() + 5000);
-    after();
-    mark('midnight');
-  };
-  A['t-real'] = () => {
-    TO.clock.reset();
-    // Moving back in time can't un-settle bets, so the wallet just follows the current day.
-    after({ title: 'Back to real time' });
-  };
-  A['t-finish'] = () => {
-    const ids = myGames().filter((id) => S.game(id).state !== 'postponed');
-    if (!ids.length) { ui.toast({ kind: 'warn', title: 'No open game bets', msg: 'Place a bet on a game first.' }); return; }
-    const now = TO.now();
-    for (const id of ids) {
-      const g = S.game(id, now);
-      const warp = (S.overrides()[id] || {}).warp || 0;
-      S.setOverride(id, { warp: warp + (g.end - now) + 1000 });
-    }
-    after({ title: `Finished ${ids.length} game${ids.length === 1 ? '' : 's'}`, msg: 'Bets settle within seconds.' });
-    mark('settle');
-  };
-  A['t-postpone'] = () => {
-    const ids = myGames().filter((id) => { const g = S.game(id); return g.state === 'scheduled' || g.state === 'live'; });
-    const id = ids[0];
-    if (!id) { ui.toast({ kind: 'warn', title: 'No open game bets', msg: 'Place a bet on a game that hasn\'t ended.' }); return; }
-    S.setOverride(id, { state: 'postponed' });
-    const g = S.game(id);
-    after({ title: `${g.away.abbr} @ ${g.home.abbr} postponed`, msg: 'Bets on it are voided and stakes returned.' });
-    mark('void');
-  };
-  A['t-odds'] = () => {
-    const legs = TO.slip.legs.filter((l) => !l.ref.startsWith('pm-'));
-    if (!legs.length) { ui.toast({ kind: 'warn', title: 'Add a game pick to your slip first', msg: 'Then tap this to move its odds.' }); return; }
-    for (const l of legs) {
-      const n = (S.overrides()[l.ref] || {}).nudge || 0;
-      S.setOverride(l.ref, { nudge: n + (Math.random() < 0.5 ? -0.3 : 0.3) });
-    }
-    after({ title: 'Odds moved', msg: 'Your slip now asks you to accept the new odds.' });
-  };
-  A['t-offday'] = () => {
-    const v = !TO.store.get('timeout.offDay', false);
-    TO.store.set('timeout.offDay', v);
-    if (v) { TO.data.feedFilter = 'all'; TO.state.save(); }
-    TO.app.go('home');
-    after({ title: v ? 'No real games today' : 'Real games are back' });
-  };
-  A['t-use'] = () => { TO.state.addUsage(10); after(); };
-  A['t-use30'] = () => { TO.state.addUsage(30); after(); };
-  A['t-offline'] = () => {
-    TO.net.simulatedOffline = !TO.net.simulatedOffline;
-    TO.app.netChanged();
-  };
-  A['t-zero'] = () => {
-    const w = TO.data.wallet;
-    w.balance = 0; w.lockedOut = true;
-    TO.state.save();
-    TO.app.go('home');
-    after({ kind: 'loss', title: 'Betting balance is 0', msg: 'Betting is locked until midnight.' });
-    mark('zero');
-  };
-  A['t-fr'] = () => {
-    const candidates = TO.state.PEOPLE.filter((p) => TO.state.relation(p.username) === 'none');
-    const p = candidates[Math.floor(Math.random() * candidates.length)];
-    if (!p) { ui.toast({ kind: 'warn', title: 'Everyone is already your friend' }); return; }
-    TO.data.requestsIn.push({ id: TO.uid('fr'), from: p.username, at: TO.now() });
-    TO.state.save();
-    after({ title: `@${p.username} sent you a friend request`, msg: 'See it in Social > Requests.' });
-  };
-  A['t-ch'] = () => {
-    const from = TO.data.friends[Math.floor(Math.random() * TO.data.friends.length)] || 'mike_t';
-    const ch = TO.state.incomingChallenge(from);
-    if (!ch) { ui.toast({ kind: 'warn', title: 'No upcoming games to challenge on' }); return; }
-    after({ title: `@${from} challenged you`, msg: `${ch.theirPick} · "${ch.terms}". See Social > Requests.` });
-  };
-  A['t-reset'] = async () => {
-    if (!(await ui.confirm({ title: 'Reset your bets and wallet?', body: TO.account.demo ? 'The demo account goes back to its starting bets, friends and history.' : 'Your bets, wallet and streak start fresh. Friends and settings stay.', confirm: 'Reset', danger: true }))) return;
-    TO.slip.clear();
-    TO.store.set('timeout.gameOverrides', {});
-    TO.state.resetMyData();
-    ui.closeAllSheets();
-    after({ title: 'Data reset' });
-  };
-  A['t-wipe'] = async () => {
-    if (!(await ui.confirm({ title: 'Erase every account?', body: TO.api.online ? 'Logs you out and removes all bets and settings saved in this browser, then reloads. Accounts in the database stay (use npm run db:reset for those).' : 'Removes all TimeOut accounts, bets and settings saved in this browser, then reloads.', confirm: 'Erase everything', danger: true }))) return;
-    try {
-      Object.keys(localStorage).filter((k) => k.startsWith('timeout.')).forEach((k) => localStorage.removeItem(k));
-    } catch (e) { /* ignore */ }
-    location.reload();
-  };
-  A['t-check'] = (el) => {
-    const d = done();
-    if (d[el.dataset.k]) delete d[el.dataset.k]; else d[el.dataset.k] = TO.now();
-    TO.store.set(KEY, d);
-    render();
-  };
-  A['t-check-clear'] = () => { TO.store.set(KEY, {}); render(); };
-
-  TO.tester = { mark, render, panelHtml };
-})(window.TO);
-
-</script>
-<script>
 /* TimeOut web demo — app shell, navigation, live refresh loop and event wiring. */
 (function (TO) {
   'use strict';
@@ -6612,7 +6431,7 @@ window.TIMEOUT_SUPABASE = {
     ['social', 'Social', 'users'],
   ];
 
-  /** The phone shell. The browser version (web.js) swaps in its own layout. */
+  /** The app shell. The browser version (web.js) swaps in its own layout. */
   app.shellHtml = () => `<div class="app" id="shell">
       <header class="topbar" id="topbar"></header>
       <main class="view" id="view" tabindex="-1"></main>
@@ -6628,20 +6447,17 @@ window.TIMEOUT_SUPABASE = {
     if (!St.loadSession()) {
       body.innerHTML = '';
       TO.views.auth.show('welcome');
-      TO.tester.render();
       return;
     }
     if (!TO.data.onboarded) {
       body.innerHTML = '';
       TO.views.auth.startOnboarding();
-      TO.tester.render();
       return;
     }
     body.innerHTML = app.shellHtml();
     app.tab = 'home';
     app.render();
     TO.live.refresh();
-    TO.tester.render();
   };
 
   const inShell = () => !!document.getElementById('shell') && !!TO.data;
@@ -6655,7 +6471,7 @@ window.TIMEOUT_SUPABASE = {
       <button class="icon-btn" data-act="menu" aria-label="Menu and settings">${icon('menu', 22)}${wl.appsLocked ? '<span class="dotbadge"></span>' : ''}</button>
       <div class="brand">${brandMark(18, 'brand-mark')}<span class="brand-word">TIME<b>OUT</b></span></div>
       <button class="bal-pill ${locked ? 'locked' : ''}" data-act="settings" data-section="screentime" aria-label="${locked ? 'Betting locked until midnight' : `${wl.balance} minutes available to bet`}">${icon(locked ? 'lock' : 'hourglass', 15)}${locked ? 'Locked' : `${wl.balance} min`}</button>`;
-    const open = TO.data.bets.filter((b) => b.status === 'open' && b.kind === 'sports' && b.legs.length && b.legs.every((leg) => leg.kind === 'game' || (leg.kind === 'sports' && leg.gameId))).length;
+    const open = TO.data.bets.filter((b) => b.status === 'open' && (b.kind === 'sports' || b.kind === 'race') && b.legs.length && b.legs.every((leg) => leg.kind === 'race' || leg.kind === 'game' || (leg.kind === 'sports' && leg.gameId))).length;
     document.getElementById('tabbar').innerHTML = TABS.map(([k, label, ic]) => {
       const badge = k === 'bets' && open ? `<span class="badge green">${open}</span>` : k === 'social' && socialBadge ? `<span class="badge">${socialBadge}</span>` : '';
       return `<button class="tab ${app.tab === k ? 'on' : ''}" data-act="tab" data-tab="${k}" aria-current="${app.tab === k ? 'page' : 'false'}">${icon(ic, 23)}<span>${label}</span>${badge}</button>`;
@@ -6729,14 +6545,6 @@ window.TIMEOUT_SUPABASE = {
   function notifySettled(list) {
     const n = TO.data.settings.notify;
     for (const b of list) {
-      if (b.friend) {
-        if (!n.challenges) continue;
-        const who = b.friend.with.join(', ');
-        if (b.status === 'won') ui.toast({ kind: 'win', title: `You beat @${who}`, msg: `They owe you: "${b.friend.terms}"` });
-        else if (b.status === 'lost') ui.toast({ kind: 'loss', title: `@${who} won your friend bet`, msg: `You owe them: "${b.friend.terms}"` });
-        else ui.toast({ kind: 'info', title: 'Friend bet voided', msg: `${betTitle(b)} · no winner` });
-        continue;
-      }
       if (!n.settled) continue;
       if (b.status === 'won') ui.toast({ kind: 'win', title: `Won: ${betTitle(b)}`, msg: `+${b.payout - b.stake} min added to tomorrow's phone time.` });
       else if (b.status === 'lost') ui.toast({ kind: 'loss', title: `Lost: ${betTitle(b)}`, msg: `−${b.stake} min from tomorrow's phone time.` });
@@ -6748,18 +6556,13 @@ window.TIMEOUT_SUPABASE = {
     const now = TO.now();
     // Every second: clocks and countdowns.
     document.querySelectorAll('[data-countdown]').forEach((el) => { el.textContent = TO.countdown(Number(el.dataset.countdown) - now); });
-    const sb = document.getElementById('sb-time');
-    if (sb) sb.textContent = new Date(now).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).replace(/\s?[AP]M$/i, '');
-    const cf = document.querySelector('#tester-body .clockface b');
-    if (cf) cf.textContent = new Date(now).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' });
-
     if (!force && Date.now() - lastFull < 5000) return;
     lastFull = Date.now();
-    if (!inShell()) { TO.tester.render(); return; }
+    if (!inShell()) return;
 
     TO.live.refresh();
 
-    // Midnight reset, settlement (PRD: within 5 minutes of a game ending; here within seconds) and friend activity.
+    // Midnight reset, bet settlement and friend activity.
     const rolledOver = St.rollover(now);
     if (rolledOver) {
       St.save();
@@ -6770,18 +6573,11 @@ window.TIMEOUT_SUPABASE = {
     const socialEvents = St.socialTick(now);
     for (const ev of socialEvents) {
       if (ev.type === 'friend' && TO.data.settings.notify.friends) ui.toast({ kind: 'win', title: `@${ev.username} accepted your friend request` });
-      if (ev.type === 'challenge' && TO.data.settings.notify.challenges) ui.toast({ kind: 'win', title: `@${ev.bet.friend.with.join(', ')} accepted your friend bet`, msg: `"${ev.bet.friend.terms}"` });
     }
     St.checkPhoneTime();
 
     const slip = TO.slip;
     if (slip.legs.length) {
-      const st = slip.status();
-      const sig = slip.legs.map((l) => { const c = TO.sim.currentSelection(l.selId); return c && c.sel ? `${c.sel.price}|${c.sel.line}` : 'x'; }).join(',');
-      if (st.changed && sig !== slip.notifiedChange) {
-        slip.notifiedChange = sig;
-        if (TO.data.settings.notify.odds && !ui.sheetOpen('slip')) ui.toast({ kind: 'warn', title: 'Odds changed on your bet slip', msg: 'Open the slip to review and accept the new odds.' });
-      }
       refreshSlip();
     }
 
@@ -6796,7 +6592,6 @@ window.TIMEOUT_SUPABASE = {
     } else {
       app.refreshSlipbar();
     }
-    TO.tester.render();
   };
 
   function isTyping() {
@@ -6805,7 +6600,7 @@ window.TIMEOUT_SUPABASE = {
   }
 
   // ---------- Connection ----------
-  /** Red banner while offline. The slip, to-do parlays and challenges refuse new bets until it clears. */
+  /** Red banner while offline; the slip refuses bets until the connection returns. */
   function renderNet() {
     const root = ui.root();
     if (!root) return;
@@ -6826,7 +6621,6 @@ window.TIMEOUT_SUPABASE = {
     renderNet();
     if (ui.sheetOpen('slip')) ui.refreshSheet('slip', ['body', 'foot']);
     if (TO.net.online()) ui.toast({ kind: 'win', title: 'Back online', msg: 'Odds are updating again.' });
-    TO.tester.render();
   };
   window.addEventListener('online', app.netChanged);
   window.addEventListener('offline', app.netChanged);
@@ -6860,6 +6654,9 @@ window.TIMEOUT_SUPABASE = {
   });
   TO.on('live:updated', () => {
     if (!inShell()) return;
+    const settled = St.settle(TO.now());
+    notifySettled(settled);
+    if (settled.length) app.renderChrome();
     if (app.tab === 'home') TO.views.home.refreshLive();
     if (app.tab === 'bets') app.renderView();
     if (ui.pageOpen('game')) TO.views.game.refresh();
@@ -6890,26 +6687,6 @@ window.TIMEOUT_SUPABASE = {
   document.addEventListener('pointerup', () => { setTimeout(() => { app.pressing = false; }, 60); });
   document.addEventListener('pointercancel', () => { app.pressing = false; });
 
-  // ---------- Fit the phone frame to the window ----------
-  function fit() {
-    const slot = document.getElementById('device-slot');
-    const device = document.getElementById('device');
-    const tester = document.getElementById('tester');
-    if (!slot || !device) return;
-    if (window.innerWidth <= 560) {
-      slot.style.width = slot.style.height = '';
-      device.style.transform = '';
-      return;
-    }
-    const bar = document.getElementById('demo-bar');
-    const scale = Math.min(1, Math.max(0.6, (window.innerHeight - 48 - (bar ? bar.offsetHeight : 0)) / 852));
-    device.style.transform = `scale(${scale})`;
-    slot.style.width = `${393 * scale}px`;
-    slot.style.height = `${852 * scale}px`;
-    if (tester) tester.style.height = `${852 * scale}px`;
-  }
-  window.addEventListener('resize', fit);
-
   /** Server mode: the database decides who is logged in. Re-reads the user on every page load,
    *  so values the server changed (last login, login count) survive a refresh. */
   async function restoreServerSession() {
@@ -6925,8 +6702,28 @@ window.TIMEOUT_SUPABASE = {
     }
   }
 
+  // A browser session can stay open while bets are placed in another one. Refresh the
+  // shared account snapshot when this tab returns and periodically while it is visible.
+  let remoteSyncAt = 0;
+  let remoteSync = null;
+  function syncRemoteState(force = false) {
+    if (!inShell() || document.hidden || !TO.api.configured || !TO.api.hasToken() || !TO.account?.server) return;
+    if (remoteSync) return remoteSync;
+    if (!force && Date.now() - remoteSyncAt < 30000) return;
+    remoteSyncAt = Date.now();
+    remoteSync = TO.api.loadState().then((state) => {
+      if (!state || !inShell()) return;
+      St.adoptServerUser(TO.account.server, state);
+      app.render();
+    }).catch((error) => {
+      console.warn('Could not refresh TimeOut data from Supabase:', error.message);
+    }).finally(() => { remoteSync = null; });
+    return remoteSync;
+  }
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) syncRemoteState(true); });
+  window.addEventListener('focus', () => syncRemoteState(true));
+
   async function start() {
-    fit();
     renderNet();
     // Arriving from the link in a confirmation email: the URL carries the new session (or why it failed).
     const redirect = TO.api.configured && TO.api.consumeAuthRedirect ? TO.api.consumeAuthRedirect() : null;
@@ -6940,6 +6737,7 @@ window.TIMEOUT_SUPABASE = {
       ui.toast({ kind: 'loss', title: 'That link didn\'t work', msg: `${redirect.error}. Log in, or create your account again to get a new link.`, ms: 8000 });
     }
     setInterval(() => app.tick(false), 1000);
+    setInterval(() => syncRemoteState(), 30000);
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
   else start();

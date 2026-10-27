@@ -7,10 +7,10 @@
 
   const prevScores = {};
 
-  const followed = () => TO.data.settings.sports;
+  const followed = () => TO.data.settings.sports?.length ? TO.data.settings.sports : S.REAL_LEAGUES;
   const offDay = () => TO.store.get('timeout.offDay', false);
   const activeFilter = () => ['pred', 'todo', 'sim'].includes(TO.data.feedFilter) ? 'all' : (TO.data.feedFilter || 'all');
-  const sportsOnly = (bet) => bet.kind === 'sports' && bet.legs.every((leg) => leg.gameId && S.game(leg.gameId)?.league !== 'sim');
+  const sportsOnly = (bet) => bet.kind === 'race' || (bet.kind === 'sports' && bet.legs.every((leg) => leg.gameId && S.game(leg.gameId)?.league !== 'sim'));
 
   // Which day the board shows: 0 = today, 1 = tomorrow. Live games are always today.
   let feedDay = 0;
@@ -41,7 +41,7 @@
   }
 
   function myOpenBetOn(ref) {
-    return TO.data.bets.filter((b) => b.status === 'open' && b.legs.some((l) => l.gameId === ref || l.predId === ref));
+    return TO.data.bets.filter((b) => b.status === 'open' && b.legs.some((l) => l.gameId === ref || l.predId === ref || l.raceId === ref));
   }
 
   // ---------- Wallet header (PRD: screen time + current bets always at the top) ----------
@@ -59,7 +59,7 @@
     return `<div class="card wallet">
       <div class="spread" style="align-items:flex-end">
         <div>
-          <div class="eyebrow">Betting balance today</div>
+          <div class="spread" style="justify-content:flex-start;gap:8px"><div class="eyebrow">Betting balance today</div>${wl.bonusToday ? `<span class="tiny green bold">+${wl.bonusToday} min ${esc(wl.tier.title)} bonus included</span>` : ''}</div>
           <div class="big" style="margin-top:4px">${wl.balance}<small>min</small></div>
         </div>
         <div style="text-align:right">
@@ -98,15 +98,18 @@
     const leg = bet.legs.find((l) => l.result === 'pending') || bet.legs[0];
     if (bet.kind === 'todo') line = `${bet.legs.filter((l) => l.result === 'won').length}/${bet.legs.length} done · due midnight`;
     else if (leg.kind === 'pred') line = `Resolves in ${TO.fmtIn(leg.start - TO.now())}`;
+    else if (leg.kind === 'race') {
+      const race = TO.races.get(leg.raceId);
+      line = race && race.status === 'running' ? `<span class="live">LIVE</span> Virtual Race #${race.number}` : `Virtual Race #${String(leg.raceId).replace('race-', '')} · ${race && race.status === 'final' ? 'Finished' : 'Starting soon'}`;
+    }
     else {
       const g = S.game(leg.gameId);
-      if (g.state === 'live') line = `<span class="live">LIVE</span> ${g.away.abbr} ${g.awayScore} – ${g.home.abbr} ${g.homeScore} · ${esc(g.clock)}`;
+      if (!g) line = 'Loading the latest score…';
+      else if (g.state === 'live') line = `<span class="live">LIVE</span> ${g.away.abbr} ${g.awayScore} – ${g.home.abbr} ${g.homeScore} · ${esc(g.clock)}`;
       else if (g.state === 'scheduled') line = `${g.away.abbr} @ ${g.home.abbr} · ${TO.fmtTime(g.start)}`;
       else line = `${g.away.abbr} ${g.awayScore} – ${g.home.abbr} ${g.homeScore} · ${esc(g.statusText)}`;
     }
-    const bottom = bet.friend
-      ? `<div class="row-s yellow small bold ellipsis">${icon('users', 14)}${esc(bet.friend.terms)}</div>`
-      : `<div class="row-s small bold"><span class="muted">${bet.stake} min</span>${icon('chevR', 12)}<span class="green">${Math.round(bet.stake * bet.decimal) - bet.stake > 0 ? `win ${Math.round((Math.round(bet.stake * bet.decimal) - bet.stake) * (bet.multiplier || 1))} min` : ''}</span></div>`;
+    const bottom = `<div class="row-s small bold"><span class="muted">${bet.stake} min</span>${icon('chevR', 12)}<span class="green">${Math.round(bet.stake * bet.decimal) - bet.stake > 0 ? `win ${Math.round((Math.round(bet.stake * bet.decimal) - bet.stake) * (bet.multiplier || 1))} min` : ''}</span></div>`;
     return `<button class="card tight mini-bet" data-act="tab" data-tab="bets">
       <div class="spread"><span class="t ellipsis">${esc(title)}</span><span class="display muted" style="font-size:15px">${TO.odds.fmt(bet.american)}</span></div>
       <div class="small muted row-s ellipsis" style="font-weight:600">${line}</div>
@@ -225,6 +228,9 @@
     const loading = day > 0 && TO.live.upcomingLoading;
     const title = f === 'live' ? 'No live games right now' : loading ? 'Loading the schedule…' : `Sorry, no games are happening for this sport ${when}.`;
     const next = f !== 'live' && !loading ? Array.from({ length: TO.live.days + 1 }, (_, i) => i).find((i) => i !== day && boardGames(i, true).some((g) => f === 'all' || g.league === f)) : null;
+    if (TO.live.failed) {
+      return `<div class="empty">${icon('alert', 40)}<h3>Sports couldn’t load</h3><p>Check your connection and try again.</p><button class="btn primary" data-act="refresh-live">Try again</button></div>`;
+    }
     return `<div class="empty">
       ${icon(loading ? 'clock' : 'target', 40)}
       <h3>${title}</h3>
@@ -318,11 +324,11 @@
     if (fb && v.scrollTop > fb.offsetTop) v.scrollTop = fb.offsetTop;
   };
   A.filter = (el) => { TO.data.feedFilter = el.dataset.f; TO.state.save(); TO.app.render(); const v = document.getElementById('view'); const fb = v.querySelector('.filterbar'); if (fb && v.scrollTop > fb.offsetTop) v.scrollTop = fb.offsetTop; };
+  A['refresh-live'] = () => TO.live.refresh(TO.now(), true);
   A['go-sim'] = () => {
     if (!followed().includes('sim')) TO.state.setSetting('sports', [...followed(), 'sim']);
     TO.data.feedFilter = 'sim';
     TO.state.save();
-    TO.tester.mark('offday');
     TO.app.render();
   };
   A.how = () => TO.views.settings.howItWorks();

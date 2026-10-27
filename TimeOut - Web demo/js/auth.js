@@ -26,7 +26,7 @@
         <div class="welcome-points">
           <div>${icon('hourglass', 18)}<span>60 betting minutes a day. Win and you get more phone time tomorrow.</span></div>
           <div>${icon('radio', 18)}<span>Live scores and odds for NFL, NBA, MLB, NHL, college football and soccer.</span></div>
-          <div>${icon('users', 18)}<span>Challenge friends and play for anything but cash.</span></div>
+          <div>${icon('users', 18)}<span>Compare screen-time records and compete on teams.</span></div>
         </div>
       </div>
       <div class="auth-inner" style="flex:none;gap:10px">
@@ -91,7 +91,7 @@
       body = `<h1>Here's the deal, @${esc(TO.account.username)}</h1>
         <div class="how-card"><span class="n">1</span><div><h3>You get 60 betting minutes a day</h3><p>They reset every night at midnight.</p></div></div>
         <div class="how-card"><span class="n">2</span><div><h3>You're betting tomorrow's phone time</h3><p>Win and tomorrow's limit goes up. Lose and it goes down.</p></div></div>
-        <div class="how-card"><span class="n">3</span><div><h3>No money, ever</h3><p>Not now, not later. Just minutes, bragging rights, and whatever you bet your friends.</p></div></div>`;
+        <div class="how-card"><span class="n">3</span><div><h3>No money, ever</h3><p>Not now, not later. Bet screen time and build a clean streak.</p></div></div>`;
       next = `<button class="btn primary full" data-act="ob-next">Next</button>`;
     } else if (step === 2) {
       const sel = av.sports;
@@ -167,7 +167,6 @@
     St.adoptServerUser(user, await TO.api.loadState());
     av.values = {}; av.photo = null;
     av.screen = 'onboard';
-    TO.tester.mark('signup');
     TO.app.boot(); // new accounts land in onboarding
     ui.toast({ kind: 'win', title: 'Email verified', msg: `Welcome to TimeOut, @${user.username}.` });
   }
@@ -230,7 +229,6 @@
     const { user } = await TO.api.login(email, password);
     St.adoptServerUser(user, await TO.api.loadState());
     av.values = {};
-    TO.tester.mark('login');
     TO.app.boot();
     ui.toast({
       kind: 'win',
@@ -271,7 +269,6 @@
         const { user, state } = result;
         St.adoptServerUser(user, state);
         av.values = {}; av.photo = null;
-        TO.tester.mark('signup');
         startOnboarding();
       } catch (e) { showError(e); }
       return;
@@ -286,7 +283,6 @@
       const acc = St.createAccount({ username: v['su-user'] || '', email: v['su-email'] || '', password: v['su-pw'] || '', photo: av.photo });
       St.startSession(acc.id);
       av.values = {}; av.photo = null;
-      TO.tester.mark('signup');
       startOnboarding();
     } catch (e) { showError(e); }
   }
@@ -313,7 +309,7 @@
   A['auth-demo'] = async (el) => {
     if (TO.api.configured) return;
     if (!TO.net.online()) { ui.toast({ kind: 'loss', title: 'No internet connection', msg: 'Check your Wi-Fi or data and try again.' }); return; }
-    if (!TO.api.online) { St.loginDemo(); TO.tester.mark('login'); TO.app.boot(); return; }
+    if (!TO.api.online) { St.loginDemo(); TO.app.boot(); return; }
     el.disabled = true;
     try {
       await serverLogin(St.DEMO.username, St.DEMO.password);
