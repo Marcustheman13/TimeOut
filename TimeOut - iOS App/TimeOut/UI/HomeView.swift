@@ -239,7 +239,7 @@ struct StatusStrip: View {
 
 struct OpenBetsStrip: View {
     var body: some View {
-        let open = (Store.shared.data?.bets ?? []).filter { $0.status == "open" && HomeModel.sportsOnly($0) }.sorted { $0.placedAt > $1.placedAt }
+        let open = (Store.shared.data?.bets ?? []).filter { $0.status == "open" && !$0.legs.isEmpty && HomeModel.sportsOnly($0) }.sorted { $0.placedAt > $1.placedAt }
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 HStack(spacing: 6) {
@@ -269,7 +269,7 @@ struct MiniBet: View {
     var bet: Bet
     var body: some View {
         let title = bet.kind == "todo" ? "To-do parlay (\(bet.legs.count))" : bet.legs.count > 1 ? "\(bet.legs.count)-pick parlay" : (bet.legs.first?.label ?? "")
-        let leg = bet.legs.first { $0.result == "pending" } ?? bet.legs[0]
+        let leg = bet.legs.first { $0.result == "pending" } ?? bet.legs.first ?? Leg(selId: "", kind: "game", market: "ml", price: 100, label: "", marketLabel: "", matchup: "")
         let win = jsRoundInt(Double(bet.stake) * bet.decimal) - bet.stake
         Button { UIState.shared.go("bets") } label: {
             VStack(alignment: .leading, spacing: 6) {

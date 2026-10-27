@@ -92,15 +92,51 @@ final class API {
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         let json = data.isEmpty ? JSON.null : JSON(data: data)
         guard (200..<300).contains(status) else {
-            let message = json["msg"].text ?? json["message"].text ?? json["error_description"].text ?? json["error"].text ?? "Supabase request failed (\(status))."
-            var fields: [String: String] = [:]
-            let lower = message.lowercased()
-            if lower.contains("username") { fields["username"] = message }
-            else if lower.contains("email") { fields["email"] = message }
-            else if lower.contains("password") { fields["password"] = message }
-            throw AppError(code: status == 409 ? "taken" : "supabase_error", message: message, fields: fields, status: status)
+            let raw = json["msg"].text ?? json["message"].text ?? json["error_description"].text ?? json["error"].text ?? "Supabase request failed (\(status))."
+            throw Self.friendlyError(raw, errorCode: json["error_code"].text ?? json["code"].text, status: status)
         }
         return json
+    }
+
+    /// Turns Supabase and Postgres errors (like "duplicate key value violates unique constraint") into messages people understand.
+    static func friendlyError(_ raw: String, errorCode: String?, status: Int) -> AppError {
+        let m = raw.lowercased(), code = (errorCode ?? "").lowercased()
+        func err(_ c: String, _ message: String, _ field: String? = nil, _ fieldText: String? = nil) -> AppError {
+            AppError(code: c, message: message, fields: field.map { [$0: fieldText ?? message] } ?? [:], status: status)
+        }
+        if m.contains("profiles_username_key") || (m.contains("duplicate key") && m.contains("username")) {
+            return err("taken", "That username is taken. Try another.", "username")
+        }
+        if m.contains("database error saving new user") {
+            return err("taken", "We couldn't create your account. That username may already be taken, so try another.", "username", "Try a different username.")
+        }
+        if code == "user_already_exists" || code == "email_exists" || m.contains("user already registered") {
+            return err("taken", "An account with this email already exists. Log in instead.", "email", "An account with this email already exists.")
+        }
+        if code == "email_not_confirmed" || m.contains("email not confirmed") {
+            return err("email_not_confirmed", "Confirm your email first. Open the link we sent you, or send a new one.")
+        }
+        if code == "invalid_credentials" || m.contains("invalid login credentials") {
+            return err("bad_login", "That email or password is incorrect.", "password", "Check your email and password, then try again.")
+        }
+        if m.contains("rate limit") || code.contains("rate_limit") {
+            return err("rate_limit", "Too many emails or tries in a short time. Wait a few minutes, then try again.")
+        }
+        if m.contains("unable to validate email") || m.contains("invalid format") || code == "email_address_invalid" {
+            return err("invalid", "Enter a valid email address.", "email")
+        }
+        if code == "weak_password" || m.contains("password should") || m.contains("password is") {
+            return err("invalid", raw, "password")
+        }
+        if m.contains("duplicate key") {
+            return err("taken", "That's already taken. Try something else.")
+        }
+        if m.contains("jwt") && m.contains("expired") {
+            return err("bad_token", "Your session expired. Log in again.")
+        }
+        var fields: [String: String] = [:]
+        if m.contains("username") { fields["username"] = raw } else if m.contains("email") { fields["email"] = raw } else if m.contains("password") { fields["password"] = raw }
+        return AppError(code: status == 409 ? "taken" : "supabase_error", message: raw, fields: fields, status: status)
     }
 
     private func authRequest(_ path: String, _ body: [String: Any], auth: Bool = false) async throws -> JSON {
@@ -128,8 +164,8 @@ final class API {
 
     /// Falls back to the on-device demo accounts when Supabase can't be reached at all.
     func initialize() async -> Bool {
-        // Launch with -offline-demo to use the on-device demo accounts, like the web demo without its Supabase config.
-        if ProcessInfo.processInfo.arguments.contains("-offline-demo") { configured = false; online = false }
+        // Launch with -offline to test without Supabase: accounts are saved on this device only.
+        if ProcessInfo.processInfo.arguments.contains("-offline") { configured = false; online = false }
         guard configured, Net.shared.online else { return configured }
         var req = URLRequest(url: URL(string: "\(Self.baseURL)/auth/v1/health")!)
         req.timeoutInterval = 5
@@ -293,8 +329,8 @@ final class API {
         case .bool(let b): return b
         case .number(let n): return n == n.rounded() && abs(n) < 1e15 ? Int(n) as Any : n
         case .string(let s): return s
-        case .array(let a): return a.map(any)
-        case .object(let o): return o.mapValues(any)
+        case .array(let a): return a.map { any($0) }
+        case .object(let o): return o.mapValues { any($0) }
         }
     }
 
@@ -470,6 +506,24 @@ final class API {
             if let p = patch.password { auth["password"] = p }
             _ = try await send(URL(string: "\(Self.baseURL)/auth/v1/user")!, method: "PUT", body: try JSONSerialization.data(withJSONObject: auth))
         }
+    }
+
+    /// Emails a password-reset link. Opening it signs the person in on the website, where Account can set a new password.
+    func sendPasswordReset(_ email: String) async throws {
+        _ = try await authRequest("recover?redirect_to=\(Self.enc(Self.returnURL))", ["email": email.trimmingCharacters(in: .whitespaces)])
+    }
+
+    /// Permanently deletes the signed-in account and its data (server/db/supabase-delete-account.sql).
+    func deleteAccount() async throws {
+        do {
+            _ = try await rest("rpc/timeout_delete_account", method: "POST", body: [String: Any]())
+        } catch let e as AppError where Self.rpcMissing(e.message, "timeout_delete_account") {
+            throw AppError(code: "not_set_up", message: "Account deletion isn't set up on the server yet. Email the TimeOut team to delete your account.")
+        }
+        pendingState = nil
+        saveTask?.cancel(); saveTask = nil
+        clearToken()
+        lastSettingsSnapshot = ""
     }
 
     func logout() async {

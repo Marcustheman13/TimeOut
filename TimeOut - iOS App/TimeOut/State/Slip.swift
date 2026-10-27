@@ -154,6 +154,8 @@ final class Slip {
     func typed(_ value: String) -> String {
         let max = Store.shared.wallet.balance
         let digits = value.filter(\.isNumber)
+        // Closing the keyboard re-sends the same text; keep the "not enough screentime" note up.
+        if digits == stake { return digits }
         let n = Int(digits)
         capped = n != nil && n! > max
         let result = capped ? String(max) : digits

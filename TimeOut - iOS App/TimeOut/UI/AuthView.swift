@@ -82,6 +82,10 @@ final class AuthModel {
                 reset()
                 AppModel.shared.boot()
             }
+        } catch let e as AppError where e.code == "email_not_confirmed" {
+            // The account exists but the email was never confirmed: offer a fresh confirmation link.
+            startVerify(loginEmail.trimmingCharacters(in: .whitespaces), loginPassword, canResendNow: true)
+            verifyNote = "Your email isn't confirmed yet. Tap Resend email for a new link, then open it."
         } catch {
             errors = [:]
             showError(error)
@@ -125,19 +129,35 @@ final class AuthModel {
         } catch { showError(error) }
     }
 
-    func demo() {
-        guard !API.shared.configured else { return }
-        guard Net.shared.online else { UIState.shared.toast(.loss, "No internet connection", "Check your Wi-Fi or data and try again."); return }
-        Store.shared.loginDemo()
-        AppModel.shared.boot()
+    func forgotPassword() async {
+        let ui = UIState.shared
+        guard API.shared.configured else {
+            _ = await ui.confirm("Reset your password", "TimeOut can't reach its server right now, so password reset emails can't be sent. Try again when you're back online.", confirm: "OK", cancel: nil)
+            return
+        }
+        let email = loginEmail.trimmingCharacters(in: .whitespaces)
+        guard email.range(of: #"^[^\s@]+@[^\s@]+\.[^\s@]{2,}$"#, options: .regularExpression) != nil else {
+            errors = ["identifier": "Enter your email, then tap Forgot password."]
+            formError = ""
+            return
+        }
+        do {
+            try await API.shared.sendPasswordReset(email)
+            errors = [:]; formError = ""
+            _ = await ui.confirm("Check your email", "If \(email) has a TimeOut account, we sent it a link to reset your password. Open it to sign in on the TimeOut website, then set a new password in **Account**.", confirm: "OK", cancel: nil)
+        } catch let e as AppError {
+            formError = e.message
+        } catch {
+            formError = error.localizedDescription
+        }
     }
 
     // MARK: Verify email
 
-    private func startVerify(_ email: String, _ password: String) {
+    private func startVerify(_ email: String, _ password: String, canResendNow: Bool = false) {
         stopPolling()
         verifyEmail = email; verifyPassword = password
-        verifySince = .now; resentAt = .now; checking = false; verifyNote = ""
+        verifySince = .now; resentAt = canResendNow ? .distantPast : .now; checking = false; verifyNote = ""
         screen = .verify; errors = [:]; formError = ""
         pollTask = Task {
             while !Task.isCancelled {
@@ -296,9 +316,6 @@ struct WelcomeScreen: View {
             VStack(spacing: 10) {
                 Button("Log in") { AuthModel.shared.show(.login) }.buttonStyle(.btn(.primary, full: true))
                 Button("Create account") { AuthModel.shared.show(.signup) }.buttonStyle(.btn(.ghost, full: true))
-                if !API.shared.configured {
-                    Button { AuthModel.shared.demo() } label: { BtnLabel("Try the demo account", icon: .flask, iconSize: 16) }.buttonStyle(.btn(.quiet, .sm, full: true))
-                }
             }
             .padding(.top, 16).padding(.horizontal, 22).padding(.bottom, 30)
         }
@@ -374,19 +391,9 @@ struct LoginScreen: View {
             FieldView(label: "Password", text: $model.loginPassword, secure: true, err: model.errors["password"], content: .password)
             Button(model.busy ? "Logging in…" : "Log in") { Task { await model.login() } }
                 .buttonStyle(.btn(.primary, full: true)).disabled(model.busy)
-            Button("Forgot password?") {
-                Task {
-                    _ = await UIState.shared.confirm("Reset your password", API.shared.configured
-                        ? "Password reset emails aren't built yet. Create a new account, or log in on the website."
-                        : "In this demo, accounts live only on this device, so there's no email reset. Create a new account or log in with the demo account.",
-                        confirm: "OK", cancel: nil)
-                }
-            }
+            Button("Forgot password?") { Task { await model.forgotPassword() } }
             .buttonStyle(.btn(.quiet, .sm, full: true))
             HRule()
-            if !API.shared.configured {
-                Button { model.demo() } label: { BtnLabel("Log in with the demo account", icon: .flask, iconSize: 16) }.buttonStyle(.btn(.ghost, full: true))
-            }
             HStack(spacing: 4) {
                 Text("New here?").foregroundStyle(Theme.text2)
                 Button("Create an account") { model.show(.signup) }.foregroundStyle(Theme.accent).font(.barlow(13.5, 700))
@@ -432,7 +439,7 @@ struct SignupScreen: View {
             FieldView(label: "Confirm password", text: $model.signupConfirm, secure: true, err: model.errors["confirm"], content: .newPassword)
             Button(model.busy ? "Creating account…" : "Create account") { Task { await model.signup() } }
                 .buttonStyle(.btn(.primary, full: true)).disabled(model.busy)
-            Text(API.shared.configured ? "Accounts and bets are saved securely with Supabase." : "Offline demo: accounts are saved on this device, not on a server.")
+            Text(API.shared.configured ? "Accounts and bets are saved securely with Supabase." : "Offline mode: this account is saved on this device only.")
                 .font(.barlow(11.5)).foregroundStyle(Theme.muted).frame(maxWidth: .infinity)
             HStack(spacing: 4) {
                 Text("Already have an account?").foregroundStyle(Theme.text2)

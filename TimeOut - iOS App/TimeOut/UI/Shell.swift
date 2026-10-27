@@ -330,6 +330,7 @@ struct SheetFrame<Body: View, Foot: View>: View {
                     }
                     .scrollIndicators(.hidden)
                     .scrollBounceBehavior(.basedOnSize)
+                    .scrollDismissesKeyboard(.interactively)
                     if hasFoot {
                         VStack(spacing: 10) { foot }
                             .padding(.horizontal, 16).padding(.top, 12).padding(.bottom, max(22, geo.safeAreaInsets.bottom))

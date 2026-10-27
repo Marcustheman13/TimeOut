@@ -150,6 +150,7 @@ struct BtnStyle: ButtonStyle {
         return configuration.label
             .font(.barlow(fs, 800))
             .lineLimit(1)
+            .minimumScaleFactor(0.8)
             .foregroundStyle(fg)
             .padding(.horizontal, pad)
             .frame(height: h)

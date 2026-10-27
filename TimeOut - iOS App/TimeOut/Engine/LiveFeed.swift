@@ -260,8 +260,8 @@ final class LiveFeed {
         let candidates: [JSON] = fetched.isEmpty
             ? [comp["odds"][0]].filter { $0.truthy }
             : fetched + (game.state == .live ? [] : comp["odds"].array)
-        let books = candidates.filter(Self.isBookmaker)
-        let liveBooks = books.filter(Self.isLiveBook)
+        let books = candidates.filter { Self.isBookmaker($0) }
+        let liveBooks = books.filter { Self.isLiveBook($0) }
         let marketBooks = game.state == .live && !liveBooks.isEmpty ? liveBooks : books
         func add(_ market: String, _ side: String, _ line: Double?, _ price: JSON, _ title: String?) -> Selection? {
             guard let p = Self.american(price) else { return nil }
@@ -360,7 +360,7 @@ final class LiveFeed {
         do {
             let payload = try await getJSON(url)
             let items = payload["items"].isArray ? payload["items"].array : (payload["provider"].truthy || payload["homeTeamOdds"].truthy ? [payload] : [])
-            let refs = Array(items.filter(Self.isBookmaker).prefix(8))
+            let refs = Array(items.filter { Self.isBookmaker($0) }.prefix(8))
             var resolved: [(Int, JSON)] = []
             await withTaskGroup(of: (Int, JSON?).self) { group in
                 for (i, item) in refs.enumerated() {

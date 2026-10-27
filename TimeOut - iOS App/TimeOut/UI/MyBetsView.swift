@@ -21,7 +21,7 @@ enum BetLogic {
     }
 
     static func overallStanding(_ bet: Bet) -> String {
-        let sts = bet.legs.filter { $0.result == "pending" }.map(legStanding)
+        let sts = bet.legs.filter { $0.result == "pending" }.map { legStanding($0) }
         if sts.contains("losing") { return "losing" }
         if !sts.isEmpty && sts.allSatisfy({ $0 == "winning" }) { return "winning" }
         if sts.allSatisfy({ $0 == "upcoming" }) { return "upcoming" }
@@ -50,9 +50,9 @@ struct MyBetsView: View {
         let _ = live.detailsVersion
         let _ = app.tick
         let _ = Races.shared.version
-        let bets = (store.data?.bets ?? []).filter { ($0.kind == "sports" || $0.kind == "race") && !$0.legs.isEmpty && $0.legs.allSatisfy(BetLogic.gameLeg) }
+        let bets = (store.data?.bets ?? []).filter { ($0.kind == "sports" || $0.kind == "race") && !$0.legs.isEmpty && $0.legs.allSatisfy { BetLogic.gameLeg($0) } }
         let open = bets.filter { $0.status == "open" }.sorted { $0.placedAt > $1.placedAt }
-        let liveNow = open.filter(BetLogic.isLive)
+        let liveNow = open.filter { BetLogic.isLive($0) }
         let otherOpen = open.filter { !BetLogic.isLive($0) }
         let allSettled = bets.filter { $0.status != "open" }.sorted { ($0.settledAt ?? 0) > ($1.settledAt ?? 0) }
         let counts = (all: allSettled.count, won: allSettled.filter { $0.status == "won" }.count, lost: allSettled.filter { $0.status == "lost" }.count,

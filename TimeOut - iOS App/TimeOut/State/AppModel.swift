@@ -40,7 +40,7 @@ final class AppModel {
         started = true
         Net.shared.start()
         Task {
-            if await API.shared.initialize() { await restoreServerSession() } else { store.ensureDemoAccount() }
+            if await API.shared.initialize() { await restoreServerSession() }
             if store.account == nil { store.loadSession() }
             boot()
             ready = true
@@ -82,6 +82,12 @@ final class AppModel {
         Task { await store.refreshTeams() }
         Invites.offer()
         ScreenTime.shared.sync()
+        requestNotifications()
+    }
+
+    /// Bet results and the "5 minutes left" warning arrive as notifications while the app is in the background.
+    private func requestNotifications() {
+        Task { _ = try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) }
     }
 
     // MARK: Live loop

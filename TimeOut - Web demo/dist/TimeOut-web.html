@@ -3991,15 +3991,32 @@ window.TIMEOUT_SUPABASE = {
     const fresh = await authRequest('token?grant_type=refresh_token', { refresh_token: session.refresh_token });
     saveSession(fresh);
   }
+  /** Turns Supabase and Postgres errors (like "duplicate key value violates unique constraint") into messages people understand. */
+  function friendlyError(raw, errorCode, status) {
+    const m = String(raw || '').toLowerCase();
+    const code = String(errorCode || '').toLowerCase();
+    const err = (c, message, field, fieldText) => new TO.AppError(c, message, { status, fields: field ? { [field]: fieldText || message } : {} });
+    if (m.includes('profiles_username_key') || (m.includes('duplicate key') && m.includes('username'))) return err('taken', 'That username is taken. Try another.', 'username');
+    if (m.includes('database error saving new user')) return err('taken', 'We couldn\u2019t create your account. That username may already be taken, so try another.', 'username', 'Try a different username.');
+    if (code === 'user_already_exists' || code === 'email_exists' || m.includes('user already registered')) return err('taken', 'An account with this email already exists. Log in instead.', 'email', 'An account with this email already exists.');
+    if (code === 'email_not_confirmed' || m.includes('email not confirmed')) return err('email_not_confirmed', 'Confirm your email first. Open the link we sent you, or send a new one.');
+    if (code === 'invalid_credentials' || m.includes('invalid login credentials')) return err('bad_login', 'That email or password is incorrect.', 'password', 'Check your email and password, then try again.');
+    if (m.includes('rate limit') || code.includes('rate_limit')) return err('rate_limit', 'Too many emails or tries in a short time. Wait a few minutes, then try again.');
+    if (m.includes('unable to validate email') || m.includes('invalid format') || code === 'email_address_invalid') return err('invalid', 'Enter a valid email address.', 'email');
+    if (code === 'weak_password' || m.includes('password should') || m.includes('password is')) return err('invalid', raw, 'password');
+    if (m.includes('duplicate key')) return err('taken', 'That\u2019s already taken. Try something else.');
+    if (m.includes('jwt') && m.includes('expired')) return err('bad_token', 'Your session expired. Log in again.');
+    const fields = {};
+    if (/username/i.test(raw)) fields.username = raw;
+    else if (/email/i.test(raw)) fields.email = raw;
+    else if (/password/i.test(raw)) fields.password = raw;
+    return new TO.AppError(status === 409 ? 'taken' : 'supabase_error', raw, { status, fields });
+  }
   async function parseResponse(res) {
     const json = await res.json().catch(() => ({}));
     if (!res.ok) {
-      const message = json.msg || json.message || json.error_description || json.error || `Supabase request failed (${res.status}).`;
-      const fields = {};
-      if (/username/i.test(message)) fields.username = message;
-      else if (/email/i.test(message)) fields.email = message;
-      else if (/password/i.test(message)) fields.password = message;
-      throw new TO.AppError(res.status === 409 ? 'taken' : 'supabase_error', message, { status: res.status, fields });
+      const raw = json.msg || json.message || json.error_description || json.error || `Supabase request failed (${res.status}).`;
+      throw friendlyError(raw, json.error_code || json.code, res.status);
     }
     return json;
   }

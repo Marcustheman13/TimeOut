@@ -193,10 +193,10 @@ enum SVGPath {
     private static func tokenize(_ d: String) -> [Token] {
         var out: [Token] = []
         var numStr = ""
-        var sawDot = false, sawExp = false
+        var sawDot = false
         func flush() {
             if !numStr.isEmpty, let v = Double(numStr) { out.append(.number(v)) }
-            numStr = ""; sawDot = false; sawExp = false
+            numStr = ""; sawDot = false
         }
         for ch in d {
             if ch.isLetter && ch != "e" && ch != "E" {
@@ -209,7 +209,7 @@ enum SVGPath {
             } else if ch.isNumber {
                 numStr.append(ch)
             } else if ch == "e" || ch == "E" {
-                numStr.append(ch); sawExp = true
+                numStr.append(ch)
             } else {
                 flush()
             }

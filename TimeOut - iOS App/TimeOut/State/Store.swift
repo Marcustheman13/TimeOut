@@ -125,7 +125,6 @@ final class Store {
         ]
     }()
 
-    static let demo = (username: "demo", email: "demo@timeout.app", password: "timeout123")
     static let todoOdds = ["easy": 50, "medium": 100, "hard": 200]
 
     // MARK: State
@@ -322,7 +321,7 @@ final class Store {
             }
             storeData(id, merged)
         } else if loadData(id) == nil {
-            storeData(id, user.isDemo ? seedDemoData(TO.now()) : freshData(TO.now()))
+            storeData(id, freshData(TO.now()))
         }
         startSession(id)
     }
@@ -1244,102 +1243,6 @@ final class Store {
             if a.element.net != b.element.net { return a.element.net > b.element.net }
             return a.offset < b.offset
         }.map(\.element)
-    }
-
-    // MARK: Demo account
-
-    func seedDemoData(_ now: Ms) -> UserData {
-        var d = freshData(now)
-        let day = TO.dayKey(now)
-        d.onboarded = true
-        d.settings.lockedApps = ["instagram", "tiktok", "youtube", "cat-social"]
-        d.friends = ["mike_t", "jess.plays", "coach_dan", "lily_k", "tbone22"]
-        d.requestsIn = [FriendRequest(id: TO.uid("fr"), from: "priya_p", at: now - 20 * TO.MIN)]
-        // Still waiting on these two: one can be resent, the other was sent too recently.
-        d.requestsOut = [FriendRequest(id: TO.uid("fr"), to: "sam_the_fan", at: now - 3 * TO.HOUR), FriendRequest(id: TO.uid("fr"), to: "ava.r", at: now - 25 * TO.MIN)]
-        d.teams = [Squad(id: "team_sunday", name: "Sunday Squad", start: TO.addDays(day, -3), end: TO.addDays(day, 4),
-                         members: ["demo", "mike_t", "jess.plays", "lily_k"], owner: "mike_t", createdAt: now - 3 * TO.DAY)]
-
-        // Bet history from past simulated games, graded with the same rules as live bets.
-        let rand = TO.RNG("demo-history")
-        for back in stride(from: 6, through: 1, by: -1) {
-            let dk = TO.addDays(day, -back)
-            d.wallet.usageByDay[dk] = 25 + Int((rand() * 25).rounded(.down))
-            for k in 0..<(2 + back % 2) {
-                let legsN = rand() < 0.25 ? 2 : 1
-                var legs: [Leg] = []
-                let placedAt = TO.dayStart(dk) + Double(12 + k * 3) * TO.HOUR + (rand() * 40).rounded(.down) * TO.MIN
-                for j in 0..<legsN {
-                    let league = Sim.realLeagues[Int((rand() * Double(Sim.realLeagues.count)).rounded(.down))]
-                    let L = Sim.leagues[league]!
-                    let slot = Int(((placedAt - L.offset) / Sim.SLOT).rounded(.down)) + 1
-                    let id = "\(league)-\(slot)-\(j % L.perSlot)"
-                    guard let g0 = Sim.game(id, now), g0.state != .postponed, !legs.contains(where: { $0.gameId == id }),
-                          let o = Sim.odds(id, g0.start - 60_000) else { continue }
-                    let pool = o.all.filter { $0.side != "draw" }
-                    let sel = pool[Int((rand() * Double(pool.count)).rounded(.down))]
-                    var leg = simLeg(sel, g0)
-                    leg.result = Sim.grade(leg, now)
-                    if let g = Sim.game(id, now) { leg.final = "\(g.away.abbr) \(g.awayScore) – \(g.home.abbr) \(g.homeScore)" }
-                    legs.append(leg)
-                }
-                if legs.isEmpty { continue }
-                let stake = 5 + Int((rand() * 3).rounded(.down)) * 5
-                let combo = Self.combine(legs)
-                var bet = Bet(id: TO.uid("bet"), kind: "sports", placedAt: placedAt, dayKey: dk, stake: stake, legs: legs, decimal: combo.decimal, american: combo.american)
-                let res = Self.outcome(bet)
-                bet.status = res.status; bet.payout = res.payout
-                bet.settledAt = legs.compactMap { $0.gameId.flatMap { Sim.game($0, now)?.end } }.max() ?? placedAt
-                d.wallet.netByDay[dk, default: 0] += bet.payout - bet.stake
-                d.bets.append(bet)
-            }
-        }
-        d.wallet.streakDays = 4
-        d.wallet.usageByDay[day] = 22
-        grantTierBonus(&d)
-
-        // Open bets on today's board.
-        let board = Feed.board(now).filter { !$0.simulated }
-        let live = board.filter { $0.state == .live && $0.progress < 0.7 }
-        let upcoming = board.filter { $0.state == .scheduled && $0.start - now > 4 * TO.MIN }
-        func open(_ legs: [Leg], _ stake: Int, _ placedAt: Ms) {
-            let combo = Self.combine(legs)
-            var bet = Bet(id: TO.uid("bet"), kind: "sports", placedAt: placedAt, dayKey: d.wallet.dayKey, stake: stake, legs: legs, decimal: combo.decimal, american: combo.american)
-            bet.multiplier = Self.streakMultiplier(d.wallet.streakDays)
-            d.bets.append(bet)
-            d.wallet.balance -= stake
-        }
-        if let g = live.first, let sel = Feed.odds(g.id, now).moneyline.first(where: { $0.side == "home" }) {
-            open([legFromSelection(sel, now)], 10, now - 3 * TO.MIN)
-        }
-        if upcoming.count >= 2, let a = Feed.odds(upcoming[0].id, now).total.first,
-           let b = Feed.odds(upcoming[1].id, now).spread.dropFirst().first ?? Feed.odds(upcoming[1].id, now).moneyline.dropFirst().first {
-            open([legFromSelection(a, now), legFromSelection(b, now)], 5, now - TO.MIN)
-        } else if live.count > 1, let sel = Feed.odds(live[1].id, now).total.dropFirst().first {
-            open([legFromSelection(sel, now)], 5, now - TO.MIN)
-        }
-        return d
-    }
-
-    /// A leg for a simulated game, without going through the live feed.
-    private func simLeg(_ sel: Selection, _ g: Game) -> Leg {
-        var leg = Leg(selId: sel.id, kind: "game", market: sel.market, price: sel.price, label: Sim.selectionLabel(sel, g),
-                      marketLabel: Sim.marketLabel(sel, g), matchup: "\(g.away.name) @ \(g.home.name)")
-        leg.gameId = g.id; leg.side = sel.side; leg.line = sel.line
-        leg.short = "\(g.away.abbr) @ \(g.home.abbr)"; leg.league = g.league; leg.start = g.start
-        return leg
-    }
-
-    @discardableResult
-    func ensureDemoAccount() -> Account? {
-        if let acc = findAccountByUsername(Self.demo.username) { return acc }
-        let seeded = seedDemoData(TO.now())
-        return try? createAccount(username: Self.demo.username, email: Self.demo.email, password: Self.demo.password,
-                                  photo: TO.initialsAvatar("Demo User", "#1AA560"), demo: true, data: seeded)
-    }
-
-    func loginDemo() {
-        if let acc = ensureDemoAccount() { startSession(acc.id) }
     }
 
     func completeOnboarding(sports: [String], locks: [String]?) {

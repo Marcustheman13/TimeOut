@@ -470,6 +470,7 @@ struct AccountSection: View {
     @State private var errors: [String: String] = [:]
     @State private var photoItem: PhotosPickerItem?
     @State private var loaded = false
+    @State private var deleting = false
 
     var body: some View {
         let a = store.account
@@ -516,9 +517,10 @@ struct AccountSection: View {
             .card()
             VStack(spacing: 8) {
                 Button { Auth.logout() } label: { BtnLabel("Log out", icon: .logout) }.buttonStyle(.btn(.ghost, full: true))
+                Button { deleteAccount() } label: { Text(deleting ? "Deleting account…" : "Delete account").foregroundStyle(Theme.loss) }
+                    .buttonStyle(.btn(.quiet, full: true)).disabled(deleting)
                 if server == nil {
-                    Button("Delete account") { deleteAccount() }.buttonStyle(.btn(.quiet, full: true)).foregroundStyle(Theme.loss)
-                    Text("Demo accounts are stored only on this device.").font(.barlow(11.5)).foregroundStyle(Theme.muted).frame(maxWidth: .infinity)
+                    Text("This account is stored only on this device.").font(.barlow(11.5)).foregroundStyle(Theme.muted).frame(maxWidth: .infinity)
                 }
             }
         }
@@ -579,7 +581,19 @@ struct AccountSection: View {
 
     private func deleteAccount() {
         Task {
-            guard await ui.confirm("Delete your account?", "This removes your account, bets and friends from this device. It can't be undone.", confirm: "Delete account", kind: .danger) else { return }
+            let server = store.account?.server != nil
+            let body = server
+                ? "This permanently deletes your TimeOut account, bets, wallet and settings from TimeOut's servers and this device, and takes you off your teams. It can't be undone."
+                : "This removes your account, bets and friends from this device. It can't be undone."
+            guard await ui.confirm("Delete your account?", body, confirm: "Delete account", kind: .danger) else { return }
+            if server {
+                deleting = true
+                defer { deleting = false }
+                do { try await API.shared.deleteAccount() } catch {
+                    ui.toast(.loss, "Couldn't delete your account", (error as? AppError)?.message ?? error.localizedDescription)
+                    return
+                }
+            }
             store.deleteAccount()
             Slip.shared.clear()
             AppModel.shared.boot()

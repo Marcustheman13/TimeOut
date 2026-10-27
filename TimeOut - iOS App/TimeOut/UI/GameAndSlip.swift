@@ -323,6 +323,12 @@ struct SlipBody: View {
                             .background(Theme.raised, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                             .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(stakeFocused ? Theme.accent : Theme.stroke, lineWidth: 1))
                             .accessibilityLabel("Minutes to stake")
+                            .toolbar {
+                                ToolbarItemGroup(placement: .keyboard) {
+                                    Spacer()
+                                    Button("Done") { stakeFocused = false }.font(.barlow(16, 700)).foregroundStyle(Theme.accent)
+                                }
+                            }
                         Text("min").font(.barlow(14, 700)).foregroundStyle(Theme.text2).padding(.trailing, 14).allowsHitTesting(false)
                     }
                     stepButton(.plus, 1).accessibilityLabel("One minute more")
