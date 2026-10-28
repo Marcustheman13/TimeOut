@@ -19,12 +19,12 @@ body {
 }
 .doc { max-width: 720px; margin: 0 auto; padding: 32px 16px 64px; }
 .brand {
-  display: inline-flex; align-items: center; gap: 8px;
+  display: inline-flex; align-items: center;
   color: var(--text); text-decoration: none;
   font: italic 900 24px/1 'Barlow Condensed', sans-serif; letter-spacing: 0.02em;
 }
 .brand b { color: var(--accent); }
-.brand .mark { width: 26px; height: 26px; border-radius: 7px; background: var(--accent); position: relative; }
+.brand .mark { width: 26px; height: 26px; margin-right: 8px; border-radius: 7px; background: var(--accent); position: relative; }
 .brand .mark::before, .brand .mark::after { content: ''; position: absolute; background: var(--accent-ink); border-radius: 3px; transform: skewX(-10deg); }
 .brand .mark::before { left: 5px; right: 5px; top: 6px; height: 4px; }
 .brand .mark::after { left: 11px; width: 4px; top: 11px; height: 9px; }
