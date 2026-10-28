@@ -219,7 +219,7 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 2700;
-				LastUpgradeCheck = 2700;
+				LastUpgradeCheck = 2710;
 				TargetAttributes = {
 					000000000000000100000000 = {
 						CreatedOnToolsVersion = 26.3;
@@ -339,6 +339,7 @@
 				COPY_PHASE_STRIP = NO;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = Q7845K7NU8;
 				DRIVERKIT_DEPLOYMENT_TARGET = 27.0;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
@@ -409,6 +410,7 @@
 				COPY_PHASE_STRIP = NO;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = Q7845K7NU8;
 				DRIVERKIT_DEPLOYMENT_TARGET = 27.0;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -442,7 +444,6 @@
 				CODE_SIGN_ENTITLEMENTS = TimeOut/TimeOut.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = Q7845K7NU8;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
@@ -487,7 +488,6 @@
 				CODE_SIGN_ENTITLEMENTS = TimeOut/TimeOut.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = Q7845K7NU8;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
@@ -531,7 +531,6 @@
 				CODE_SIGN_ENTITLEMENTS = TimeOutMonitor/TimeOutMonitor.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = Q7845K7NU8;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = TimeOutMonitor/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = TimeOutMonitor;
@@ -562,7 +561,6 @@
 				CODE_SIGN_ENTITLEMENTS = TimeOutMonitor/TimeOutMonitor.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = Q7845K7NU8;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = TimeOutMonitor/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = TimeOutMonitor;
@@ -594,7 +592,6 @@
 				CODE_SIGN_ENTITLEMENTS = TimeOutShield/TimeOutShield.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = Q7845K7NU8;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = TimeOutShield/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = TimeOutShield;
@@ -625,7 +622,6 @@
 				CODE_SIGN_ENTITLEMENTS = TimeOutShield/TimeOutShield.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = Q7845K7NU8;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = TimeOutShield/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = TimeOutShield;
