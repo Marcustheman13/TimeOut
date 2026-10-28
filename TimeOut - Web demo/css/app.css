@@ -784,7 +784,7 @@ body.is-offline .toasts { margin-top: 56px; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
 }
-a.btn { text-decoration: none; }
+a.btn, a.dn, a.sn { text-decoration: none; color: inherit; }
 
 /* Virtual racing */
 .race-page { padding-bottom: 24px; }

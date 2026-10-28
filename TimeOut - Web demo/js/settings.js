@@ -35,6 +35,8 @@
         ${item('privacy')}
         ${item('account')}
         <button class="dn" data-act="how">${icon('help', 20)}How TimeOut works</button>
+        <a class="dn" href="support.html" target="_blank" rel="noopener">${icon('info', 20)}Help & support</a>
+        <a class="dn" href="privacy.html" target="_blank" rel="noopener">${icon('shield', 20)}Privacy policy</a>
         <button class="dn" data-act="logout">${icon('logout', 20)}Log out</button>
       </nav></aside>`;
     ui.layer().appendChild(wrap);

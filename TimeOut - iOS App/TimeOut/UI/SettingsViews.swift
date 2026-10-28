@@ -34,6 +34,7 @@ struct DrawerView: View {
     private var store: Store { .shared }
     private var ui: UIState { .shared }
     @State private var shown = false
+    @Environment(\.openURL) private var openURL
 
     var body: some View {
         let wl = store.wallet
@@ -63,6 +64,8 @@ struct DrawerView: View {
                             item("privacy", nil)
                             item("account", nil)
                             row(.help, "How TimeOut works", nil) { HowItWorks.open() }
+                            row(.info, "Help & support", nil) { openURL(API.supportURL) }
+                            row(.shield, "Privacy policy", nil) { openURL(API.privacyURL) }
                             row(.logout, "Log out", nil) { Auth.logout() }
                         }
                         .padding(.top, 8).padding(.horizontal, 8).padding(.bottom, 20)

@@ -1,0 +1,41 @@
+/* Privacy policy and support pages. Same colors and type as the app (css/app.css). */
+:root {
+  --bg: #0a0d12;
+  --surface: #141922;
+  --stroke: #283141;
+  --text: #f2f5f9;
+  --text-2: #8c96a8;
+  --accent: #22d66e;
+  --accent-ink: #03140a;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text-2);
+  font: 16px/1.6 'Barlow', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+.doc { max-width: 720px; margin: 0 auto; padding: 32px 16px 64px; }
+.brand {
+  display: inline-flex; align-items: center; gap: 8px;
+  color: var(--text); text-decoration: none;
+  font: italic 900 24px/1 'Barlow Condensed', sans-serif; letter-spacing: 0.02em;
+}
+.brand b { color: var(--accent); }
+.brand .mark { width: 26px; height: 26px; border-radius: 7px; background: var(--accent); position: relative; }
+.brand .mark::before, .brand .mark::after { content: ''; position: absolute; background: var(--accent-ink); border-radius: 3px; transform: skewX(-10deg); }
+.brand .mark::before { left: 5px; right: 5px; top: 6px; height: 4px; }
+.brand .mark::after { left: 11px; width: 4px; top: 11px; height: 9px; }
+h1 { margin: 28px 0 4px; color: var(--text); font: 800 40px/1.05 'Barlow Condensed', sans-serif; }
+h2 { margin: 32px 0 8px; color: var(--text); font-size: 20px; font-weight: 700; }
+h3 { margin: 20px 0 4px; color: var(--text); font-size: 16px; font-weight: 700; }
+p, ul { margin: 0 0 12px; }
+ul { padding-left: 20px; }
+li { margin-bottom: 6px; }
+b { color: var(--text); font-weight: 600; }
+a { color: var(--accent); font-weight: 600; }
+.meta { color: var(--text-2); font-size: 14px; }
+.callout { margin: 20px 0; padding: 14px 16px; border: 1px solid var(--stroke); border-radius: 14px; background: var(--surface); }
+footer { margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--stroke); font-size: 14px; }

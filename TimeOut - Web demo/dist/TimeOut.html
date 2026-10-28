@@ -797,7 +797,7 @@ body.is-offline .toasts { margin-top: 56px; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
 }
-a.btn { text-decoration: none; }
+a.btn, a.dn, a.sn { text-decoration: none; color: inherit; }
 
 /* Virtual racing */
 .race-page { padding-bottom: 24px; }
@@ -6654,6 +6654,8 @@ window.TIMEOUT_SUPABASE = {
         ${item('privacy')}
         ${item('account')}
         <button class="dn" data-act="how">${icon('help', 20)}How TimeOut works</button>
+        <a class="dn" href="support.html" target="_blank" rel="noopener">${icon('info', 20)}Help & support</a>
+        <a class="dn" href="privacy.html" target="_blank" rel="noopener">${icon('shield', 20)}Privacy policy</a>
         <button class="dn" data-act="logout">${icon('logout', 20)}Log out</button>
       </nav></aside>`;
     ui.layer().appendChild(wrap);
@@ -7763,6 +7765,8 @@ window.TIMEOUT_SUPABASE = {
         <div class="side-label eyebrow">Screen time & settings</div>
         ${MENU.map(([k, t, ic]) => item(k, t, ic)).join('')}
         <button class="sn" data-act="how" title="How TimeOut works">${icon('help', 19)}<span class="sn-l">How TimeOut works</span></button>
+        <a class="sn" href="support.html" target="_blank" rel="noopener" title="Help & support">${icon('info', 19)}<span class="sn-l">Help & support</span></a>
+        <a class="sn" href="privacy.html" target="_blank" rel="noopener" title="Privacy policy">${icon('shield', 19)}<span class="sn-l">Privacy policy</span></a>
       </nav>
       <div class="side-foot">
         <button class="side-user" data-act="settings" data-section="account" title="@${esc(TO.account.username)}">${ui.avatar(TO.account.photo)}<span class="sn-l"><b class="ellipsis" style="display:block">@${esc(TO.account.username)}</b><span style="display:block;margin-top:3px">${ui.tierBadge(wl.tier.id, true)}</span></span></button>
