@@ -144,6 +144,7 @@ The demo account above already has open bets, friends and a team. Account deleti
 | Copyright | `2026 TimeOut` (or your team's name) |
 | Privacy policy URL | `https://marcustheman13.github.io/TimeOut/privacy.html` |
 | Support URL | `https://marcustheman13.github.io/TimeOut/support.html` |
+| Marketing URL | `https://marcustheman13.github.io/TimeOut/about.html` |
 
 ## Screenshots
 

@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TimeOut · Bet your screen time, not your money</title>
+<meta name="description" content="TimeOut is a sports prediction game where you bet screen time instead of money. Live odds, parlays, friends and real app blocking.">
+<meta property="og:title" content="TimeOut · Bet your screen time, not your money">
+<meta property="og:description" content="Pick winners with live odds, win back phone time for tomorrow, and compete with friends. No money, ever.">
+<meta property="og:image" content="img/screens/01-home.jpg">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 100 100%27%3E%3Crect width=%27100%27 height=%27100%27 rx=%2722.5%27 fill=%27%2322D66E%27/%3E%3Cg transform=%27translate(48 50) skewX(-10) translate(-50 -50)%27 fill=%27%2303140A%27%3E%3Crect x=%2719%27 y=%2723%27 width=%2762%27 height=%2716%27 rx=%278%27/%3E%3Crect x=%2742%27 y=%2744%27 width=%2716%27 height=%2733%27 rx=%278%27/%3E%3C/g%3E%3C/svg%3E">
+<link rel="apple-touch-icon" href="img/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;600;700&family=Barlow+Condensed:ital,wght@0,700;0,800;1,900&display=swap">
+<link rel="stylesheet" href="css/legal.css">
+<style>
+  .doc { max-width: 1040px; }
+  .hero { display: grid; gap: 32px; align-items: center; margin-top: 28px; }
+  .hero h1 { margin: 0; font: italic 900 clamp(48px, 9vw, 84px)/0.9 'Barlow Condensed', sans-serif; letter-spacing: 0.02em; }
+  .hero h1 b { color: var(--accent); font-weight: 900; }
+  .tag { margin: 14px 0 0; color: var(--text); font: 700 clamp(24px, 4vw, 32px)/1.1 'Barlow Condensed', sans-serif; }
+  .lead { margin: 14px 0 24px; font-size: 18px; max-width: 36ch; }
+  .cta { display: flex; flex-wrap: wrap; gap: 10px; }
+  .btn { display: inline-flex; align-items: center; height: 48px; padding: 0 20px; border-radius: 14px; font-weight: 700; text-decoration: none; }
+  .btn.primary { background: var(--accent); color: var(--accent-ink); }
+  .btn.ghost { border: 1px solid var(--stroke); color: var(--text); }
+  .soon { margin-top: 10px; font-size: 14px; }
+  .shots { display: flex; gap: 14px; overflow-x: auto; padding-bottom: 8px; scrollbar-width: thin; }
+  .shots img { flex: none; width: 220px; border-radius: 22px; border: 1px solid var(--stroke); }
+  .features { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); margin-top: 40px; }
+  .feature { padding: 18px; border: 1px solid var(--stroke); border-radius: 16px; background: var(--surface); }
+  .feature h3 { margin: 0 0 6px; }
+  .feature p { margin: 0; font-size: 15px; }
+  .nomoney { margin-top: 40px; text-align: center; color: var(--text); font: 800 clamp(26px, 5vw, 40px)/1.1 'Barlow Condensed', sans-serif; }
+  @media (min-width: 860px) { .hero { grid-template-columns: 1fr 1.1fr; } }
+</style>
+</head>
+<body>
+<main class="doc">
+  <a class="brand" href="./"><span class="mark"></span>TIME<b>OUT</b></a>
+
+  <section class="hero">
+    <div>
+      <h1>TIME<b>OUT</b></h1>
+      <p class="tag">Bet your screen time, not your money.</p>
+      <p class="lead">Pick winners with live odds. Win, and you get more phone time tomorrow. Lose, and it comes off.
+        The thrill of a good pick, without the damage.</p>
+      <div class="cta">
+        <a class="btn primary" href="./">Play in your browser</a>
+        <a class="btn ghost" href="support.html">Get help</a>
+      </div>
+      <p class="soon">Coming soon to the App Store for iPhone.</p>
+    </div>
+    <div class="shots" aria-label="App screenshots">
+      <img src="img/screens/01-home.jpg" alt="Home: betting balance, tier and open bets" loading="lazy">
+      <img src="img/screens/03-bet-slip.jpg" alt="Bet slip: stake minutes to win more phone time" loading="lazy">
+      <img src="img/screens/06-friends.jpg" alt="Friends leaderboard ranked by minutes won" loading="lazy">
+      <img src="img/screens/07-tier-streak.jpg" alt="Tiers and perks for locking apps" loading="lazy">
+    </div>
+  </section>
+
+  <section class="features">
+    <div class="feature"><h3>60 minutes a day</h3><p>Everyone starts with 60 betting minutes, reset at midnight. Wins add to tomorrow's phone time.</p></div>
+    <div class="feature"><h3>Live scores and odds</h3><p>Football, basketball, baseball, hockey and soccer, with moneylines, spreads, totals and parlays.</p></div>
+    <div class="feature"><h3>Real app blocking</h3><p>On iPhone, TimeOut uses Apple's Screen Time to lock your time-wasting apps when your phone time runs out.</p></div>
+    <div class="feature"><h3>Tiers and streaks</h3><p>Lock more apps to climb tiers for bonus minutes and odds boosts. Clean days in a row multiply your wins.</p></div>
+    <div class="feature"><h3>Compete with friends</h3><p>Leaderboards, teams for a week or a season, and shareable bet cards.</p></div>
+    <div class="feature"><h3>Settles itself</h3><p>Bets pay out minutes after the game ends. Postponed games are voided and your stake comes back.</p></div>
+  </section>
+
+  <p class="nomoney">No money. No deposits. No prizes. Ever.</p>
+
+  <footer><a href="./">Open TimeOut</a> · <a href="support.html">Support</a> · <a href="privacy.html">Privacy Policy</a></footer>
+</main>
+</body>
+</html>
