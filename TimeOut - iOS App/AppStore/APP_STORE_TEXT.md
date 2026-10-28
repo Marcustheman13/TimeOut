@@ -148,13 +148,16 @@ The demo account above already has open bets, friends and a team. Account deleti
 
 ## Screenshots
 
-In `Screenshots/`, 6.9" iPhone size (1320 × 2868), ready to upload in this order:
+Upload in this order. Each set has the same 8 screens.
+
+- `Screenshots/6.3-inch/`: 6.3" iPhone (1206 × 2622, iPhone 17 Pro)
+- `Screenshots/6.9-inch/`: 6.9" iPhone (1320 × 2868, iPhone 17 Pro Max)
 
 1. `01-home.png`: balance, tier and open bets
-2. `02-games.png`: live game feed with odds
-3. `03-bet-slip.png`: bet slip (+455 underdog, win 46 minutes)
-4. `04-game.png`: game page with your bet and all markets
-5. `05-my-bets.png`: record and an open parlay
+2. `02-games.png`: game feed with odds
+3. `03-bet-slip.png`: bet slip with an odds boost
+4. `04-game.png`: game page with all markets and team stats
+5. `05-my-bets.png`: record and a live open bet
 6. `06-friends.png`: friends leaderboard
 7. `07-tier-streak.png`: tiers and perks
 8. `08-welcome.png`: welcome screen
