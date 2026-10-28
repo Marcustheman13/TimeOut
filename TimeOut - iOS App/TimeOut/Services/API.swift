@@ -149,8 +149,26 @@ final class API {
     private func ensureFreshSession() async throws {
         guard let s = stored, let refresh = s.refresh_token else { return }
         if (s.expires_at ?? 0) > Date().timeIntervalSince1970 + 60 { return }
-        let fresh = try await authRequest("token?grant_type=refresh_token", ["refresh_token": refresh])
-        saveSession(fresh)
+        do {
+            let fresh = try await authRequest("token?grant_type=refresh_token", ["refresh_token": refresh])
+            saveSession(fresh)
+        } catch let e as AppError where (400..<500).contains(e.status ?? 0) {
+            // The login was revoked or used on another device: sign out instead of failing every sync.
+            sessionExpired()
+            throw AppError(code: "bad_token", message: "Your session expired. Log in again.", status: 401)
+        }
+    }
+
+    private func sessionExpired() {
+        guard token != nil else { return }
+        clearToken()
+        pendingState = nil
+        saveTask?.cancel(); saveTask = nil
+        lastSettingsSnapshot = ""
+        Slip.shared.clear()
+        Store.shared.logout()
+        AppModel.shared.boot()
+        UIState.shared.toast(.warn, "Your session expired", "Log in again to keep your bets in sync.")
     }
 
     private func rest(_ path: String, method: String = "GET", body: Any? = nil, extra: [String: String] = [:], timeout: TimeInterval? = nil) async throws -> JSON {

@@ -339,17 +339,18 @@ struct Ticker: View {
         let _ = live.version
         let games = Array(Feed.board().filter { $0.state == .live && !$0.simulated }.prefix(8))
         if !games.isEmpty {
-            TimelineView(.animation) { ctx in
-                let t = ctx.date.timeIntervalSinceReferenceDate
-                let offset = width > 0 ? -CGFloat(t.truncatingRemainder(dividingBy: 32) / 32) * width : 0
-                HStack(spacing: 8) {
-                    row(games).background(GeometryReader { g in Color.clear.onAppear { width = g.size.width + 8 } })
-                    row(games)
+            // An overlay, so the rows (wider than the screen) can't widen the welcome layout.
+            Color.clear.frame(maxWidth: .infinity).frame(height: 38).overlay(alignment: .leading) {
+                TimelineView(.animation) { ctx in
+                    let t = ctx.date.timeIntervalSinceReferenceDate
+                    let offset = width > 0 ? -CGFloat(t.truncatingRemainder(dividingBy: 32) / 32) * width : 0
+                    HStack(spacing: 8) {
+                        row(games).background(GeometryReader { g in Color.clear.onAppear { width = g.size.width + 8 } })
+                        row(games)
+                    }
+                    .offset(x: offset)
                 }
-                .offset(x: offset)
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(height: 38)
             .clipped()
             .mask(LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.1), .init(color: .black, location: 0.9), .init(color: .clear, location: 1)], startPoint: .leading, endPoint: .trailing))
             .accessibilityHidden(true)
