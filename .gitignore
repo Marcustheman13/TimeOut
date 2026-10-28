@@ -22,4 +22,4 @@ DerivedData/
 Screenshot*.png
 
 # Build output for claude.ai publishing (dist/TimeOut.html is kept on purpose)
-TimeOut - Web demo/dist/TimeOut-artifact.html
+TimeOut - Web/dist/TimeOut-artifact.html

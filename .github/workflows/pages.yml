@@ -1,14 +1,14 @@
 # Publishes the web demo to GitHub Pages whenever it changes on main:
 #   https://marcustheman13.github.io/TimeOut/          the web app (index.html), resizes from phone to desktop
 #   https://marcustheman13.github.io/TimeOut/web.html  forwards old links to the main page
-# Pages can't serve a folder with spaces in its name directly, so this uploads "TimeOut - Web demo" as the site.
+# Pages can't serve a folder with spaces in its name directly, so this uploads "TimeOut - Web" as the site.
 name: Deploy web demo to GitHub Pages
 
 on:
   push:
     branches: [main]
     paths:
-      - 'TimeOut - Web demo/**'
+      - 'TimeOut - Web/**'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 
@@ -32,6 +32,6 @@ jobs:
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: 'TimeOut - Web demo'
+          path: 'TimeOut - Web'
       - id: deployment
         uses: actions/deploy-pages@v4
