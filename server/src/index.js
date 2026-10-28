@@ -12,7 +12,7 @@ const users = require('./users');
 const teams = require('./teams');
 
 const PORT = Number(process.env.PORT) || 3000;
-const WEB_DIR = path.join(__dirname, '..', '..', 'TimeOut - Web demo');
+const WEB_DIR = path.join(__dirname, '..', '..', 'TimeOut - Web');
 const SQL_DIR = path.join(__dirname, '..', 'db');
 
 const app = express();

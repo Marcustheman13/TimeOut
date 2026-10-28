@@ -45,7 +45,7 @@ users → sessions is one-to-many (one user can be logged in on several devices)
 
 | Layer | What we use | Where it lives |
 | --- | --- | --- |
-| Frontend (now) | Plain HTML, CSS and JavaScript, no framework | [`TimeOut - Web demo/`](TimeOut%20-%20Web%20demo) |
+| Frontend (now) | Plain HTML, CSS and JavaScript, no framework | [`TimeOut - Web/`](TimeOut%20-%20Web) |
 | Frontend (iOS) | Native SwiftUI app with the same screens and features as the web demo, plus real Screen Time blocking (FamilyControls) | [`TimeOut - iOS App/`](TimeOut%20-%20iOS%20App) |
 | Backend | Node.js + Express 5 REST API | [`server/src/`](server/src) |
 | Database | PostgreSQL | [`server/db/`](server/db) |
@@ -108,7 +108,7 @@ On a shared Supabase or Neon database you can run them while the server is up, o
 **Shared database setup (one person, once):** create a free project at [supabase.com](https://supabase.com) or [neon.tech](https://neon.tech), copy its Postgres connection string
 (Supabase: *Connect > Session pooler > URI*), put it in your `server/.env` as `DATABASE_URL=...`, run `npm run db:reset`, then send the string to teammates privately.
 
-**No server?** You can still double-click `TimeOut - Web demo/index.html` (or `dist/TimeOut.html`). It runs in offline demo mode with accounts saved only in that browser.
+**No server?** You can still double-click `TimeOut - Web/index.html` (or `dist/TimeOut.html`). It runs in offline demo mode with accounts saved only in that browser.
 
 ---
 
@@ -116,7 +116,7 @@ On a shared Supabase or Neon database you can run them while the server is up, o
 
 **The slice: logging in.** When you press **Log in**, the app:
 
-1. sends `POST /api/auth/login` with your username/email and password ([`js/api.js`](TimeOut%20-%20Web%20demo/js/api.js)),
+1. sends `POST /api/auth/login` with your username/email and password ([`js/api.js`](TimeOut%20-%20Web/js/api.js)),
 2. checks the password against the bcrypt hash, then **updates** your row in `users` (`last_login_at = now()`, `login_count = login_count + 1`) and inserts a row in `sessions` ([`server/src/auth.js`](server/src/auth.js)),
 3. returns the updated user (including the new `loginCount` and `lastLoginAt`) to the browser,
 4. shows it in the UI: a toast saying **"Login #N, saved to the database"** and, under **Menu (☰) > Account**, a **"Saved in the TimeOut database"** card with *Last login* and *Total logins*.
@@ -148,7 +148,7 @@ TimeOut/
 │   ├── db/seed.sql              ← sample rows for every table
 │   ├── scripts/                 ← db:reset and db:query
 │   └── .env.example             ← copy to .env (which git ignores)
-├── TimeOut - Web demo/          ← the clickable web app (HTML/CSS/JS)
+├── TimeOut - Web/               ← the clickable web app (HTML/CSS/JS)
 │   ├── index.html               ← the web app; resizes from phone to desktop
 │   ├── css/web.css, js/web.js   ← its responsive layout (web.html just forwards old links)
 │   ├── js/api.js                ← every call from the web app to the server goes through here
@@ -182,10 +182,10 @@ All requests and responses are JSON. Errors look like `{ "error": { "code", "mes
   ```
 - **Never commit `server/.env`** or paste the database connection string into code, issues or chat. `.gitignore` already blocks `.env`.
 - If you change `schema.sql`, also update `seed.sql` and the ERD, and tell the team to run `npm run db:reset`.
-- After editing anything in `TimeOut - Web demo/css` or `js`, run `python3 build.py` in that folder if you want the single-file `dist/TimeOut.html` updated.
+- After editing anything in `TimeOut - Web/css` or `js`, run `python3 build.py` in that folder if you want the single-file `dist/TimeOut.html` updated.
 
 ## What's Still Stored Only in the Browser
 
-Only accounts and login use the database so far. Bets, the screen-time wallet, friends, challenges, teams and settings are still in the browser's `localStorage` ([`js/state.js`](TimeOut%20-%20Web%20demo/js/state.js)).
+Only accounts and login use the database so far. Bets, the screen-time wallet, friends, challenges, teams and settings are still in the browser's `localStorage` ([`js/state.js`](TimeOut%20-%20Web/js/state.js)).
 To move a feature over: add its tables to `schema.sql`, add routes in `server/src/`, add a function in `js/api.js`, and call it from the screen.
 Good next slices: editing the profile (username/email/password/photo), placing a bet, and sending a friend request.
