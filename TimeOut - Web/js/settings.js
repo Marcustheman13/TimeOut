@@ -45,7 +45,7 @@
 
   // ---------- Sections ----------
   const listRow = (ic, title, sub, right, attrs = '') => `<label class="list-row" ${attrs}><span class="lr-icon">${icon(ic, 17)}</span><span class="lr-main"><div class="lr-title">${title}</div>${sub ? `<div class="lr-sub">${sub}</div>` : ''}</span>${right}</label>`;
-  const brow = (label, value, cls = '') => `<div class="spread small"><span class="muted">${label}</span><b class="num ${cls}">${value}</b></div>`;
+  const brow = (label, value, cls = '') => `<div class="row-layout small"><span class="muted">${label}</span><b class="num ${cls}">${value}</b></div>`;
 
   function screentime() {
     const wl = St.wallet();
@@ -55,22 +55,22 @@
     return `
       <div class="card stack-s">
         <h2 style="margin:0;font-size:17px">How your screen time works</h2>
-        <div class="how-card"><span class="n">1</span><div><h3>${TO.RULES.daily} betting minutes a day</h3><p>Your betting balance starts at ${TO.RULES.daily} minutes${wl.tier.bonus ? ` (plus ${wl.tier.bonus} from your ${esc(wl.tier.title)} tier)` : ''} and resets at midnight, your local time.</p></div></div>
-        <div class="how-card"><span class="n">2</span><div><h3>You bet tomorrow's phone time</h3><p>Every minute you win is added to tomorrow's limit. Every minute you lose comes off it.</p></div></div>
-        <div class="how-card"><span class="n">3</span><div><h3>The math</h3><p>Tomorrow's limit = ${TO.RULES.daily} min + today's bet results − emergency unlock penalties.</p></div></div>
+        <div class="how-card"><span class="n">1</span><div><h3>${TO.RULES.daily} pledge minutes a day</h3><p>Your available minutes start at ${TO.RULES.daily}${wl.tier.bonus ? ` (plus ${wl.tier.bonus} from your ${esc(wl.tier.title)} tier)` : ''} and reset at midnight, your local time.</p></div></div>
+        <div class="how-card"><span class="n">2</span><div><h3>Challenges affect tomorrow's phone time</h3><p>Successful challenges add minutes to tomorrow's allowance. Missed challenges subtract the committed minutes.</p></div></div>
+        <div class="how-card"><span class="n">3</span><div><h3>The calculation</h3><p>Tomorrow's allowance = ${TO.RULES.daily} min + today's earned minutes − emergency unlock adjustments.</p></div></div>
       </div>
 
       <div class="card stack-s">
-        <div class="spread"><h2 style="margin:0;font-size:17px">Today</h2><span class="tiny faint bold">Resets in ${ui.countdownEl(TO.nextMidnight())}</span></div>
+        <div class="row-layout"><h2 style="margin:0;font-size:17px">Today</h2><span class="tiny faint bold">Resets in ${ui.countdownEl(TO.nextMidnight())}</span></div>
         ${brow('Base limit', `${TO.RULES.daily} min`)}
-        ${brow("Yesterday's bets", TO.signedMin(wl.yesterdayNet), wl.yesterdayNet > 0 ? 'green' : wl.yesterdayNet < 0 ? 'red' : '')}
+        ${brow("Yesterday's challenges", TO.signedMin(wl.yesterdayNet), wl.yesterdayNet > 0 ? 'green' : wl.yesterdayNet < 0 ? 'red' : '')}
         ${wl.penaltyToday ? brow('Emergency unlock penalty', `−${wl.penaltyToday} min`, 'red') : ''}
         ${s.minLimit && TO.RULES.daily + wl.yesterdayNet - wl.penaltyToday < s.minLimit ? brow('Raised to your minimum', `${s.minLimit} min`) : ''}
         ${wl.emergencyToday ? brow('Emergency unlocks used', `+${wl.emergencyToday} min`, 'yellow') : ''}
         <hr class="divider">
         ${brow('Phone time allowed today', `${wl.todayLimit} min`)}
         <div class="bar" style="height:8px"><i style="width:${usedPct}%;background:${wl.appsLocked ? 'var(--loss)' : usedPct > 80 ? 'var(--warn)' : 'var(--accent)'}"></i></div>
-        <div class="spread tiny bold"><span class="muted">${wl.used} min used on locked apps</span><span class="${wl.appsLocked ? 'red' : ''}">${s.enforce ? `${wl.phoneLeft} min left` : 'Limits are off'}</span></div>
+        <div class="row-layout tiny bold"><span class="muted">${wl.used} min used on locked apps</span><span class="${wl.appsLocked ? 'red' : ''}">${s.enforce ? `${wl.phoneLeft} min left` : 'Limits are off'}</span></div>
       </div>
 
       <div class="card stack-s">
@@ -111,15 +111,15 @@
     }).join('');
     const ms = St.nextStreakMilestone(wl.streak);
     return `<div class="card stack">
-        <div class="spread"><h2 style="margin:0;font-size:17px">Your tier</h2>${ui.tierBadge(t.id)}</div>
-        ${next ? `<div class="stack-s"><div class="spread small"><b>${wl.points} lock point${wl.points === 1 ? '' : 's'}</b><span class="muted">${next.min - wl.points} more for ${esc(next.title)}</span></div><div class="bar"><i style="width:${Math.min(100, ((wl.points - t.min) / (next.min - t.min)) * 100)}%;background:${next.color}"></i></div></div>` : `<div class="bold" style="color:${t.color}">Top tier. ${wl.points} lock points.</div>`}
+        <div class="row-layout"><h2 style="margin:0;font-size:17px">Your tier</h2>${ui.tierBadge(t.id)}</div>
+        ${next ? `<div class="stack-s"><div class="row-layout small"><b>${wl.points} lock point${wl.points === 1 ? '' : 's'}</b><span class="muted">${next.min - wl.points} more for ${esc(next.title)}</span></div><div class="bar"><i style="width:${Math.min(100, ((wl.points - t.min) / (next.min - t.min)) * 100)}%;background:${next.color}"></i></div></div>` : `<div class="bold" style="color:${t.color}">Top tier. ${wl.points} lock points.</div>`}
         ${!TO.data.settings.enforce ? `<div class="note warn">${icon('info', 15)}<span>App limits are off, so your lock points don't count. Turn them on in Screen time.</span></div>` : ''}
         <div class="stack-s">${ladder}</div>
         <div class="tiny faint">Lock more of your real screen time to climb. Apps and websites are 1 point; whole categories (like Social) are 3.</div>
         <button class="btn ghost sm" data-act="locked-apps">${icon('lock', 16)} Choose locked apps</button>
       </div>
       <div class="card stack-s">
-        <div class="spread"><div class="row-s">${icon('flame', 20, wl.streak ? 'yellow' : 'faint')}<b style="font-size:16px">${wl.streak ? `${wl.streak}-day clean streak` : 'No clean streak yet'}</b></div>${wl.multiplier > 1 ? `<span class="tag green" style="height:24px;font-size:12px">Wins ${St.fmtMult(wl.multiplier)}</span>` : ''}</div>
+        <div class="row-layout"><div class="row-s">${icon('flame', 20, wl.streak ? 'yellow' : 'faint')}<b style="font-size:16px">${wl.streak ? `${wl.streak}-day clean streak` : 'No clean streak yet'}</b></div>${wl.multiplier > 1 ? `<span class="tag green" style="height:24px;font-size:12px">Wins ${St.fmtMult(wl.multiplier)}</span>` : ''}</div>
         ${ms ? `<div class="bar"><i style="width:${(wl.streak / ms.days) * 100}%;background:var(--warn)"></i></div><div class="small muted bold">${ms.days - wl.streak} more clean day${ms.days - wl.streak === 1 ? '' : 's'} for ${St.fmtMult(ms.mult)} winnings.</div>` : '<div class="small green bold">Max multiplier reached. Keep it going.</div>'}
         <div class="small muted">A clean day means limits were on, you stayed under your phone time, and you didn't use an emergency unlock. Winnings get ×1.1 at 3 days and ×1.25 at 7. An emergency unlock resets the streak.</div>
       </div>`;
@@ -136,7 +136,7 @@
     const n = TO.data.settings.notify;
     const row = (k, t, sub, ic) => listRow(ic, t, sub, ui.switchEl(`nt-${k}`, n[k], `data-change="set-notify" data-k="${k}"`), `for="nt-${k}"`);
     return `<div class="small muted">In the demo these show as banners at the top of the screen.</div><div class="list">
-      ${row('settled', 'Bet results', 'When a bet wins, loses or is voided', 'ticket')}
+      ${row('settled', 'Challenge results', 'When a matchup challenge is completed', 'target')}
       ${row('friends', 'Friend requests', 'When someone adds or accepts you', 'userPlus')}
       ${row('lowTime', 'Low phone time', 'Before your locked apps close', 'phone')}
     </div>`;
@@ -148,7 +148,7 @@
     return `<div class="small muted">Friends only see what you turn on here. Anything off shows as "Private" to them.</div><div class="list">
       ${row('record', 'My record', 'Wins and losses', 'chart')}
       ${row('minutes', 'Minutes won or lost', 'Your leaderboard number', 'hourglass')}
-      ${row('bets', 'My open bets', 'Picks you currently have open', 'ticket')}
+      ${row('challenges', 'My open bets', 'Picks you currently have open', 'ticket')}
     </div>`;
   }
 
@@ -157,7 +157,7 @@
 
   /** Values read from PostgreSQL through GET /api/auth/me — the login vertical slice. */
   function serverAccountCard(s) {
-    const line = (k, v, id) => `<div class="spread"><span class="muted">${k}</span><b${id ? ` id="${id}"` : ''}>${esc(String(v))}</b></div>`;
+    const line = (k, v, id) => `<div class="row-layout"><span class="muted">${k}</span><b${id ? ` id="${id}"` : ''}>${esc(String(v))}</b></div>`;
     return `<div class="card stack-s" id="db-account">
       <div class="row-s">${icon('check', 16)}<b>Connected to Supabase</b></div>
       ${line('User ID', s.id)}
@@ -218,10 +218,10 @@
     ui.sheet('how', {
       render: () => ({
         title: 'How TimeOut works',
-        body: `<div class="how-card"><span class="n">1</span><div><h3>Bet screen time, not money</h3><p>You get ${TO.RULES.daily} betting minutes every day. They reset at midnight.</p></div></div>
-          <div class="how-card"><span class="n">2</span><div><h3>Winning buys you phone time</h3><p>Win a bet and the minutes you win are added to tomorrow's phone time. Lose and they come off it.</p></div></div>
-          <div class="how-card"><span class="n">3</span><div><h3>Bets settle on their own</h3><p>When a game ends, your bet pays out within minutes. Postponed games are voided and you get your stake back.</p></div></div>
-          <div class="how-card"><span class="n">4</span><div><h3>Out of minutes? Wait for midnight</h3><p>At 0 minutes, betting locks until the reset. Emergency unlocks exist, but they cost you tomorrow.</p></div></div>
+        body: `<div class="how-card"><span class="n">1</span><div><h3>Commit screen time minutes</h3><p>You get ${TO.RULES.daily} available minutes every day. They reset at midnight.</p></div></div>
+          <div class="how-card"><span class="n">2</span><div><h3>Meet the challenge to earn time</h3><p>Successful challenges add earned minutes to tomorrow's phone-time allowance.</p></div></div>
+          <div class="how-card"><span class="n">3</span><div><h3>Results update automatically</h3><p>When a game ends, the challenge is resolved. Postponed games return your committed minutes.</p></div></div>
+          <div class="how-card"><span class="n">4</span><div><h3>Out of minutes? Wait for midnight</h3><p>At 0 minutes, new pledges pause until the reset. Emergency unlocks adjust tomorrow's allowance.</p></div></div>
           `,
         foot: `<button class="btn primary full" data-act="close-sheet" data-name="how">Got it</button>`,
       }),
@@ -241,7 +241,7 @@
         return {
           title: 'Locked apps & sites',
           body: `<div class="small muted">These are the apps TimeOut blocks when your phone time runs out. The more you lock, the higher your tier.</div>
-            <div class="card tight spread"><span class="bold">${pts} lock points</span>${ui.tierBadge(t.id)}</div>
+            <div class="card tight row-layout"><span class="bold">${pts} lock points</span>${ui.tierBadge(t.id)}</div>
             <div class="eyebrow">Categories · 3 pts each</div><div class="list">${group('Category')}</div>
             <div class="eyebrow">Apps · 1 pt each</div><div class="list">${group('App')}</div>
             <div class="eyebrow">Websites · 1 pt each</div><div class="list">${group('Website')}</div>`,
@@ -306,7 +306,7 @@
   A.logout = async () => {
     closeDrawer();
     if (!(await ui.confirm({ title: 'Log out?', body: 'Your bets and settings stay saved on this device.', confirm: 'Log out' }))) return;
-    TO.slip.clear();
+    TO.comboGoalBuilder.clear();
     if (TO.api.online) await TO.api.logout();
     St.logout();
     TO.app.boot();
@@ -342,7 +342,7 @@
   A['acct-delete'] = async () => {
     if (!(await ui.confirm({ title: 'Delete your account?', body: 'This removes your account, bets and friends from this device. It can\'t be undone.', confirm: 'Delete account', danger: true }))) return;
     St.deleteAccount();
-    TO.slip.clear();
+    TO.comboGoalBuilder.clear();
     TO.app.boot();
   };
 

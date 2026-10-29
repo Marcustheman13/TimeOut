@@ -1,4 +1,4 @@
-/* TimeOut web demo — simulated sports feed, live stats, fair odds and prediction markets.
+/* TimeOut web demo — simulated sports feed, live stats, fair challenge targets and prediction markets.
  *
  * Every league runs on rolling 20-minute slots. Each game lasts 12 real minutes (sped up for the demo),
  * and every score, stat and price is a pure function of the game ID and the (demo) clock, so the same
@@ -246,7 +246,7 @@
     return g;
   }
 
-  /** Live team stats for the game page and open-bet cards. */
+  /** Live team stats for the game page and open-pledges cards. */
   function stats(g) {
     if (g.state !== 'live' && g.state !== 'final') return [];
     const p = g.progress;
@@ -359,7 +359,7 @@
     return list.sort((a, b) => rank[a.state] - rank[b.state] || a.start - b.start);
   }
 
-  // ---------- Odds ----------
+  // ---------- challenge targets ----------
   const oddsCache = new Map();
 
   function expectedMargin(g, now) {
@@ -412,7 +412,7 @@
     return { moneyline, spread, total, suspended, all: [...moneyline, ...spread, ...total] };
   }
 
-  /** Current odds for a game. Live prices refresh every 15 seconds; pre-game every 2 minutes. */
+  /** Current challenge targets for a game. Live prices refresh every 15 seconds; pre-game every 2 minutes. */
   function odds(id, now = TO.now()) {
     const g = game(id, now);
     if (!g) return null;

@@ -28,10 +28,10 @@
     return `<span class="status-pill ${status}">${label.toUpperCase()}</span>`;
   };
 
-  ui.oddsText = (price) => TO.odds.fmt(price);
+  ui.multiplierText = (price) => TO.multiplierText(price);
 
-  ui.leagueTitle = (id) => (id === 'pred' ? 'Predictions' : id === 'todo' ? 'To-Do' : id === 'parlay' ? 'Parlays' : (S.LEAGUES[id] || {}).title || id);
-  ui.leagueShort = (id) => (id === 'pred' ? 'PRED' : id === 'todo' ? 'TO-DO' : id === 'parlay' ? 'PARLAY' : (S.LEAGUES[id] || {}).short || id);
+  ui.leagueTitle = (id) => (id === 'pred' ? 'Predictions' : id === 'todo' ? 'To-Do' : id === 'combo-goal' ? 'Combo Goals' : (S.LEAGUES[id] || {}).title || id);
+  ui.leagueShort = (id) => (id === 'pred' ? 'PRED' : id === 'todo' ? 'TO-DO' : id === 'combo-goal' ? 'combo-goal' : (S.LEAGUES[id] || {}).short || id);
 
   ui.gameStatus = (g) => {
     if (g.state === 'live') return `<span class="live">LIVE</span><span style="color:var(--text)">${esc(g.clock)}</span>`;
@@ -44,18 +44,18 @@
     return `<span class="yellow row-s">${icon('alert', 13)} Postponed · all bets voided, stakes returned</span>`;
   };
 
-  /** One odds button. Tapping adds or removes the pick on the bet slip. */
-  ui.oddsBtn = (sel, { suspended, move, big, label } = {}) => {
-    const on = TO.slip.has(sel.id);
+  /** One matchup choice. Tapping adds or removes it from the daily commitment. */
+  ui.challengeChoiceButton = (sel, { suspended, move, big, label } = {}) => {
+    const on = TO.comboGoalBuilder.has(sel.id);
     const locked = suspended;
     let ln = '';
-    if (sel.market === 'spread') ln = TO.odds.fmtLine(sel.line);
-    if (sel.market === 'total') ln = `${sel.side === 'over' ? 'O' : 'U'} ${TO.odds.fmtLine(sel.line, false)}`;
-    const mv = move ? `<span class="mv ${move > 0 ? 'up' : 'down'}">${move > 0 ? '▲' : '▼'}</span>` : '';
+    if (sel.market === 'spread') ln = sel.line < 0 ? `Win by ${Math.ceil(Math.abs(sel.line))}+` : `Stay within ${Math.floor(sel.line)}`;
+    if (sel.market === 'total') ln = `Total Score ${sel.side === 'over' ? 'Over' : 'Under'} ${TO.odds.fmtLine(sel.line, false)}`;
+    const mult = TO.convertOddsToMultiplier(sel.price);
     const inner = locked
       ? `${icon('lock', 14)}`
-      : `${big && label ? `<span class="lbl">${esc(label)}</span>` : ''}${ln ? `<span class="ln">${ln}</span>` : ''}<span class="pr ${ln || (big && label) ? '' : 'solo'}">${mv}${ui.oddsText(sel.price)}</span>`;
-    return `<button class="odds-btn ${on ? 'on' : ''} ${locked ? 'locked' : ''} ${big ? 'big' : ''}" data-act="pick" data-sel="${esc(sel.id)}" ${locked ? 'disabled' : ''} aria-pressed="${on}" aria-label="${esc(label || '')} ${ln} ${ui.oddsText(sel.price)}${locked ? ' suspended' : ''}">${inner}</button>`;
+      : `${big && label ? `<span class="lbl">${esc(label)}</span>` : ''}${ln ? `<span class="ln">${ln}</span>` : ''}<span class="pr ${ln || (big && label) ? '' : 'solo'}">${TO.multiplierText(sel.price)}</span>`;
+    return `<button class="challenge-btn ${on ? 'on' : ''} ${locked ? 'locked' : ''} ${big ? 'big' : ''}" data-act="pick" data-sel="${esc(sel.id)}" ${locked ? 'disabled' : ''} aria-pressed="${on}" aria-label="${esc(label || '')} ${ln} ${TO.multiplierText(sel.price)}${locked ? ' unavailable' : ''}">${inner}</button>`;
   };
 
   ui.countdownEl = (target, cls = '') => `<span class="${cls}" data-countdown="${target}">${TO.countdown(target - TO.now())}</span>`;
@@ -128,7 +128,7 @@
     el.dataset.page = name;
     el._opts = opts;
     el.innerHTML = `<div class="page-top"><button class="icon-btn" data-act="close-page" data-name="${name}" aria-label="Back">${icon('chevL', 22)}</button><div class="t"></div><div class="pt-right"></div></div><div class="page-scroll"></div>`;
-    // Newer pages stack above older ones (a game opened from the parlay builder), but below sheets and dialogs.
+    // Newer pages stack above older ones (a game opened from the Combo Goal builder), but below sheets and dialogs.
     const pages = ui.layer().querySelectorAll('[data-page]');
     ui.layer().insertBefore(el, pages.length ? pages[pages.length - 1].nextSibling : ui.layer().firstChild);
     ui.refreshPage(name);
@@ -187,7 +187,7 @@
   };
   TO.on('toast', (t) => ui.toast(t));
 
-  /** For actions that need a connection (placing bets). False, with a toast, when offline. */
+  /** For actions that need a connection (placing pledges). False, with a toast, when offline. */
   TO.net.guard = () => {
     if (TO.net.online()) return true;
     ui.toast({ kind: 'loss', title: 'No internet connection', msg: 'Betting is paused until you\'re back online.' });

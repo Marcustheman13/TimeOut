@@ -167,7 +167,7 @@
     if (Number.isFinite(direct) && direct !== 0) return direct;
     const awayLine = Number(awayMarketLine);
     if (Number.isFinite(awayLine) && awayLine !== 0) return -awayLine;
-    // ESPN's MLB `details` is the moneyline favorite and price, not a run line.
+    // ESPN's MLB `details` is the outright winner favorite and price, not a run line.
     if (game.sport === 'baseball') return null;
     const detail = String(book.details || '');
     const match = detail.match(/([+-]\s*\d+(?:\.\d+)?)/);
@@ -445,7 +445,7 @@
 
   // ---------- Tomorrow's games (Home's Today / Tomorrow picker) ----------
   // Fetched in the background and refreshed every 10 minutes. Raise UPCOMING_DAYS to offer more days ahead
-  // (ESPN's scoreboard takes one day per request). Odds for a future day load when someone opens that day.
+  // (ESPN's scoreboard takes one day per request). challenge targets for a future day load when someone opens that day.
   const UPCOMING_DAYS = 1;
   const UPCOMING_TTL = 10 * TO.MIN;
   const upcoming = new Map(); // league -> scheduled games after today, up to UPCOMING_DAYS ahead
@@ -501,11 +501,11 @@
     return null;
   }
 
-  // Keep the existing selection, slip and settlement code, but supply ESPN game data and prices.
+  // Keep the existing selection, commitment and settlement code, but supply ESPN game data and prices.
   const simGame = S.game, simBoard = S.board, simOdds = S.odds, simCurrent = S.currentSelection, simGrade = S.grade;
   S.game = (id, now) => byId(id) || simGame(id, now);
   /** options.day: 0 = today (live and today's games), 1 = tomorrow (up to UPCOMING_DAYS).
-   *  options.peek: just look (for counts), don't start loading odds. */
+   *  options.peek: just look (for counts), don't start loading challenge targets. */
   S.board = (now = TO.now(), options = {}) => {
     if (localDayKey(now) !== updatedDayKey || now - updatedAt > 25000) refresh(now);
     refreshUpcoming(now);

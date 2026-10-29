@@ -22,10 +22,10 @@
         <div style="margin-top:auto"></div>
         ${brandIcon(64)}
         <div class="wordmark">TIME<b>OUT</b></div>
-        <div class="tagline">Bet your screen time, not your money.</div>
+        <div class="tagline">Build healthier screen-time habits with sports challenges.</div>
         <div class="welcome-points">
-          <div>${icon('hourglass', 18)}<span>60 betting minutes a day. Win and you get more phone time tomorrow.</span></div>
-          <div>${icon('radio', 18)}<span>Live scores and odds for NFL, NBA, MLB, NHL, college football and soccer.</span></div>
+          <div>${icon('hourglass', 18)}<span>60 pledge minutes a day. Successful challenges add phone time tomorrow.</span></div>
+          <div>${icon('radio', 18)}<span>Live scores and matchup targets for NFL, NBA, MLB, NHL, college football and soccer.</span></div>
           <div>${icon('users', 18)}<span>Compare screen-time records and compete on teams.</span></div>
         </div>
       </div>
@@ -78,7 +78,7 @@
       ${ui.field({ id: 'su-pw', label: 'Password', type: 'password', value: v['su-pw'] || '', err: av.errors.password, hint: 'At least 8 characters', attrs: 'autocomplete="new-password"' })}
       ${ui.field({ id: 'su-pw2', label: 'Confirm password', type: 'password', value: v['su-pw2'] || '', err: av.errors.confirm, attrs: 'autocomplete="new-password"' })}
       <button type="submit" class="btn primary full">Create account</button>
-      <div class="tiny faint" style="text-align:center">${TO.api.configured ? 'Accounts and bets are saved securely with Supabase.' : 'Offline demo: accounts are saved in this browser, not on a server.'}</div>
+      <div class="tiny faint" style="text-align:center">${TO.api.configured ? 'Accounts and pledges are saved securely with Supabase.' : 'Offline demo: accounts are saved in this browser, not on a server.'}</div>
       <div class="small muted" style="text-align:center">Already have an account? <button type="button" class="link-btn" data-act="auth-go" data-s="login">Log in</button></div>
     </form></div>`;
   }
@@ -89,9 +89,9 @@
     let body, next;
     if (step === 1) {
       body = `<h1>Here's the deal, @${esc(TO.account.username)}</h1>
-        <div class="how-card"><span class="n">1</span><div><h3>You get 60 betting minutes a day</h3><p>They reset every night at midnight.</p></div></div>
-        <div class="how-card"><span class="n">2</span><div><h3>You're betting tomorrow's phone time</h3><p>Win and tomorrow's limit goes up. Lose and it goes down.</p></div></div>
-        <div class="how-card"><span class="n">3</span><div><h3>No money, ever</h3><p>Not now, not later. Bet screen time and build a clean streak.</p></div></div>`;
+        <div class="how-card"><span class="n">1</span><div><h3>You get 60 pledge minutes a day</h3><p>They reset every night at midnight.</p></div></div>
+        <div class="how-card"><span class="n">2</span><div><h3>Challenges guide tomorrow's phone time</h3><p>Successful challenges add minutes to tomorrow's allowance.</p></div></div>
+        <div class="how-card"><span class="n">3</span><div><h3>No money, ever</h3><p>Commit screen-time minutes to an outcome and track your streak.</p></div></div>`;
       next = `<button class="btn primary full" data-act="ob-next">Next</button>`;
     } else if (step === 2) {
       const sel = av.sports;
@@ -101,8 +101,8 @@
     } else {
       const pts = av.locks.reduce((s, id) => s + St.LOCKABLE.find((x) => x.id === id).pts, 0);
       const t = St.tierForPoints(pts);
-      body = `<h1>Lock your time-wasters</h1><p class="sub">When today's phone time runs out, these apps lock. Lock more to reach a higher tier with bonus minutes and odds boosts.</p>
-        <div class="card tight spread"><span class="bold">${pts} lock points</span>${ui.tierBadge(t.id)}</div>
+      body = `<h1>Lock your time-wasters</h1><p class="sub">When today's phone time runs out, these apps lock. Lock more to reach a higher tier with bonus minutes and allowance boosts.</p>
+        <div class="card tight margins"><span class="bold">${pts} lock points</span>${ui.tierBadge(t.id)}</div>
         <div class="list">${St.LOCKABLE.filter((x) => x.kind !== 'Website').map((x) => `<button class="list-row" data-act="ob-lock" data-id="${x.id}"><span class="lr-icon" style="background:${x.color}22;color:${x.color}">${icon(x.kind === 'Category' ? 'grid' : 'phone', 17)}</span><span class="lr-main"><div class="lr-title">${esc(x.name)}</div><div class="lr-sub">${x.kind} · ${x.pts} pt${x.pts === 1 ? '' : 's'}</div></span><span class="checkbox ${av.locks.includes(x.id) ? 'on' : ''}">${icon('check', 15)}</span></button>`).join('')}</div>`;
       next = `<button class="btn primary full" data-act="ob-finish">Start betting</button><button class="btn quiet sm" data-act="ob-finish" data-skip="1">Skip for now</button>`;
     }
@@ -337,7 +337,7 @@
     St.grantTierBonus();
     St.save();
     TO.app.boot();
-    ui.toast({ kind: 'win', title: `Welcome to TimeOut, @${TO.account.username}`, msg: `You have ${TO.data.wallet.balance} betting minutes today. Tap any odds to start.` });
+    ui.toast({ kind: 'win', title: `Welcome to TimeOut, @${TO.account.username}`, msg: `You have ${TO.data.wallet.balance} pledge minutes today. Choose a matchup challenge to start.` });
   };
   TO.changes['su-photo'] = async (el) => {
     try {

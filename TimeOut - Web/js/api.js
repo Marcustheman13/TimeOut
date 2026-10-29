@@ -30,17 +30,17 @@
     return /timeout_place_bet_with_perks/i.test(message) && /schema cache|function.*(not found|does not exist|could not find)/i.test(message);
   }
   function isTierPerkLimitError(error) {
-    return /no odds boosts left|no parlay insurance left/i.test(String(error?.message || ''));
+    return /no odds boosts left|no Combo Goal insurance left/i.test(String(error?.message || ''));
   }
   function notifyOutOfBettingMinutes() {
     if (Date.now() - lastOutOfMinutesAlertAt < 15000 || !TO.ui?.toast) return;
     lastOutOfMinutesAlertAt = Date.now();
-    TO.ui.toast({ kind: 'loss', title: 'Out of betting minutes', msg: 'Betting reopens at midnight.' });
+    TO.ui.toast({ kind: 'loss', title: 'Out of pledge minutes', msg: 'Pledges reopen at midnight.' });
   }
   function notifyTierBonusMigrationRequired() {
     if (Date.now() - lastTierBonusMigrationAlertAt < 15000 || !TO.ui?.toast) return;
     lastTierBonusMigrationAlertAt = Date.now();
-    TO.ui.toast({ kind: 'loss', title: 'Tier setup needed in Supabase', msg: 'This parlay was not saved. Run the tier system migration in Supabase SQL Editor, then reload the app.' });
+    TO.ui.toast({ kind: 'loss', title: 'Tier setup needed in Supabase', msg: 'This Combo Goal was not saved. Run the tier system migration in Supabase SQL Editor, then reload the app.' });
   }
   function notifyTierPerkMigrationRequired() {
     if (Date.now() - lastTierPerkMigrationAlertAt < 15000 || !TO.ui?.toast) return;
@@ -301,8 +301,8 @@
         if (!bet.supabaseId && !placing.has(bet.id)) {
           placing.add(bet.id);
           try {
-            const payout = Number(bet.payout) > 0 ? Number(bet.payout) : Math.max(0,
-              Number(bet.stake) + Math.round((Math.round(Number(bet.stake) * Number(bet.decimal)) - Number(bet.stake)) * Number(bet.multiplier || 1)));
+            const payout = Number(bet.payout) > 0 ? Number(bet.payout) : Math.min(TO.MAX_ALLOWED_MINUTES, Math.max(0,
+              Number(bet.stake) + Math.round((Math.round(Number(bet.stake) * Number(bet.decimal)) - Number(bet.stake)) * Number(bet.multiplier || 1))));
             const bonusToday = data.wallet?.bonusDay === (data.wallet?.dayKey || bet.dayKey) ? Number(data.wallet?.bonusGranted || 0) : 0;
             const betArgs = {
               p_stake_minutes: Number(bet.stake), p_combined_odds: Number(bet.decimal), p_potential_payout: payout,

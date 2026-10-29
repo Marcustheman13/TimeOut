@@ -1,4 +1,4 @@
-/* TimeOut web demo — accounts, screen-time wallet, bets, settlement, tiers/streaks and friends.
+/* TimeOut web demo — accounts, screen-time wallet, pledges, settlement, tiers/streaks and friends.
  * All data lives in this browser's localStorage. Passwords are hashed only to keep them out of plain sight;
  * this is a mockup, not real security.
  */
@@ -10,6 +10,8 @@
   const RULES = {
     daily: 60,
     maxLegs: 10,
+    maxMatchupPicks: 4,
+    maxAllowedMinutes: 120,
     overrideMinutes: 15,
     overridePenalty: 30,
     maxOverrides: 2,
@@ -17,6 +19,8 @@
     boostPercent: 0.1,
   };
   TO.RULES = RULES;
+  const MAX_ALLOWED_MINUTES = 120;
+  TO.MAX_ALLOWED_MINUTES = MAX_ALLOWED_MINUTES;
 
   // ---------- Tiers & streaks (carried over from the iOS app) ----------
   const TIERS = [
@@ -30,7 +34,7 @@
     const list = [];
     if (t.bonus) list.push(`+${t.bonus} betting min a day`);
     if (t.boosts) list.push(`${t.boosts} odds boost${t.boosts === 1 ? '' : 's'} a day (+10% winnings)`);
-    if (t.insurance) list.push('Parlay insurance once a week');
+    if (t.insurance) list.push('Combo Goal insurance once a week');
     return list.length ? list : ['Lock apps to earn perks'];
   };
   const tierById = (id) => TIERS.find((t) => t.id === id) || TIERS[0];
@@ -180,7 +184,7 @@
               .map((day) => [day, Math.max(Number(serverCounts[day] || 0), Number(localCounts[day] || 0))]));
           }
           // The server may not have credited today's local tier bonus yet. Keep
-          // that uncredited portion in the visible balance; the bet RPC applies
+          // that uncredited portion in the visible balance; the pledges RPC applies
           // the same amount atomically before it checks the stake.
           const serverDay = serverWallet.dayKey;
           const localBonus = localWallet.bonusDay === serverDay ? Number(localWallet.bonusGranted || 0) : 0;
@@ -312,9 +316,13 @@
     for (const k of Object.keys(f)) if (d[k] === undefined) d[k] = f[k];
     for (const k of Object.keys(f.wallet)) if (d.wallet[k] === undefined) d.wallet[k] = f.wallet[k];
     for (const k of Object.keys(f.settings)) if (d.settings[k] === undefined) d.settings[k] = f.settings[k];
+    // The lock flag is a cached mirror of the balance. Older server/local state can
+    // leave it true after minutes were restored, so derive it from the balance.
+    d.wallet.balance = Math.max(0, Number(d.wallet.balance) || 0);
+    d.wallet.lockedOut = d.wallet.balance <= 0;
     if (!Array.isArray(d.settings.sports) || d.settings.sports.length === 0) d.settings.sports = S.REAL_LEAGUES.slice();
     d.bets = (d.bets || []).filter((bet) => !bet.friend);
-    // Server wallets don't store the daily bet-result ledger. Rebuild it from settled bets
+    // Server wallets don't store the daily pledges-result ledger. Rebuild it from settled pledges
     // so previous-day results continue to determine today's screen-time balance after sync.
     const settledNetByDay = {};
     for (const bet of d.bets || []) {
@@ -347,7 +355,7 @@
   }
   const tier = (d = TO.data) => tierForPoints(lockPoints(d));
 
-  /** Phone screen time allowed on a day: 60 + the day before's bet results − emergency penalties (never below the user's floor). */
+  /** Phone screen time allowed on a day: 60 + the day before's pledges results − emergency penalties (never below the user's floor). */
   function baseLimitFor(day, d = TO.data) {
     const w = d.wallet;
     const net = w.netByDay[TO.addDays(day, -1)] || 0;
@@ -359,12 +367,13 @@
 
   function wallet() {
     const w = W(), day = today(), tomorrow = TO.addDays(day, 1);
+    const balance = Math.max(0, Number(w.balance) || 0);
     const used = w.usageByDay[day] || 0;
     const todayLimit = limitFor(day);
     const open = TO.data.bets.filter((b) => b.status === 'open');
     const t = tier();
     return {
-      day, balance: w.balance, lockedOut: w.lockedOut,
+      day, balance, lockedOut: balance <= 0,
       todayLimit, tomorrowLimit: baseLimitFor(tomorrow),
       yesterdayNet: w.netByDay[TO.addDays(day, -1)] || 0,
       todayNet: w.netByDay[day] || 0,
@@ -471,7 +480,7 @@
     save();
   }
 
-  // ---------- Bets ----------
+  // ---------- pledges ----------
   function legFromSelection(sel, now) {
     if (sel.kind === 'pred' || sel.market === 'pred') {
       const p = S.prediction(sel.predId, now);
@@ -495,12 +504,12 @@
     return { decimal: dec, american: TO.odds.fromDecimal(dec) };
   };
 
-  /** Places a bet from bet-slip picks. Each pick carries the price the user accepted. */
-  function placeBet({ picks, stake, boost, insure }, now = TO.now()) {
+  /** Saves a daily commitment from selected matchup choices. */
+  function submitPledge({ picks, stake, boost, insure }, now = TO.now()) {
     rollover(now);
     const w = W();
-    if (!picks.length) throw new AppError('empty', 'Add a pick to your bet slip.');
-    if (picks.length > RULES.maxLegs) throw new AppError('too_many', `Parlays can have up to ${RULES.maxLegs} picks.`);
+    if (!picks.length) throw new AppError('empty', 'Add a pick to your bet commitment.');
+    if (picks.length > RULES.maxMatchupPicks) throw new AppError('too_many', `Combo Goals can include up to ${RULES.maxMatchupPicks} matchup choices.`);
     // Every pick must still be open and at the price the user saw.
     const changed = [];
     const legs = picks.map((p) => {
@@ -509,21 +518,23 @@
       if (cur.sel.price !== p.price || cur.sel.line !== p.line) changed.push(p.selId);
       return legFromSelection(cur.sel, now);
     });
+    const matchupIds = legs.map((leg) => leg.gameId).filter(Boolean);
+    if (new Set(matchupIds).size !== matchupIds.length) throw new AppError('duplicate_matchup', 'Choose only one target from each matchup.');
     if (changed.length) throw new AppError('odds_changed', 'The odds changed. Review the new odds and confirm again.', { changed });
     if (legs.some((leg) => leg.kind === 'race') && legs.length !== 1) {
       throw new AppError('race_single', 'Virtual race picks can only be placed as a single bet.');
     }
 
-    if (w.lockedOut || w.balance <= 0) throw new AppError('locked', 'You\'re out of betting minutes for today. Betting reopens at midnight.');
+    if (w.lockedOut || w.balance <= 0) throw new AppError('locked', 'You\'re out of pledge minutes for today. Pledges reopen at midnight.');
     if (!Number.isInteger(stake) || stake < 1) throw new AppError('stake', 'Enter a stake of at least 1 minute.');
     if (stake > w.balance) throw new AppError('not_enough', `Not enough screentime. You have ${w.balance} min left to bet today.`, { remaining: w.balance });
 
     const wl = wallet();
     const { decimal, american } = combine(legs);
     const bet = {
-      id: TO.uid('bet'), kind: legs[0].kind === 'race' ? 'race' : 'sports', placedAt: now, dayKey: w.dayKey,
+      id: TO.uid('pledge'), kind: legs[0].kind === 'race' ? 'race' : 'sports', placedAt: now, dayKey: w.dayKey,
       stake, legs, decimal, american,
-      boosted: false, insured: false, multiplier: 1, status: 'open', payout: 0, settledAt: null,
+      boosted: false, insured: false, multiplier: 1, targetMultiplier: +decimal.toFixed(2), maxAllowedMinutes: MAX_ALLOWED_MINUTES, status: 'open', payout: 0, settledAt: null,
     };
     let mult = wl.multiplier;
     if (boost && wl.boostsLeft > 0) {
@@ -546,7 +557,7 @@
     return bet;
   }
 
-  /** To-do parlay (Could-have): stake minutes on finishing up to 3 tasks before midnight. */
+  /** To-do Combo Goal (Could-have): stake minutes on finishing up to 3 tasks before midnight. */
   const TODO_ODDS = { easy: 50, medium: 100, hard: 200 };
   function placeTodoParlay({ tasks, stake }, now = TO.now()) {
     rollover(now);
@@ -554,14 +565,14 @@
     const clean = tasks.map((t) => ({ text: String(t.text || '').trim(), difficulty: t.difficulty })).filter((t) => t.text);
     if (!clean.length) throw new AppError('empty', 'Add at least one task.');
     if (clean.length > RULES.maxLegs) throw new AppError('too_many', `To-do parlays can have up to ${RULES.maxLegs} tasks.`);
-    if (w.lockedOut || w.balance <= 0) throw new AppError('locked', 'You\'re out of betting minutes for today. Betting reopens at midnight.');
+    if (w.lockedOut || w.balance <= 0) throw new AppError('locked', 'You\'re out of pledge minutes for today. Pledges reopen at midnight.');
     if (!Number.isInteger(stake) || stake < 1) throw new AppError('stake', 'Enter a stake of at least 1 minute.');
     if (stake > RULES.todoMaxStake) throw new AppError('stake', `To-do parlays are capped at ${RULES.todoMaxStake} minutes.`);
     if (stake > w.balance) throw new AppError('not_enough', `Not enough screentime. You have ${w.balance} min left to bet today.`, { remaining: w.balance });
     const legs = clean.map((t, i) => ({ selId: `todo-${i}`, kind: 'todo', market: 'todo', text: t.text, difficulty: t.difficulty, price: TODO_ODDS[t.difficulty] || 100,
       label: t.text, marketLabel: `To-do · ${t.difficulty}`, matchup: 'Finish before midnight', result: 'pending', final: null }));
     const { decimal, american } = combine(legs);
-    const bet = { id: TO.uid('bet'), kind: 'todo', placedAt: now, dayKey: w.dayKey, deadline: TO.nextMidnight(now), stake, legs, decimal, american,
+    const bet = { id: TO.uid('pledge'), kind: 'todo', placedAt: now, dayKey: w.dayKey, deadline: TO.nextMidnight(now), stake, legs, decimal, american,
       boosted: false, insured: false, multiplier: wallet().multiplier, status: 'open', payout: 0, settledAt: null };
     w.balance -= stake;
     if (w.balance <= 0) { w.balance = 0; w.lockedOut = true; }
@@ -602,9 +613,10 @@
     if (pending) return { status: 'open' };
     const won = legs.filter((l) => l.result === 'won');
     if (!won.length) return { status: legs.every((l) => l.result === 'void') ? 'void' : 'push', payout: bet.stake };
-    const dec = won.reduce((p, l) => p * TO.odds.decimal(l.price), 1);
+    const dec = won.reduce((p, l) => p * TO.convertOddsToMultiplier(l.price), 1);
     let payout = Math.round(bet.stake * dec);
     payout = bet.stake + Math.round((payout - bet.stake) * (bet.multiplier || 1));
+    payout = Math.min(payout, bet.maxAllowedMinutes || MAX_ALLOWED_MINUTES);
     return { status: 'won', payout };
   }
 
@@ -622,7 +634,7 @@
     return bet;
   }
 
-  /** Grades every open bet against the latest scores. Runs on every tick, so bets settle seconds after a game ends. */
+  /** Grades every open pledges against the latest scores. Runs on every tick, so pledges settle seconds after a game ends. */
   function settle(now = TO.now()) {
     const settled = [];
     for (const bet of TO.data.bets) {
@@ -660,7 +672,7 @@
     const net = settled.reduce((s, b) => s + (b.payout - b.stake), 0);
     const bySport = {};
     for (const b of settled) {
-      const key = b.kind === 'todo' ? 'todo' : b.kind === 'race' ? 'race' : b.legs.length > 1 ? 'parlay' : b.legs[0].league;
+      const key = b.kind === 'todo' ? 'todo' : b.kind === 'race' ? 'race' : b.legs.length > 1 ? 'combo-goal' : b.legs[0].league;
       bySport[key] = bySport[key] || { w: 0, l: 0, net: 0 };
       if (b.status === 'won') bySport[key].w++;
       if (b.status === 'lost') bySport[key].l++;
@@ -691,7 +703,7 @@
   /** Open picks a friend has shared (fake friends pick from the live board). */
   function sharedPicks(p, now = TO.now()) {
     if (!p || !p.share.bets) return [];
-    if (p.local) return (p.openBets || []).slice(0, 3).map((b) => ({ label: b.legs.map((l) => l.label).join(' + '), matchup: b.legs.length > 1 ? `${b.legs.length}-pick parlay` : b.legs[0].matchup, price: b.american, stake: b.stake }));
+    if (p.local) return (p.openBets || []).slice(0, 3).map((b) => ({ label: b.legs.map((l) => l.label).join(' + '), matchup: b.legs.length > 1 ? `${b.legs.length}-pick Combo Goal` : b.legs[0].matchup, price: b.american, stake: b.stake }));
     const games = S.board(now).filter((g) => (g.state === 'live' || g.state === 'scheduled') && !g.simulated);
     const rand = TO.rng(`${p.username}-${Math.floor(now / S.SLOT)}`);
     const picks = [];
@@ -1121,7 +1133,7 @@
     d.requestsOut = [{ id: TO.uid('fr'), to: 'sam_the_fan', at: now - 3 * HOUR }, { id: TO.uid('fr'), to: 'ava.r', at: now - 25 * MIN }];
     d.teams = [{ id: 'team_sunday', name: 'Sunday Squad', start: TO.addDays(day, -3), end: TO.addDays(day, 4), members: ['demo', 'mike_t', 'jess.plays', 'lily_k'], owner: 'mike_t', createdAt: now - 3 * DAY }];
 
-    // Bet history from real (simulated) past games, graded with the same rules as live bets.
+    // pledges history from real (simulated) past games, graded with the same rules as live pledges.
     const rand = TO.rng('demo-history');
     const leagues = S.REAL_LEAGUES;
     const w = d.wallet;
@@ -1151,7 +1163,7 @@
         if (!legs.length) continue;
         const stake = 5 + Math.floor(rand() * 3) * 5;
         const { decimal, american } = combine(legs);
-        const bet = { id: TO.uid('bet'), kind: 'sports', placedAt, dayKey: dk, stake, legs, decimal, american,
+        const bet = { id: TO.uid('pledge'), kind: 'sports', placedAt, dayKey: dk, stake, legs, decimal, american,
           boosted: false, insured: false, multiplier: 1, status: 'open', payout: 0, settledAt: null };
         const res = outcome(bet);
         bet.status = res.status; bet.payout = res.payout; bet.settledAt = Math.max(...legs.map((l) => (S.game(l.gameId, now) || {}).end || placedAt));
@@ -1162,7 +1174,7 @@
     w.streakDays = 4;
     w.usageByDay[day] = 22;
 
-    // Open bets on today's board.
+    // Open pledges on today's board.
     TO.data = d; // temporarily so wallet helpers work
     grantTierBonus();
     const board = S.board(now).filter((g) => !g.simulated);
@@ -1186,7 +1198,7 @@
 
   function pushOpen(d, legs, stake, placedAt) {
     const { decimal, american } = combine(legs);
-    d.bets.push({ id: TO.uid('bet'), kind: 'sports', placedAt, dayKey: d.wallet.dayKey, stake, legs, decimal, american,
+    d.bets.push({ id: TO.uid('pledge'), kind: 'sports', placedAt, dayKey: d.wallet.dayKey, stake, legs, decimal, american,
       boosted: false, insured: false, multiplier: streakMultiplier(d.wallet.streakDays), status: 'open', payout: 0, settledAt: null });
     d.wallet.balance -= stake;
   }
@@ -1230,7 +1242,7 @@
     accounts, findAccount, createAccount, login, logout, loadSession, startSession, updateAccount, deleteAccount, adoptServerUser,
     validateUsername, validateEmail, validatePassword,
     save, wallet, rollover, grantTierBonus, addUsage, checkPhoneTime, useEmergencyUnlock, setSetting, limitFor, baseLimitFor, lockPoints, tier,
-    placeBet, placeTodoParlay, completeTodo, settle, outcome, combine, legFromSelection,
+    submitPledge, placeTodoParlay, completeTodo, settle, outcome, combine, legFromSelection,
     myStats, statsFor, person, sharedPicks, searchPeople, relation,
     sendFriendRequest, addFriend, acceptFriendRequest, declineFriendRequest, cancelFriendRequest, resendFriendRequest, resendWait, removeFriend,
     socialTick,

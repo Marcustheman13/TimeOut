@@ -6,6 +6,7 @@
   const ui = TO.ui;
 
   let currentId = null;
+  const activeMarket = new Map();
 
   function scoreboard(g) {
     const live = g.state === 'live', fin = g.state === 'final';
@@ -22,43 +23,42 @@
     }
     const team = (t) => `<div class="sb-team">${ui.teamBadge(t, 52)}<div class="nm">${esc(!t.city || t.city === t.name ? t.name : `${t.city} ${t.name}`)}</div>${t.rank ? `<div class="rec">#${t.rank}</div>` : ''}</div>`;
     return `<div class="card scoreboard">
-      <div class="spread tiny bold faint" style="margin-bottom:12px"><span>${esc(S.LEAGUES[g.league].title)}${g.simulated ? ' · Simulated' : ''}</span><span>Away @ Home</span></div>
+      <div class="row-layout tiny bold faint" style="margin-bottom:12px"><span>${esc(S.LEAGUES[g.league].title)}${g.simulated ? ' · Simulated' : ''}</span><span>Away @ Home</span></div>
       <div class="sb-grid">${team(g.away)}<div class="sb-mid">${mid}</div>${team(g.home)}</div>
     </div>`;
   }
 
   function banner(g, o) {
-    if (g.state === 'postponed') return `<div class="note warn">${icon('alert', 16)}<span><b>This game was postponed.</b> All bets on it are void, and every stake has been returned in full. It no longer counts toward anyone's record.</span></div>`;
-    if (g.state === 'canceled') return `<div class="note warn">${icon('alert', 16)}<span>This game was canceled. Bets on it will be voided.</span></div>`;
-    if (g.state === 'final') return `<div class="note">${icon('lock', 16)}<span><b>Final: ${esc(g.away.abbr)} ${g.awayScore}, ${esc(g.home.abbr)} ${g.homeScore}${g.ot ? ` (${g.ot.label === '10' ? '10 innings' : 'OT'})` : ''}.</b> Betting is closed on this game.</span></div>`;
-    if (o.suspended) return `<div class="note">${icon('lock', 16)}<span>Betting is closed for the final moments of this game.</span></div>`;
+    if (g.state === 'postponed') return `<div class="note warn">${icon('alert', 16)}<span><b>This game was postponed.</b> Related pledges will be returned in full and won't affect your record.</span></div>`;
+    if (g.state === 'canceled') return `<div class="note warn">${icon('alert', 16)}<span>This game was canceled. Related pledges will be returned.</span></div>`;
+    if (g.state === 'final') return `<div class="note">${icon('lock', 16)}<span><b>Final: ${esc(g.away.abbr)} ${g.awayScore}, ${esc(g.home.abbr)} ${g.homeScore}${g.ot ? ` (${g.ot.label === '10' ? '10 innings' : 'OT'})` : ''}.</b> Challenges are closed on this game.</span></div>`;
+    if (o.suspended) return `<div class="note">${icon('lock', 16)}<span>Challenges are closed for the final moments of this game.</span></div>`;
     return '';
   }
 
   function myBets(g) {
     const bets = TO.data.bets.filter((b) => b.legs.some((l) => l.gameId === g.id)).sort((a, b) => (a.status === 'open' ? -1 : 1) - (b.status === 'open' ? -1 : 1));
     if (!bets.length) return '';
-    return `<div class="stack-s"><div class="eyebrow">Your bets on this game</div>${bets.map((b) => TO.views.bets.betCard(b, { compact: true })).join('')}</div>`;
+    return `<div class="stack-s"><div class="eyebrow">Your pledges on this game</div>${bets.map((b) => TO.views.bets.betCard(b, { compact: true })).join('')}</div>`;
   }
 
   function markets(g, o) {
     if (g.state !== 'live' && g.state !== 'scheduled') return '';
-    const Sp = S.SPORTS[g.sport];
-    const name = (side) => (side === 'home' ? g.home.name : side === 'away' ? g.away.name : 'Draw');
-    const block = (title, sels, labelFn) => `<div class="market"><h4>${esc(title)}</h4><div class="opts">${sels.map((s) => ui.oddsBtn(s, { suspended: o.suspended, move: o.move[s.id], big: true, label: labelFn(s) })).join('')}</div></div>`;
-    const moneyline = o.moneyline.length
-      ? `${block('Moneyline · who wins', o.moneyline, (s) => name(s.side))}${g.sport === 'soccer' && !o.moneyline.some((s) => s.side === 'draw') ? '<div class="market"><h4>Draw</h4><div class="opts"><span class="tag">N/A</span></div></div>' : ''}`
-      : '<div class="market"><h4>Moneyline · who wins</h4><div class="opts"><span class="tag">Moneyline N/A</span></div></div>';
-    const available = [
-      moneyline,
-      o.spread.length ? block(`${Sp.spreadLabel} · win by more than the line`, o.spread, (s) => name(s.side)) : '',
-      o.total.length ? block(`Total ${Sp.unit} · both teams combined`, o.total, (s) => (s.side === 'over' ? 'Over' : 'Under')) : '',
-    ].filter(Boolean);
-    if (!available.length) return `<div class="card small muted">ESPN betting lines are not available for this game yet.</div>`;
+    const tabs = [['ml','Match Winner',o.moneyline],['spread','Margin',o.spread],['total','Total Points',o.total]].filter(([, , sels]) => sels.filter((s) => s.side !== 'draw').length >= 2);
+    const current = tabs.find(([key]) => key === activeMarket.get(g.id)) || tabs[0];
+    if (!current) return `<div class="card small muted">Challenge targets are not available for this game yet.</div>`;
+    const choices = current[2].filter((s) => s.side !== 'draw').slice(0, 2);
+    const label = (s) => {
+      const team = s.side === 'away' ? g.away.name : g.home.name;
+      if (s.market === 'ml') return `${team} · Outright Winner`;
+      if (s.market === 'spread') return s.line < 0 ? `${team} to win by ${Math.ceil(Math.abs(s.line))}+` : `${team} to stay within ${Math.floor(s.line)}`;
+      return `${s.side === 'over' ? 'Total Score Over' : 'Total Score Under'} ${s.line}`;
+    };
     return `<div class="card stack" id="game-markets">
-      <div class="spread"><h2 style="margin:0;font-size:17px">Pick a side</h2><span class="tiny faint bold">ESPN odds refresh every 25 seconds</span></div>
-      ${available.join('')}
-      <div class="tiny faint">ESPN lines and prices. Tap a price to add it to your bet slip.</div>
+      <div class="row-layout"><h2 style="margin:0;font-size:17px">Matchup Challenge</h2><span class="tiny faint bold">Targets refresh every 25 seconds</span></div>
+      <div class="challenge-tabs" role="tablist" aria-label="Challenge type">${tabs.map(([key,title]) => `<button role="tab" aria-selected="${current[0] === key}" class="${current[0] === key ? 'on' : ''}" data-act="game-challenge-tab" data-game="${esc(g.id)}" data-market="${key}">${title}</button>`).join('')}</div>
+      <div class="challenge-choices">${choices.map((s) => ui.challengeChoiceButton(s, { suspended: o.suspended, big: true, label: label(s) })).join('')}</div>
+      <div class="tiny faint">Choose an option to add it to your Daily Commitment.</div>
     </div>`;
   }
 
@@ -67,7 +67,7 @@
     const rows = TO.live.stats(g);
     if (!rows.length) return `<div class="card small muted">ESPN live stats are not available for this game yet.</div>`;
     return `<div class="card stack">
-      <div class="spread"><h2 style="margin:0;font-size:17px">${g.state === 'live' ? 'Live stats' : 'Final stats'}</h2><span class="row-s tiny bold faint">${ui.teamBadge(g.away, 18)} vs ${ui.teamBadge(g.home, 18)}</span></div>
+      <div class="row-layout"><h2 style="margin:0;font-size:17px">${g.state === 'live' ? 'Live stats' : 'Final stats'}</h2><span class="row-s tiny bold faint">${ui.teamBadge(g.away, 18)} vs ${ui.teamBadge(g.home, 18)}</span></div>
       ${rows.map((r) => {
         return `<div class="cmp-row"><span class="v">${esc(r.awayValue)}</span><div class="mid"><span class="lab">${esc(r.label)}</span></div><span class="v r">${esc(r.homeValue)}</span></div>`;
       }).join('')}
@@ -77,15 +77,15 @@
   function researchCard(g) {
     const teams = g.eventID ? [g.away, g.home].filter((team) => team.rank || team.record) : [];
     if (!teams.length) return '';
-    return `<div class="card stack"><h2 style="margin:0;font-size:17px">ESPN team information</h2>${teams.map((team) => `<div class="spread"><span class="row-s bold">${ui.teamBadge(team, 22)}${esc(team.name)}</span><span class="small muted">${[team.rank ? `#${team.rank}` : '', team.record || ''].filter(Boolean).map(esc).join(' · ')}</span></div>`).join('')}</div>`;
+    return `<div class="card stack"><h2 style="margin:0;font-size:17px">ESPN team information</h2>${teams.map((team) => `<div class="row-layout"><span class="row-s bold">${ui.teamBadge(team, 22)}${esc(team.name)}</span><span class="small muted">${[team.rank ? `#${team.rank}` : '', team.record || ''].filter(Boolean).map(esc).join(' · ')}</span></div>`).join('')}</div>`;
   }
 
-  /** Floating button: jumps to the odds, or back to the slip once there's a pick on it. */
+  /** Floating button: jumps to the challenge targets, or back to the commitment once there's a pick on it. */
   function fab(g, o) {
     if (g.state !== 'live' && g.state !== 'scheduled') return '';
-    const n = TO.slip.legs.length;
-    if (n) return `<div class="page-fab game-fab has-slip"><button class="btn primary full" data-act="open-slip">${icon('ticket', 18)} Open bet slip · ${n} pick${n === 1 ? '' : 's'}</button></div>`;
-    return `<div class="page-fab game-fab"><button class="btn primary full" data-act="game-bet" ${o.suspended ? 'disabled' : ''}>${icon(o.suspended ? 'lock' : 'ticket', 18)} ${o.suspended ? 'Betting is closed on this game' : 'Make a bet'}</button></div>`;
+    const n = TO.comboGoalBuilder.selectedPicks.length;
+    if (n) return `<div class="page-fab game-fab has-commitment"><button class="btn primary full" data-act="open-commitment">${icon('target', 18)} Open Daily Commitment · ${n} choice${n === 1 ? '' : 's'}</button></div>`;
+    return `<div class="page-fab game-fab"><button class="btn primary full" data-act="game-challenge" ${o.suspended ? 'disabled' : ''}>${icon(o.suspended ? 'lock' : 'target', 18)} ${o.suspended ? 'Challenges are closed' : 'Choose a challenge'}</button></div>`;
   }
 
   function render() {
@@ -107,13 +107,14 @@
 
   TO.views.game = { open, refresh: () => ui.refreshPage('game') };
   TO.actions['open-game'] = (el) => open(el.dataset.id);
-  TO.actions['game-bet'] = () => {
+  TO.actions['game-challenge-tab'] = (el) => { activeMarket.set(el.dataset.game, el.dataset.market); ui.refreshPage('game'); };
+  TO.actions['game-challenge'] = () => {
     const m = document.getElementById('game-markets');
     if (!m) return;
     m.scrollIntoView({ behavior: 'smooth', block: 'start' });
     m.classList.remove('flash');
     void m.offsetWidth; // restart the highlight
     m.classList.add('flash');
-    ui.toast({ kind: 'info', title: 'Pick a price', msg: 'Tap any odds and your bet slip opens with it.', ms: 2600 });
+    ui.toast({ kind: 'info', title: 'Choose a challenge', msg: 'Select an option to add it to your Daily Commitment.', ms: 2600 });
   };
 })(window.TO);

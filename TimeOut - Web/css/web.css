@@ -1,6 +1,6 @@
 /* TimeOut in the browser, from phone to desktop widths. Loaded after app.css by index.html.
    Shared components are laid out for a wide screen: sidebar navigation on the left, content in a
-   centered grid, and the bet slip docked on the right. */
+   centered grid, and the pledges commitment docked on the right. */
 .web {
   --side-w: 256px;
   --rail-w: 380px;
@@ -17,7 +17,7 @@
 .web :is(.view, .page-scroll, .sheet-body)::-webkit-scrollbar { display: block; width: 10px; }
 .web :is(.view, .page-scroll, .sheet-body)::-webkit-scrollbar-thumb { background: #2a3342; border-radius: 5px; border: 3px solid var(--bg); }
 
-/* ---------- Shell: sidebar | main | bet slip ---------- */
+/* ---------- Shell: sidebar | main | pledges commitment ---------- */
 .web .app {
   display: grid;
   grid-template-columns: var(--side-w) minmax(0, 1fr) var(--rail-w);
@@ -25,7 +25,7 @@
 }
 .web .main { position: relative; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 /* The content area and pages are size containers: their layouts below react to the room they actually have
-   (window minus sidebar and slip), not to the window width. */
+   (window minus sidebar and commitment), not to the window width. */
 .web .main, .web .page { container: area / inline-size; }
 
 .side {
@@ -99,7 +99,7 @@ button.wt-stat:hover { border-color: #3a4558; }
 @container area (max-width: 700px) { .wt-stat.opt { display: none; } }
 .web .bal-pill:hover { filter: brightness(1.07); }
 
-/* Right rail: shown under the docked slip when the slip is empty. */
+/* Right rail: shown under the docked commitment when the commitment is empty. */
 .rail { display: flex; flex-direction: column; min-height: 0; overflow-y: auto; background: var(--panel); border-left: 1px solid var(--stroke); }
 .rail-head { flex: none; height: var(--bar-h); display: flex; align-items: center; padding: 0 22px; border-bottom: 1px solid var(--stroke); }
 .rail-head h2 { margin: 0; font-family: var(--font-display); font-weight: 900; font-size: 26px; }
@@ -135,7 +135,7 @@ button.wt-stat:hover { border-color: #3a4558; }
 .web .view .pad > .seg { max-width: 460px; }
 .web .card { border-radius: 18px; }
 .web .card.tappable:hover, .web button.card:hover { border-color: #3a4558; }
-.web .odds-btn:hover:not(:disabled):not(.on) { background: var(--raised-2); }
+.web .challenge-btn:hover:not(:disabled):not(.on) { background: var(--raised-2); }
 .web .page-head { padding: 0 0 22px; }
 .web .page-head h1 { font-size: 46px; }
 .web .page-head p { font-size: 15px; max-width: 60ch; margin-top: 8px; }
@@ -173,9 +173,9 @@ button.wt-stat:hover { border-color: #3a4558; }
 .web .wallet.locked .bigcd { font-size: 60px; }
 .web .status-strip { padding: 12px 16px; gap: 10px 18px; flex-wrap: wrap; }
 .web .status-strip .sp { font-size: 13.5px; }
-.web .open-bets .mini-bets { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); gap: 12px; padding: 0; }
-.web .mini-bet { width: auto; min-height: 104px; padding: 14px; }
-.web .mini-bet:nth-child(n+5) { display: none; }
+.web .open-challenges .mini-challenges { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); gap: 12px; padding: 0; }
+.web .mini-challenge { width: auto; min-height: 104px; padding: 14px; }
+.web .mini-challenge:nth-child(n+5) { display: none; }
 
 .web .feed {
   display: grid;
@@ -183,8 +183,8 @@ button.wt-stat:hover { border-color: #3a4558; }
   gap: 16px;
   align-items: start;
 }
-.web .feed > :is(.filterbar, .league-head, .empty, .pad, .section-title, .promo, .note, .build-parlay) { grid-column: 1 / -1; }
-.web .view .build-parlay { width: 100%; margin-inline: 0; }
+.web .feed > :is(.filterbar, .league-head, .empty, .pad, .section-title, .promo, .note, .build-combo-goal) { grid-column: 1 / -1; }
+.web .view .build-combo-goal { width: 100%; margin-inline: 0; }
 .web .view .simulated-note { margin-inline: 0; }
 .web .view :is(.cfb-select-label, .cfb-select) { margin-inline: 0; }
 .web .view .cfb-select { width: 100%; max-width: 460px; }
@@ -194,35 +194,35 @@ button.wt-stat:hover { border-color: #3a4558; }
 .web .feed > .league-head .cnt { font-size: 13px; }
 .web .game-card { padding: 14px 14px 14px 16px; container-type: inline-size; }
 .web .gc-grid { gap: 6px; }
-/* Wider odds buttons once the card has room for them */
+/* Wider challenge targets buttons once the card has room for them */
 @container (min-width: 440px) {
   .web .gc-grid { grid-template-columns: minmax(0, 1fr) repeat(3, 80px); gap: 6px 8px; }
   .web .gc-grid.two { grid-template-columns: minmax(0, 1fr) repeat(2, 92px); }
 }
 .web .gc-team .nm { font-size: 15px; }
-.web .odds-btn { height: 48px; }
+.web .challenge-btn { height: 48px; }
 .web .pred-card .q { font-size: 16.5px; }
 
-/* My Bets: record on top, bets in a two-column grid */
-.web .view[data-tab="bets"] > .stack {
+/* My pledges: record on top, pledges in a two-column grid */
+.web .view[data-tab="challenges"] > .stack {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr));
   align-items: start;
   gap: 16px;
 }
-.web .view[data-tab="bets"] > .stack > :not(.bet-card) { grid-column: 1 / -1; }
+.web .view[data-tab="challenges"] > .stack > :not(.pledge-card) { grid-column: 1 / -1; }
 .web .record-card { padding: 20px 22px; }
 @container area (min-width: 760px) {
   .web .record-card { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px 36px; align-items: center; padding: 20px 24px; }
-  .web .record-card > .spread { grid-column: 1 / -1; }
+  .web .record-card > .row-layout { grid-column: 1 / -1; }
   .web .record-card:not(:has(.sport-bars)) > .record-big { grid-column: 1 / -1; }
 }
 .web .record-big b { font-size: clamp(22px, 5cqi, 32px); white-space: nowrap; }
 
-/* Parlay builder: games in the same grid as Home */
-.web .parlay-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr)); gap: 16px; align-items: start; }
-.web .parlay-list > :is(.league-head, .empty) { grid-column: 1 / -1; }
-.web .parlay-list > .league-head h3 { font-family: var(--font-display); font-weight: 800; font-size: 24px; }
+/* Combo Goal builder: games in the same grid as Home */
+.web .combo-goal-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr)); gap: 16px; align-items: start; }
+.web .combo-goal-list > :is(.league-head, .empty) { grid-column: 1 / -1; }
+.web .combo-goal-list > .league-head h3 { font-family: var(--font-display); font-weight: 800; font-size: 24px; }
 .web .page-fab { max-width: 520px; width: 100%; justify-self: center; margin-inline: auto; }
 
 /* Social: profile and search on the left, friends / requests / teams on the right */
@@ -279,11 +279,11 @@ button.wt-stat:hover { border-color: #3a4558; }
 .web .sheet-foot { padding: 14px 24px 20px; border-radius: 0 0 24px 24px; }
 .web .dialog { max-width: 400px; padding: 24px; }
 
-/* Docked bet slip */
+/* Docked pledges commitment */
 @media (min-width: 900px) {
-  .web .sheet-wrap[data-sheet="slip"] { left: auto !important; width: var(--rail-w); }
-  .web .sheet-wrap[data-sheet="slip"] .scrim { display: none; }
-  .web .sheet-wrap[data-sheet="slip"] .sheet {
+  .web .sheet-wrap[data-sheet="commitment"] { left: auto !important; width: var(--rail-w); }
+  .web .sheet-wrap[data-sheet="commitment"] .scrim { display: none; }
+  .web .sheet-wrap[data-sheet="commitment"] .sheet {
     inset: 0; translate: none;
     width: auto; height: auto; max-height: none;
     border: 0; border-left: 1px solid var(--stroke); border-radius: 0;
@@ -291,10 +291,10 @@ button.wt-stat:hover { border-color: #3a4558; }
     box-shadow: none;
     animation: fade 0.18s ease;
   }
-  .web .sheet-wrap[data-sheet="slip"] .sheet-head { height: var(--bar-h); flex: none; padding: 0 22px; margin-bottom: 18px; border-bottom: 1px solid var(--stroke); }
-  .web .game-fab.has-slip, .web .parlay-fab { display: none; } /* the docked slip is already on screen */
-  .web .sheet-wrap[data-sheet="slip"] .sheet-body { padding: 0 20px 20px; }
-  .web .sheet-wrap[data-sheet="slip"] .sheet-foot { padding: 14px 20px 20px; border-radius: 0; background: var(--panel); }
+  .web .sheet-wrap[data-sheet="commitment"] .sheet-head { height: var(--bar-h); flex: none; padding: 0 22px; margin-bottom: 18px; border-bottom: 1px solid var(--stroke); }
+  .web .game-fab.has-commitment, .web .combo-goal-fab { display: none; } /* the docked commitment is already on screen */
+  .web .sheet-wrap[data-sheet="commitment"] .sheet-body { padding: 0 20px 20px; }
+  .web .sheet-wrap[data-sheet="commitment"] .sheet-foot { padding: 14px 20px 20px; border-radius: 0; background: var(--panel); }
 }
 
 /* Offline banner across the top of the content area */
@@ -305,8 +305,8 @@ button.wt-stat:hover { border-color: #3a4558; }
 .web .toasts { top: calc(var(--bar-h) + 12px); left: var(--side-w); right: var(--rail-w); align-items: center; }
 .web .toast { width: min(440px, calc(100% - 32px)); }
 
-/* Shown only when the slip can't dock (narrow windows) */
-.web .slipbar { left: 50%; right: auto; translate: -50% 0; width: min(440px, calc(100% - 32px)); bottom: 24px; }
+/* Shown only when the commitment can't dock (narrow windows) */
+.web .commitment-bar { left: 50%; right: auto; translate: -50% 0; width: min(440px, calc(100% - 32px)); bottom: 24px; }
 
 /* ---------- Welcome, log in, sign up, onboarding ---------- */
 .web .auth {
@@ -365,7 +365,7 @@ button.wt-stat:hover { border-color: #3a4558; }
   .side-user { justify-content: center; padding: 8px 0; }
   .side-foot { padding: 10px; }
 }
-/* No room to dock the slip: it opens as a dialog from the floating slip bar */
+/* No room to dock the commitment: it opens as a dialog from the floating commitment bar */
 @media (max-width: 899px) {
   .web .app { grid-template-columns: var(--side-w) minmax(0, 1fr); }
   .rail { display: none; }

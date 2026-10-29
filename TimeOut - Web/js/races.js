@@ -49,7 +49,7 @@
     for (const h of horses) { roll -= implied(h.americanOdds); if (roll <= 0) return h.id; }
     return horses[0].id;
   }
-  function beginRace(race, seed, now = TO.now(), betId = null) {
+  function beginRace(race, seed, now = TO.now(), pledgeId = null) {
     const winnerId = weightedWinner(`${race.number}-${seed}-${now}`);
     const rest = horses.filter((h) => h.id !== winnerId).sort((a, b) => {
       const ra = TO.u01(`${seed}-${a.id}`) * a.speed;
@@ -61,14 +61,14 @@
     race.finishAt = now + 12000;
     race.winnerId = winnerId;
     race.order = [winnerId, ...rest.map((h) => h.id)];
-    race.betId = betId;
+    race.pledgeId = pledgeId;
     persist();
   }
-  function startForBet(bet, now = TO.now()) {
+  function startForBet(pledge, now = TO.now()) {
     const race = current();
-    const leg = bet.legs[0];
-    if (race.status !== 'open' || leg.raceId !== `race-${race.number}`) throw new TO.AppError('closed', 'That race is no longer taking bets.');
-    beginRace(race, bet.id, now, bet.id);
+    const leg = pledge.legs[0];
+      if (race.status !== 'open' || leg.raceId !== `race-${race.number}`) throw new TO.AppError('closed', 'That race challenge is closed.');
+    beginRace(race, pledge.id, now, pledge.id);
   }
   function startForViewing() {
     const race = current();
@@ -95,7 +95,7 @@
 
   function statusText(race) {
     if (race.status === 'running') return 'Race in progress';
-    return race.status === 'final' ? `Race #${race.number} finished` : 'Bets open';
+    return race.status === 'final' ? `Race #${race.number} finished` : 'Challenge open';
   }
   function latestResultHtml(race) {
     return race ? `<div class="card race-card race-result"><span class="eyebrow">Last result · Race #${race.number}</span><b>${esc(horse(race.winnerId).name)} won</b><span class="small muted">${race.order.map((id, i) => `${i + 1}. ${esc(horse(id).name)}`).join(' · ')}</span></div>` : '';
@@ -106,7 +106,7 @@
       const isWinner = race.status === 'final' && race.winnerId === runner.id;
       return `<div class="race-entry ${isWinner ? 'race-winner' : ''}">
         <div class="race-horse-info"><span class="race-silk" style="--silk:${runner.color}">#${runner.number}</span><span class="race-horse-copy"><b>${esc(runner.name)}</b><small>Form ${runner.form} · ${esc(runner.jockey)}</small></span></div>
-        <div class="race-odds">${TO.ui.oddsBtn(sel, { suspended: race.status !== 'open', big: true, label: runner.name })}</div>
+        <div class="race-target">${TO.ui.challengeChoiceButton(sel, { suspended: race.status !== 'open', big: true, label: runner.name })}</div>
       </div>`;
     }).join('');
   }
@@ -114,17 +114,17 @@
     const race = current();
     const latest = data.history[0];
     return `<div class="stack race-page" data-race-id="${race.number}" data-race-status="${race.status}">
-      <div class="page-head"><h1>Virtual Racing</h1><p>Pick a winner and stake screen-time minutes using your regular bet slip.</p></div>
+      <div class="page-head"><h1>Virtual Racing</h1><p>Pick a winner and stake screen-time minutes using your regular Daily Commitment.</p></div>
       <div class="card race-card">
         <div class="race-card-head"><div><span id="race-status" class="tag ${race.status === 'running' ? 'red' : 'green'}">${esc(statusText(race))}</span><span class="race-caption">· 1,200m Cyber Turf Classic #${race.number}</span></div><span class="race-clock" id="race-clock">12 sec</span></div>
         <div class="race-track-wrap"><canvas class="race-track" id="race-track" aria-label="Animated virtual horse race"></canvas><div class="race-finish-line" aria-hidden="true"></div></div>
-        <div class="race-caller"><span>${icon('radio', 14)} Caller</span><span id="race-commentary">${race.status === 'running' ? 'The field is underway!' : 'Welcome to Silicon Downs. Select a horse to add it to your bet slip.'}</span></div>
+        <div class="race-caller"><span>${icon('radio', 14)} Caller</span><span id="race-commentary">${race.status === 'running' ? 'The field is underway!' : 'Welcome to Silicon Downs. Select a horse to add it to your Daily Commitment.'}</span></div>
         <button class="btn primary full" id="race-start" data-act="race-start" ${race.status === 'open' ? '' : 'disabled'}>${race.status === 'open' ? 'Start race now' : race.status === 'running' ? 'Race in progress' : 'Race finished'}</button>
       </div>
       <div class="card race-card stack-s">
-        <div class="spread"><div><h2 class="race-heading">Field odds</h2><div class="small muted">Tap a price to open your standard screen-time bet slip.</div></div><span class="tag">5 runners</span></div>
+        <div class="row-layout"><div><h2 class="race-heading">Race targets</h2><div class="small muted">Choose a target to open your standard screen-time Daily Commitment.</div></div><span class="tag">5 runners</span></div>
         <div id="race-roster" class="race-roster">${rosterHtml(race)}</div>
-        <div class="note blue">${icon('info', 16)}<span>Place a bet to start the race with your pick, or start it now to watch without a bet. Bets use your regular screen-time balance.</span></div>
+        <div class="note blue">${icon('info', 16)}<span>Lock in pledge to start the race with your pick, or start it now to watch without a pledge. Pledges use your available screen-time minutes.</span></div>
       </div>
       ${latestResultHtml(latest)}
     </div>`;
@@ -193,7 +193,7 @@
       page.dataset.raceId = race.number;
       page.dataset.raceStatus = race.status;
       const statusTag = mounted.querySelector('#race-status');
-      if (statusTag) statusTag.outerHTML = `<span id="race-status" class="tag green">Bets open</span>`;
+      if (statusTag) statusTag.outerHTML = `<span id="race-status" class="tag green">Challenge open</span>`;
       const caption = mounted.querySelector('.race-caption');
       if (caption) caption.textContent = `· 1,200m Cyber Turf Classic #${race.number}`;
       const roster = mounted.querySelector('#race-roster');
@@ -202,7 +202,7 @@
       if (result) result.outerHTML = latestResultHtml(data.history[0]);
       else if (data.history[0]) page.insertAdjacentHTML('beforeend', latestResultHtml(data.history[0]));
       const comment = mounted.querySelector('#race-commentary');
-      if (comment) comment.textContent = 'The previous race is official. Place your next screen-time bet.';
+      if (comment) comment.textContent = 'The previous race is official. Choose your next screen-time challenge.';
     } else if (page && page.dataset.raceStatus !== race.status) {
       page.dataset.raceStatus = race.status;
       const roster = mounted.querySelector('#race-roster');

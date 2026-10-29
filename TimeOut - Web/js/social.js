@@ -165,7 +165,7 @@
       <h2 style="margin:0;font-size:17px">Find friends</h2>
       <div class="input-wrap"><input class="input" id="social-search" placeholder="Search by username" value="${esc(view.query)}" autocomplete="off" autocapitalize="off" spellcheck="false"><span class="icon-btn" style="pointer-events:none">${icon('search', 18)}</span></div>
       <div id="search-results" class="stack-s">${searchResults()}</div>
-      <div class="spread small" style="margin-top:2px"><span class="muted ellipsis">Or share your invite link</span><button class="btn xs ghost" data-act="copy-invite">${icon('link', 14)} Copy link</button></div>
+      <div class="row-layout small" style="margin-top:2px"><span class="muted ellipsis">Or share your invite link</span><button class="btn xs ghost" data-act="copy-invite">${icon('link', 14)} Copy link</button></div>
     </div>`;
   }
 
@@ -174,7 +174,7 @@
       return `<div class="empty">${icon('users', 40)}<h3>Keep up with your friends</h3><p>Compare screen-time records and build teams that compete for a week or a season. Add your first friend to get started.</p><button class="btn primary" data-act="copy-invite">${icon('link', 16)} Invite a friend</button><button class="btn quiet sm" data-act="focus-search">Search usernames instead</button></div>`;
     }
     const rows = St.leaderboard();
-    return `<div class="stack-s pad"><div class="spread"><span class="eyebrow">Leaderboard · minutes won or lost</span><button class="link-btn tiny" data-act="settings" data-section="privacy">What friends see</button></div>
+    return `<div class="stack-s pad"><div class="row-layout"><span class="eyebrow">Leaderboard · minutes won or lost</span><button class="link-btn tiny" data-act="settings" data-section="privacy">What friends see</button></div>
       <div class="list">${rows.map((r, i) => `<button class="lb-row ${r.me ? 'me' : ''}" data-act="profile" data-u="${esc(r.username)}">
         <span class="rk">${r.share.minutes ? i + 1 : '–'}</span>${ui.avatar(r.photo)}
         <span style="min-width:0"><span class="nm ellipsis" style="display:block">${r.me ? 'You' : `@${esc(r.username)}`}</span><span class="sub">${ui.tierBadge(r.tier, true)}${r.share.record ? `<span>${r.w}-${r.l}</span>` : '<span>Record private</span>'}${r.streak ? `<span class="yellow row-s">${icon('flame', 11)}${r.streak}</span>` : ''}</span></span>
@@ -217,8 +217,8 @@
         ? `<div class="small">You're <b>${TO.ordinal(myPlace + 1)}</b> of ${standings.length} · leader <b>${standings[0].me ? 'you' : `@${esc(standings[0].username)}`}</b></div>`
         : '';
       return `<button class="card team-card tappable" style="text-align:left" data-act="team" data-id="${t.id}">
-        <div class="spread"><b style="font-size:16px">${esc(t.name)}</b>${statusTag}</div>
-        <div class="spread small muted"><span>${TO.fmtDate(TO.dayStart(t.start))} – ${TO.fmtDate(TO.dayStart(t.end))} · ${t.members.length} members</span><span class="avatars">${standings.slice(0, 5).map((s) => `<img src="${esc(s.photo)}" alt="">`).join('')}</span></div>
+        <div class="row-layout"><b style="font-size:16px">${esc(t.name)}</b>${statusTag}</div>
+        <div class="row-layout small muted"><span>${TO.fmtDate(TO.dayStart(t.start))} – ${TO.fmtDate(TO.dayStart(t.end))} · ${t.members.length} members</span><span class="avatars">${standings.slice(0, 5).map((s) => `<img src="${esc(s.photo)}" alt="">`).join('')}</span></div>
         ${rankLine}
       </button>`;
     }).join('');
@@ -277,7 +277,7 @@
           title: isMe ? 'Your profile' : `@${esc(username)}`,
           body: `<div class="row" style="gap:14px">${ui.avatar(isMe ? TO.account.photo : p.photo, 'xl')}<div><div style="font-size:20px;font-weight:800">${isMe ? `@${esc(username)}` : esc(p.name)}</div>${isMe ? '' : `<div class="muted small">@${esc(username)}</div>`}<div class="row-s" style="margin-top:8px">${ui.tierBadge(tierId, true)}${streak ? `<span class="tiny bold yellow row-s">${icon('flame', 12)}${streak}-day streak</span>` : ''}</div></div></div>
             ${showAll ? `<div class="record-big">${stat('Record', rec, share.record)}${stat('Minutes won/lost', `<span class="${net > 0 ? 'green' : net < 0 ? 'red' : ''}">${TO.signed(net)}</span>`, share.minutes)}${stat('Clean streak', `${streak}d`, true)}</div>` : `<div class="note">${icon('lock', 16)}<span>Add @${esc(username)} as a friend to see their stats.</span></div>`}
-            ${!isMe && showAll ? (share.bets ? `<div class="stack-s"><div class="eyebrow">Open bets they're sharing</div>${picks.length ? picks.map((k) => `<div class="card tight spread"><div><b>${esc(k.label)}</b><div class="small muted">${esc(k.matchup)}</div></div><div style="text-align:right"><div class="display green" style="font-size:18px">${TO.odds.fmt(k.price)}</div><div class="tiny faint">${k.stake} min</div></div></div>`).join('') : '<div class="small muted">No open bets right now.</div>'}</div>` : `<div class="small muted">${esc(p.name)} keeps their open bets private.</div>`) : ''}
+            ${!isMe && showAll ? (share.bets ? `<div class="stack-s"><div class="eyebrow">Active challenges they're sharing</div>${picks.length ? picks.map((k) => `<div class="card tight row-layout"><div><b>${esc(k.label)}</b><div class="small muted">${esc(k.matchup)}</div></div><div style="text-align:right"><div class="display green" style="font-size:18px">${TO.multiplierText(k.price)}</div><div class="tiny faint">${k.stake} min</div></div></div>`).join('') : '<div class="small muted">No active challenges right now.</div>'}</div>` : `<div class="small muted">${esc(p.name)} keeps their active challenges private.</div>`) : ''}
             ${isMe ? `<button class="btn ghost sm" data-act="settings" data-section="privacy">${icon('eye', 16)} Choose what friends can see</button>` : ''}`,
           foot: isMe ? '' : actions,
         };
@@ -298,7 +298,7 @@
         const owner = St.sameUser(t.owner, TO.account.username) ? 'You own this team' : `Owned by @${esc(t.owner)}`;
         return {
           title: esc(t.name),
-          body: `<div class="spread small muted"><span class="row-s">${icon('calendar', 14)} ${TO.fmtDate(TO.dayStart(t.start))} – ${TO.fmtDate(TO.dayStart(t.end))}</span><span>${status === 'active' ? `Ends in ${TO.fmtIn(TO.dayStart(t.end) + TO.DAY - TO.now())}` : status === 'upcoming' ? `Starts in ${TO.fmtIn(TO.dayStart(t.start) - TO.now())}` : 'Ended'}</span></div>
+          body: `<div class="row-layout small muted"><span class="row-s">${icon('calendar', 14)} ${TO.fmtDate(TO.dayStart(t.start))} – ${TO.fmtDate(TO.dayStart(t.end))}</span><span>${status === 'active' ? `Ends in ${TO.fmtIn(TO.dayStart(t.end) + TO.DAY - TO.now())}` : status === 'upcoming' ? `Starts in ${TO.fmtIn(TO.dayStart(t.start) - TO.now())}` : 'Ended'}</span></div>
             <div class="small muted">${owner} · ${t.members.length} on the roster</div>
             <div class="list">${rows.map((r, i) => `<div class="lb-row ${r.me ? 'me' : ''}"><span class="rk">${r.hidden ? '–' : i + 1}</span>${ui.avatar(r.photo)}<span><span class="nm">${r.me ? 'You' : `@${esc(r.username)}`}</span><span class="sub">${r.w}-${r.l} during this team</span></span><span class="val">${r.hidden ? '<span class="faint" style="font-size:14px">Private</span>' : `<span class="${r.net > 0 ? 'green' : r.net < 0 ? 'red' : ''}">${TO.signed(r.net)}</span><small>min</small>`}</span></div>`).join('')}</div>
             <div class="tiny faint">Standings count screen-time bets placed between the start and end dates. Friend bets don't count.</div>
@@ -315,7 +315,7 @@
         title: 'How teams work',
         body: `<p class="sub" style="margin-top:0">Teams are how friends compete here without betting money. TimeOut puts screen time on the line instead of cash, and a team is the stretch of days you compare.</p>
           <div class="how-card"><span class="n">1</span><div><h3>Pick a name and the dates</h3><p>Create a team for a week or a season. You can start it on your own and invite people later.</p></div></div>
-          <div class="how-card"><span class="n">2</span><div><h3>Minutes decide the standings</h3><p>Between the start and end dates, screen-time bets count. Whoever comes out ahead on minutes leads. A side bet with a friend does not count.</p></div></div>
+          <div class="how-card"><span class="n">2</span><div><h3>Minutes decide the standings</h3><p>Between the start and end dates, screen-time challenges count. Whoever earns the most minutes leads.</p></div></div>
           <div class="how-card"><span class="n">3</span><div><h3>Invite friends onto the roster</h3><p>Open the team and add a friend, or copy the team link. When they open it, you become friends and they join the roster.</p></div></div>
           <div class="how-card"><span class="n">4</span><div><h3>Leave whenever you want</h3><p>Leaving takes you off the standings. The team stays for everyone else.</p></div></div>
           <div class="tiny faint">The team is saved in this browser. When this page can reach the TimeOut server, the roster is saved there too, one member at a time, so it is still here the next time you open the app.</div>`,

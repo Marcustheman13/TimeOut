@@ -1,6 +1,6 @@
 /* TimeOut web app — the responsive browser layout. Loaded by index.html, after app.js.
    Same app, data and actions as the app version, laid out for a desktop browser: a sidebar instead of the
-   tab bar and menu drawer, a wide content area, and the bet slip docked on the right. */
+   tab bar and menu drawer, a wide content area, and the pledges commitment docked on the right. */
 (function (TO) {
   'use strict';
   const { esc, icon, brandMark } = TO;
@@ -9,13 +9,13 @@
   const app = TO.app;
   const A = TO.actions;
 
-  /** Wide enough to dock the bet slip on the right. Below this the slip opens as a dialog. */
+  /** Wide enough to dock the pledges commitment on the right. Below this the commitment opens as a dialog. */
   const wide = window.matchMedia('(min-width: 900px)');
   const isWeb = () => !!document.getElementById('side') && !!TO.data;
 
   const TABS = [
     ['home', 'Home', 'home'],
-    ['bets', 'My Bets', 'ticket'],
+    ['challenges', 'My Challenges', 'target'],
     ['social', 'Social', 'users'],
   ];
   // Titles match the settings page titles so the open page can be highlighted.
@@ -34,9 +34,9 @@
       <div class="main">
         <header class="topbar web-top" id="topbar"></header>
         <main class="view" id="view" tabindex="-1"></main>
-        <div id="slipbar-host"></div>
+        <div id="commitment-bar-host"></div>
       </div>
-      <aside class="rail" id="rail" aria-label="Bet slip"></aside>
+      <aside class="rail" id="rail" aria-label="Daily Commitment"></aside>
       <nav id="tabbar" hidden></nav>
     </div>`;
 
@@ -53,8 +53,8 @@
     const section = openSection();
     const tabs = TABS.map(([k, label, ic]) => {
       const on = !section && app.tab === k;
-      const n = k === 'bets' ? open : k === 'social' ? socialBadge : 0;
-      return `<button class="sn primary ${on ? 'on' : ''}" data-act="tab" data-tab="${k}" title="${label}" aria-current="${on ? 'page' : 'false'}">${icon(ic, 21)}<span class="sn-l">${label}</span>${n ? `<span class="sn-n ${k === 'bets' ? 'green' : ''}">${n}</span>` : ''}</button>`;
+      const n = k === 'challenges' ? open : k === 'social' ? socialBadge : 0;
+      return `<button class="sn primary ${on ? 'on' : ''}" data-act="tab" data-tab="${k}" title="${label}" aria-current="${on ? 'page' : 'false'}">${icon(ic, 21)}<span class="sn-l">${label}</span>${n ? `<span class="sn-n ${k === 'challenges' ? 'green' : ''}">${n}</span>` : ''}</button>`;
     }).join('');
     const subs = { screentime: `${wl.phoneLeft} min left`, status: wl.streak ? `${wl.streak}-day streak` : '' };
     const item = (key, title, ic, cls = '') => {
@@ -85,29 +85,29 @@
       <div class="wt-when"><b>${now.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}</b><span>${now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span></div>
       <button class="wt-stat opt" data-act="settings" data-section="screentime">${icon('phone', 15)}<span><b class="${phoneCls}">${TO.data.settings.enforce ? `${wl.phoneLeft} min` : 'Off'}</b> phone time left</span></button>
       <span class="wt-stat opt">${icon('clock', 15)}<span>Resets in <b>${ui.countdownEl(TO.nextMidnight())}</b></span></span>
-      <button class="bal-pill ${locked ? 'locked' : ''}" data-act="settings" data-section="screentime" aria-label="${locked ? 'Betting locked until midnight' : `${wl.balance} minutes available to bet`}">${icon(locked ? 'lock' : 'hourglass', 16)}${locked ? 'Betting locked' : `${wl.balance} min to bet`}</button>`;
+      <button class="bal-pill ${locked ? 'locked' : ''}" data-act="settings" data-section="screentime" aria-label="${locked ? 'Pledges paused until midnight' : `${wl.balance} minutes available to commit`}">${icon(locked ? 'lock' : 'hourglass', 16)}${locked ? 'Paused' : `${wl.balance} min`}</button>`;
   }
 
   function railHtml() {
     const wl = St.wallet();
     const locked = wl.lockedOut || wl.balance <= 0;
     const step = (n, t, d) => `<div class="how-card"><span class="n">${n}</span><div><h3>${t}</h3><p>${d}</p></div></div>`;
-    return `<div class="rail-head"><h2>Bet Slip</h2></div>
+    return `<div class="rail-head"><h2>Daily Commitment</h2></div>
       <div class="rail-body">
         <div class="rail-empty">
           <span class="re-ic">${icon('ticket', 26)}</span>
-          <h3>Your slip is empty</h3>
-          <p>${locked ? 'Betting is locked until midnight. Your open bets still settle.' : `Click any odds to add a pick. Add up to ${TO.RULES.maxLegs} picks from different games for a parlay.`}</p>
+          <h3>Your commitment is empty</h3>
+          <p>${locked ? 'New pledges resume at midnight. Active challenges still resolve.' : 'Choose an option on a Matchup Focus Card to begin a pledge. Link up to four matchups in a Combo Goal.'}</p>
         </div>
         <div class="stack-s">
-          <div class="eyebrow">How a bet works</div>
-          ${step(1, 'Pick a price', 'Click odds on any game or prediction.')}
-          ${step(2, 'Stake minutes', `Up to your ${wl.balance} betting minutes today.`)}
-          ${step(3, 'Win phone time', "Wins add to tomorrow's limit. Losses take it away.")}
+          <div class="eyebrow">How a challenge works</div>
+          ${step(1, 'Choose a target', 'Select a matchup outcome.')}
+          ${step(2, 'Commit minutes', `Use up to your ${wl.balance} available minutes today.`)}
+          ${step(3, 'Earn phone time', "Successful challenges add to tomorrow's allowance.")}
         </div>
         <div class="rail-limits">
-          <div><span>Betting balance</span><b class="${locked ? 'red' : 'green'}">${wl.balance} min</b></div>
-          <div><span>In open bets</span><b>${wl.atRisk} min</b></div>
+          <div><span>Available today</span><b class="${locked ? 'red' : 'green'}">${wl.balance} min</b></div>
+          <div><span>Committed to active challenges</span><b>${wl.atRisk} min</b></div>
           <div><span>Tomorrow's limit</span><b class="${wl.tomorrowLimit > TO.RULES.daily ? 'green' : wl.tomorrowLimit < TO.RULES.daily ? 'red' : ''}">${wl.tomorrowLimit} min</b></div>
         </div>
       </div>`;
@@ -123,8 +123,8 @@
   app.renderChrome = () => {
     phoneChrome();
     if (!isWeb()) return;
-    // With room for it, the slip stays docked whenever it has picks. open() re-renders the chrome itself.
-    if (wide.matches && TO.slip.legs.length && !ui.sheetOpen('slip')) { TO.slip.open(); return; }
+    // With room for it, the commitment stays docked whenever it has picks. open() re-renders the chrome itself.
+    if (wide.matches && TO.comboGoalBuilder.selectedPicks.length && !ui.sheetOpen('commitment')) { TO.comboGoalBuilder.open(); return; }
     put('side', sideHtml());
     put('rail', railHtml());
     document.getElementById('topbar').innerHTML = topHtml();
@@ -137,9 +137,9 @@
     phoneView();
   };
 
-  // Leaving a page or switching tabs shouldn't take the docked slip away.
+  // Leaving a page or switching tabs shouldn't take the docked commitment away.
   ui.closeAllSheets = () => ui.layer().querySelectorAll('[data-sheet]').forEach((w) => {
-    if (w.dataset.sheet === 'slip' && wide.matches && isWeb()) return;
+    if (w.dataset.sheet === 'commitment' && wide.matches && isWeb()) return;
     ui.closeSheet(w.dataset.sheet);
   });
   // ---------- Small windows: the sidebar becomes a slide-in menu ----------
@@ -156,20 +156,20 @@
   window.matchMedia('(max-width: 720px)').addEventListener('change', () => setSide(false));
 
   const appBoot = app.boot;
-  app.boot = () => { ui.closeSheet('slip', true); TO.slip.clear(); setSide(false); appBoot(); };
-  TO.slip.docked = () => wide.matches && isWeb();
+  app.boot = () => { ui.closeSheet('commitment', true); TO.comboGoalBuilder.clear(); setSide(false); appBoot(); };
+  TO.comboGoalBuilder.docked = () => wide.matches && isWeb();
 
   // The sidebar is always on screen, so a settings section can be opened over a game page. Replace it instead.
   const appSettings = A.settings;
   A.settings = (el) => { ui.closeAllPages(); appSettings(el); app.renderChrome(); };
 
-  // Escape closes the sidebar or a dialog, but never the docked slip.
+  // Escape closes the sidebar or a dialog, but never the docked commitment.
   window.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
     if (document.body.classList.contains('side-open')) { setSide(false); e.stopImmediatePropagation(); return; }
     if (!wide.matches) return;
     const last = ui.layer().lastElementChild;
-    if (last && last.dataset.sheet === 'slip') e.stopImmediatePropagation();
+    if (last && last.dataset.sheet === 'commitment') e.stopImmediatePropagation();
   }, true);
 
   wide.addEventListener('change', () => app.renderChrome());

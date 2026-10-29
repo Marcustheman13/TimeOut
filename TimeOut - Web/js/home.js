@@ -6,6 +6,7 @@
   const ui = TO.ui;
 
   const prevScores = {};
+  const activeChallenge = new Map();
 
   const followed = () => TO.data.settings.sports?.length ? TO.data.settings.sports : S.REAL_LEAGUES;
   const offDay = () => TO.store.get('timeout.offDay', false);
@@ -44,22 +45,22 @@
     return TO.data.bets.filter((b) => b.status === 'open' && b.legs.some((l) => l.gameId === ref || l.predId === ref || l.raceId === ref));
   }
 
-  // ---------- Wallet header (PRD: screen time + current bets always at the top) ----------
+  // ---------- Wallet header (PRD: screen time + current pledges always at the top) ----------
   function walletCard(wl) {
     if (wl.lockedOut || wl.balance <= 0) {
       return `<div class="card wallet locked" style="border-color:rgba(255,90,95,.45)">
-        <div class="lockhead">${icon('lock', 14)} OUT OF BETTING MINUTES</div>
-        <div class="bold" style="margin-top:8px;font-size:16px">Betting is locked. It reopens at midnight.</div>
+        <div class="lockhead">${icon('lock', 14)} OUT OF PLEDGE MINUTES</div>
+        <div class="bold" style="margin-top:8px;font-size:16px">Pledges are paused. They reopen at midnight.</div>
         <div class="bigcd" style="margin-top:6px">${ui.countdownEl(TO.nextMidnight())}</div>
-        <div class="small muted" style="margin-top:4px">Your open bets still settle and count toward tomorrow's phone time.</div>
+        <div class="small muted" style="margin-top:4px">Active challenges still resolve and update tomorrow's phone time.</div>
         ${statsRow(wl)}
       </div>`;
     }
     const pct = Math.min(100, (wl.balance / (TO.RULES.daily + wl.bonusToday)) * 100);
     return `<div class="card wallet">
-      <div class="spread" style="align-items:flex-end">
+      <div class="row-layout" style="align-items:flex-end">
         <div>
-          <div class="spread" style="justify-content:flex-start;gap:8px"><div class="eyebrow">Betting balance today</div>${wl.bonusToday ? `<span class="tiny green bold">+${wl.bonusToday} min ${esc(wl.tier.title)} bonus included</span>` : ''}</div>
+          <div class="row-layout" style="justify-content:flex-start;gap:8px"><div class="eyebrow">Available minutes today</div>${wl.bonusToday ? `<span class="tiny green bold">+${wl.bonusToday} min ${esc(wl.tier.title)} bonus included</span>` : ''}</div>
           <div class="big" style="margin-top:4px">${wl.balance}<small>min</small></div>
         </div>
         <div style="text-align:right">
@@ -69,7 +70,7 @@
       </div>
       <div class="bar" style="margin-top:12px"><i style="width:${pct}%"></i></div>
       ${statsRow(wl)}
-      <button class="explain" data-act="how">${icon('info', 14)} You bet with tomorrow's phone time. How it works</button>
+      <button class="explain" data-act="how">${icon('info', 14)} Pledges use tomorrow's phone time. How it works</button>
     </div>`;
   }
 
@@ -79,7 +80,7 @@
     const pColor = wl.appsLocked ? 'red' : wl.phoneLeft <= TO.data.settings.lowWarn ? 'yellow' : '';
     return `<div class="wallet-stats">
       <div><b class="${pColor}">${TO.data.settings.enforce ? `${wl.phoneLeft} min` : 'Off'}</b><span>Phone time left</span></div>
-      <div><b class="${wl.atRisk ? 'yellow' : ''}">${wl.atRisk} min</b><span>In open bets</span></div>
+      <div><b class="${wl.atRisk ? 'yellow' : ''}">${wl.atRisk} min</b><span>Committed to active challenges</span></div>
       <div><b class="${tColor}">${wl.tomorrowLimit} min</b><span>Tomorrow's limit</span></div>
     </div>`;
   }
@@ -93,7 +94,7 @@
   }
 
   function miniBet(bet) {
-    const title = bet.kind === 'todo' ? `To-do parlay (${bet.legs.length})` : bet.legs.length > 1 ? `${bet.legs.length}-pick parlay` : bet.legs[0].label;
+    const title = bet.kind === 'todo' ? `To-do Combo Goal (${bet.legs.length})` : bet.legs.length > 1 ? `${bet.legs.length}-pick Combo Goal` : bet.legs[0].label;
     let line = '';
     const leg = bet.legs.find((l) => l.result === 'pending') || bet.legs[0];
     if (bet.kind === 'todo') line = `${bet.legs.filter((l) => l.result === 'won').length}/${bet.legs.length} done · due midnight`;
@@ -110,8 +111,8 @@
       else line = `${g.away.abbr} ${g.awayScore} – ${g.home.abbr} ${g.homeScore} · ${esc(g.statusText)}`;
     }
     const bottom = `<div class="row-s small bold"><span class="muted">${bet.stake} min</span>${icon('chevR', 12)}<span class="green">${Math.round(bet.stake * bet.decimal) - bet.stake > 0 ? `win ${Math.round((Math.round(bet.stake * bet.decimal) - bet.stake) * (bet.multiplier || 1))} min` : ''}</span></div>`;
-    return `<button class="card tight mini-bet" data-act="tab" data-tab="bets">
-      <div class="spread"><span class="t ellipsis">${esc(title)}</span><span class="display muted" style="font-size:15px">${TO.odds.fmt(bet.american)}</span></div>
+    return `<button class="card tight mini-challenge" data-act="tab" data-tab="challenges">
+      <div class="row-layout"><span class="t ellipsis">${esc(title)}</span><span class="display muted" style="font-size:15px">${TO.multiplierText(TO.odds.fromDecimal(bet.decimal))}</span></div>
       <div class="small muted row-s ellipsis" style="font-weight:600">${line}</div>
       <div style="margin-top:auto">${bottom}</div>
     </button>`;
@@ -119,11 +120,11 @@
 
   function openBetsStrip() {
     const open = TO.data.bets.filter((b) => b.status === 'open' && sportsOnly(b)).sort((a, b) => b.placedAt - a.placedAt);
-    return `<div class="stack-s open-bets">
-      <div class="section-title"><div class="row-s"><h2>Open bets</h2><span class="count-pill ${open.length ? '' : 'off'}">${open.length}</span></div>${open.length ? `<button class="link-btn" data-act="tab" data-tab="bets">See all</button>` : ''}</div>
+    return `<div class="stack-s open-challenges">
+      <div class="section-title"><div class="row-s"><h2>Active challenges</h2><span class="count-pill ${open.length ? '' : 'off'}">${open.length}</span></div>${open.length ? `<button class="link-btn" data-act="tab" data-tab="challenges">See all</button>` : ''}</div>
       ${open.length
-        ? `<div class="hscroll mini-bets" data-hkey="minibets">${open.map(miniBet).join('')}</div>`
-        : `<div class="card tight small muted" style="margin:0 16px">No open bets. Tap any odds below to start one.</div>`}
+        ? `<div class="hscroll mini-challenges" data-hkey="minichallenges">${open.map(miniBet).join('')}</div>`
+        : `<div class="card tight small muted" style="margin:0 16px">No active challenges. Choose a matchup target below to begin.</div>`}
     </div>`;
   }
 
@@ -154,71 +155,40 @@
 
   function gameCard(g) {
     const o = S.odds(g.id);
-    const bettable = g.state === 'live' || g.state === 'scheduled';
+    const bettable = (g.state === 'live' || g.state === 'scheduled') && !o.suspended;
     const mine = myOpenBetOn(g.id);
-    const Sp = S.SPORTS[g.sport];
     let body;
     if (bettable) {
-      if (g.eventID) {
-        const sides = [
-          ['away', g.away, g.awayScore, g.homeScore],
-          ['home', g.home, g.homeScore, g.awayScore],
-        ];
-        const teamLine = (side, team, score, opponent) => `<div class="gc-live-team">
-          <button class="gc-live-team-open" data-act="open-game" data-id="${g.id}" aria-label="Open ${esc(team.name)} game stats">
-            <span class="gc-live-logo">${team.logo ? `<img src="${esc(team.logo)}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='grid'">` : ''}<span style="${team.logo ? 'display:none' : ''}">${esc(team.abbr)}</span></span>
-            <span class="gc-live-name">${esc(team.name)}</span>
-          </button>
-          <span class="gc-live-score ${g.state === 'live' && score < opponent ? 'trail' : ''} ${g.state === 'live' ? scoreCls(g, side) : ''}">${g.state === 'scheduled' ? '–' : score}</span>
-        </div>`;
-        const picks = [
-          [o.spread.find((sel) => sel.side === 'away'), `Away · ${g.away.abbr}`],
-          [o.spread.find((sel) => sel.side === 'home'), `Home · ${g.home.abbr}`],
-          [o.total.find((sel) => sel.side === 'over'), 'Over'],
-          [o.total.find((sel) => sel.side === 'under'), 'Under'],
-          [o.moneyline.find((sel) => sel.side === 'away'), `Away ML · ${g.away.abbr}`, true],
-          [o.moneyline.find((sel) => sel.side === 'home'), `Home ML · ${g.home.abbr}`, true],
-        ];
-        if (g.sport === 'soccer') picks.push([o.moneyline.find((sel) => sel.side === 'draw'), 'Draw', true]);
-        body = `<div class="gc-live-layout">
-          <div class="gc-live-teams">${sides.map(([side, team, score, opponent]) => teamLine(side, team, score, opponent)).join('')}</div>
-          <div class="gc-live-bets">${picks.map(([sel, label, isMoneyline]) => sel
-            ? ui.oddsBtn(sel, { suspended: o.suspended, move: o.move[sel.id], big: true, label })
-            : `<button class="odds-btn locked big" disabled aria-label="${esc(label)} unavailable"><span class="lbl">${esc(label)}</span><span class="pr">${isMoneyline ? 'N/A' : '—'}</span></button>`).join('')}</div>
-        </div>`;
-      } else {
-      const cols = [];
-      if (o.spread.length === 2) cols.push([Sp.spreadLabel, o.spread]);
-      if (o.total.length === 2) cols.push(['Total', o.total]);
-      if (o.moneyline.length === 2) cols.push(['Money', o.moneyline]);
-      const teamRow = (team, side, row) => {
-        const score = side === 'home' ? g.homeScore : g.awayScore;
-        const opp = side === 'home' ? g.awayScore : g.homeScore;
-        return `<button class="gc-team" data-act="open-game" data-id="${g.id}">
-            ${ui.teamBadge(team)}
-            <span style="min-width:0"><span class="nm" style="display:block">${esc(g.state === 'live' ? team.abbr : team.name)}</span></span>
-            ${g.state === 'live' ? `<span class="sc ${score < opp ? 'trail' : ''} ${scoreCls(g, side)}">${score}</span>` : ''}
-          </button>
-          ${cols.map(([, sels]) => ui.oddsBtn(sels[row], { suspended: o.suspended, move: o.move[sels[row].id], label: team.name })).join('')}`;
+      const tabs = [['ml','Match Winner',o.moneyline],['spread','Margin',o.spread],['total','Total Points',o.total]].filter(([, , choices]) => choices.length >= 2);
+      const chosen = activeChallenge.get(g.id) || tabs[0]?.[0];
+      const current = tabs.find(([key]) => key === chosen) || tabs[0];
+      const choices = current ? current[2].filter((sel) => sel.side !== 'draw').slice(0, 2) : [];
+      const choiceLabel = (sel) => {
+        if (sel.market === 'ml') return `${sel.side === 'away' ? g.away.name : g.home.name} to win`;
+        if (sel.market === 'spread') {
+          const team = sel.side === 'away' ? g.away.name : g.home.name;
+          return sel.line < 0 ? `${team} to win by ${Math.ceil(Math.abs(sel.line))}+` : `${team} to stay within ${Math.floor(sel.line)}`;
+        }
+        return `${sel.side === 'over' ? 'Over' : 'Under'} ${sel.line} pts`;
       };
-      const draw = o.moneyline.find((s) => s.side === 'draw');
-        body = `<div class="gc-grid ${cols.length === 2 ? 'two' : ''}" style="grid-template-columns:minmax(0,1fr) repeat(${cols.length},60px)">
-          <span></span>${cols.map(([h]) => `<span class="colh">${esc(h)}</span>`).join('')}
-          ${teamRow(g.away, 'away', 0)}
-          ${teamRow(g.home, 'home', 1)}
-          ${draw ? `<span class="gc-team muted bold" style="height:40px">Draw</span>${cols.length === 2 ? '<span></span>' : '<span></span><span></span>'}${ui.oddsBtn(draw, { suspended: o.suspended, move: o.move[draw.id], label: 'Draw' })}` : ''}
-        </div>${cols.length ? '' : '<div class="tiny faint" style="margin:6px 2px 0">Betting lines are not available for this game yet.</div>'}`;
-      }
+      const statusLine = g.state === 'live' ? `<span class="live">LIVE</span> · ${g.awayScore}–${g.homeScore} · ${esc(g.clock)}` : `${esc(TO.fmtDay(g.start))} · ${esc(TO.fmtTime(g.start))}`;
+      body = `<div class="matchup-head">
+        <button class="matchup-team" data-act="open-game" data-id="${g.id}">${ui.teamBadge(g.away, 30)}<span>${esc(g.away.name)}</span>${g.state === 'live' ? `<b>${g.awayScore}</b>` : ''}</button>
+        <span class="matchup-at">@</span>
+        <button class="matchup-team" data-act="open-game" data-id="${g.id}">${ui.teamBadge(g.home, 30)}<span>${esc(g.home.name)}</span>${g.state === 'live' ? `<b>${g.homeScore}</b>` : ''}</button>
+      </div><div class="matchup-time">${statusLine}</div>
+      <div class="challenge-tabs" role="tablist" aria-label="Challenge type">${tabs.map(([key,label]) => `<button role="tab" aria-selected="${current?.[0] === key}" class="${current?.[0] === key ? 'on' : ''}" data-act="challenge-tab" data-game="${esc(g.id)}" data-market="${key}">${label}</button>`).join('')}</div>
+      <div class="challenge-choices">${choices.map((sel) => ui.challengeChoiceButton(sel, { suspended: false, big: true, label: choiceLabel(sel) })).join('')}</div>`;
     } else {
       const row = (team, score, won) => `<button class="gc-team" style="width:100%" data-act="open-game" data-id="${g.id}">${ui.teamBadge(team)}<span class="nm" style="${won ? '' : 'color:var(--text-2)'}">${esc(team.name)}</span>${g.state === 'final' ? `<span class="sc ${won ? '' : 'trail'}">${score}</span>` : ''}</button>`;
       body = row(g.away, g.awayScore, g.awayScore > g.homeScore) + row(g.home, g.homeScore, g.homeScore > g.awayScore);
-      if (g.state === 'postponed') body += `<div class="note warn" style="margin-top:6px">${icon('info', 15)}<span>This game was postponed. Every bet on it is void and the full stake goes back to the bettor.</span></div>`;
+      if (g.state === 'postponed') body += `<div class="note warn" style="margin-top:6px">${icon('info', 15)}<span>This game was postponed. Any related pledge will be returned.</span></div>`;
     }
-    const status = `${ui.gameStatus(g)}${o.suspended && g.state === 'live' ? `<span class="tag">${icon('lock', 10)} Betting closed</span>` : ''}`;
+    const status = `${ui.gameStatus(g)}${o.suspended && g.state === 'live' ? `<span class="tag">${icon('lock', 10)} Challenges closed</span>` : ''}`;
     return `<div class="card game-card" data-game="${g.id}">
       <div class="gc-status">${status}<span class="lg">${g.otherConferenceLive ? `LIVE · ${esc(g.conferenceName || 'UNRANKED')}` : g.simulated ? 'SIMULATED' : esc(S.LEAGUES[g.league].short)}</span></div>
       ${body}
-      <div class="gc-more">${mine.length ? `<span class="yourbet">${icon('ticket', 14)} You have ${mine.length === 1 ? 'a bet' : `${mine.length} bets`} on this game</span>` : '<span></span>'}<button class="row-s link-btn" style="font-size:12.5px" data-act="open-game" data-id="${g.id}">Stats & all odds ${icon('chevR', 14)}</button></div>
+      <div class="gc-more">${mine.length ? `<span class="your-challenge">${icon('target', 14)} ${mine.length} active challenge${mine.length === 1 ? '' : 's'} here</span>` : '<span></span>'}<button class="row-s link-btn" style="font-size:12.5px" data-act="open-game" data-id="${g.id}">Stats & challenge details ${icon('chevR', 14)}</button></div>
     </div>`;
   }
 
@@ -240,9 +210,9 @@
   }
 
   function buildParlayControl() {
-    const slip = TO.slip;
-    if (!slip.parlayMode) return `<button class="build-parlay" data-act="toggle-parlay">${icon('ticket', 18)}<span><b>Build parlay</b><small>Select picks from multiple games</small></span>${icon('chevR', 18)}</button>`;
-    return `<div class="build-parlay active"><span class="lr-icon">${icon('ticket', 18)}</span><span class="grow"><b>Choose your parlay picks</b><small>${slip.legs.length} of ${TO.RULES.maxLegs} picks · choose one bet per game</small></span><button class="link-btn" data-act="toggle-parlay">Cancel</button></div>`;
+    const builder = TO.comboGoalBuilder;
+    if (!builder.comboGoalMode) return `<button class="build-combo-goal" data-act="toggle-combo-goal">${icon('target', 18)}<span><b>Build a Combo Goal</b><small>Link choices from up to four matchups</small></span>${icon('chevR', 18)}</button>`;
+    return `<div class="build-combo-goal active"><span class="lr-icon">${icon('target', 18)}</span><span class="grow"><b>Choose Combo Goal picks</b><small>${builder.selectedPicks.length} of ${TO.RULES.maxMatchupPicks} choices · one per matchup</small></span><button class="link-btn" data-act="toggle-combo-goal">Cancel</button></div>`;
   }
 
   function feed(games) {
@@ -275,7 +245,7 @@
       <div class="stack feed" style="gap:12px">
         ${filterBar(games)}
         ${buildParlayControl()}
-        ${TO.live.offline ? `<div class="note blue simulated-note">${icon('info', 16)}<span>Live ESPN odds can't be reached here, so these are simulated games with real team names. Everything else works the same.</span></div>` : ''}
+        ${TO.live.offline ? `<div class="note blue simulated-note">${icon('info', 16)}<span>Live matchup targets can't be reached here, so these are simulated games with real team names. Everything else works the same.</span></div>` : ''}
         ${feed(games)}
       </div>
     </div>`;
@@ -315,10 +285,11 @@
 
   // ---------- Actions ----------
   const A = TO.actions;
+  A['challenge-tab'] = (el) => { activeChallenge.set(el.dataset.game, el.dataset.market); TO.app.renderView(); };
   A['feed-day'] = (el) => {
     feedDay = Number(el.dataset.day) || 0;
     TO.app.render();
-    if (TO.ui.pageOpen('parlay')) TO.ui.refreshPage('parlay');
+    if (TO.ui.pageOpen('combo-goal')) TO.ui.refreshPage('combo-goal');
     const v = document.getElementById('view');
     const fb = v && v.querySelector('.filterbar');
     if (fb && v.scrollTop > fb.offsetTop) v.scrollTop = fb.offsetTop;

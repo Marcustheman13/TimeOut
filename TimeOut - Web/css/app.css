@@ -147,7 +147,7 @@ button:disabled { cursor: not-allowed; }
 .stack-s { display: flex; flex-direction: column; gap: 8px; }
 .row { display: flex; align-items: center; gap: 10px; }
 .row-s { display: flex; align-items: center; gap: 6px; }
-.spread { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.row-layout { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .grow { flex: 1; min-width: 0; }
 .pad { padding-inline: 16px; }
 .mt { margin-top: 14px; }
@@ -367,9 +367,9 @@ label.list-row { cursor: pointer; }
 .tier-badge.rookie { background: var(--raised); color: var(--text); }
 .tier-badge.sm { height: 20px; font-size: 10px; padding: 0 7px; }
 
-.mini-bets { padding-bottom: 2px; }
-.mini-bet { flex: none; width: 222px; min-height: 96px; display: flex; flex-direction: column; gap: 6px; text-align: left; }
-.mini-bet .t { font-weight: 800; font-size: 14px; }
+.mini-challenges { padding-bottom: 2px; }
+.mini-challenge { flex: none; width: 222px; min-height: 96px; display: flex; flex-direction: column; gap: 6px; text-align: left; }
+.mini-challenge .t { font-weight: 800; font-size: 14px; }
 
 .filterbar { position: sticky; top: 0; z-index: 4; background: var(--bg); padding: 10px 0; }
 .cfb-select-label { display: block; margin: 9px 16px 4px; color: var(--muted); font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; }
@@ -390,6 +390,18 @@ label.list-row { cursor: pointer; }
 .gc-team .sc { margin-left: auto; padding-right: 2px; flex: none; font-family: var(--font-display); font-weight: 900; font-size: 23px; font-variant-numeric: tabular-nums; }
 .gc-team .sc.trail { color: var(--text-2); }
 .gc-live-layout { display: grid; grid-template-columns: minmax(112px, .9fr) minmax(0, 1.2fr); gap: 9px; align-items: center; }
+.matchup-head { display:grid; grid-template-columns:minmax(0,1fr) auto minmax(0,1fr); align-items:center; gap:8px; margin:8px 0 4px; }
+.matchup-team { min-width:0; display:flex; align-items:center; gap:7px; text-align:left; font-weight:750; }
+.matchup-team span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.matchup-team b { margin-left:auto; font-variant-numeric:tabular-nums; font-size:19px; }
+.matchup-at,.matchup-time { text-align:center; color:var(--text-2); font-size:12px; font-weight:700; }
+.matchup-time { margin:4px 0 12px; }
+.challenge-tabs { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:5px; padding:4px; border-radius:11px; background:var(--raised); margin:8px 0; }
+.challenge-tabs button { min-height:34px; border-radius:8px; color:var(--text-2); font-size:12px; font-weight:750; }
+.challenge-tabs button.on { background:var(--accent); color:var(--accent-ink); }
+.challenge-choices { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:7px; }
+.challenge-choices .challenge-btn { min-height:58px; height:auto; padding:6px; }
+.commitment-summary { display:grid; gap:6px; padding:12px; border-radius:12px; background:var(--raised); }
 .gc-live-teams { min-width: 0; }
 .gc-live-team { min-width: 0; height: 48px; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 5px; }
 .gc-live-team-open { min-width: 0; display: flex; align-items: center; gap: 7px; text-align: left; }
@@ -398,17 +410,17 @@ label.list-row { cursor: pointer; }
 .gc-live-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 700; }
 .gc-live-score { min-width: 23px; text-align: right; font-family: var(--font-display); font-weight: 900; font-size: 23px; font-variant-numeric: tabular-nums; }
 .gc-live-score.trail { color: var(--text-2); }
-.gc-live-bets { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; }
-.gc-live-bets .odds-btn.big { height: 48px; min-width: 0; border-radius: 8px; }
-.gc-live-bets .odds-btn.big .lbl { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; }
-.gc-live-bets .odds-btn .ln { font-size: 11px; }
-.gc-live-bets .odds-btn .pr { font-size: 12px; }
+.gc-live-challenges { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; }
+.gc-live-challenges .challenge-btn.big { height: 48px; min-width: 0; border-radius: 8px; }
+.gc-live-challenges .challenge-btn.big .lbl { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; }
+.gc-live-challenges .challenge-btn .ln { font-size: 11px; }
+.gc-live-challenges .challenge-btn .pr { font-size: 12px; }
 .gc-more { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; font-size: 12px; font-weight: 700; color: var(--text-2); }
-.gc-more .yourbet { color: var(--accent); display: inline-flex; gap: 4px; align-items: center; }
+.gc-more .your-challenge { color: var(--accent); display: inline-flex; gap: 4px; align-items: center; }
 .bump { animation: bump 0.6s ease; }
 @keyframes bump { 0% { color: var(--accent); transform: scale(1.18); } 100% { transform: scale(1); } }
 
-.odds-btn {
+.challenge-btn {
   height: 46px;
   width: 100%;
   border-radius: 10px;
@@ -417,20 +429,20 @@ label.list-row { cursor: pointer; }
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
   transition: background 0.12s, border-color 0.12s;
 }
-.odds-btn:hover:not(:disabled) { border-color: #3d4a5e; }
-.odds-btn .ln { font-size: 12.5px; font-weight: 700; color: var(--text); }
-.odds-btn .pr { font-size: 13.5px; font-weight: 800; color: var(--accent); display: inline-flex; align-items: center; gap: 2px; font-variant-numeric: tabular-nums; }
-.odds-btn .pr.solo { font-size: 15px; }
-.odds-btn .mv { font-size: 8px; }
-.odds-btn .mv.up { color: var(--accent); }
-.odds-btn .mv.down { color: var(--loss); }
-.odds-btn.on { background: var(--accent); border-color: transparent; }
-.odds-btn.on .ln, .odds-btn.on .pr, .odds-btn.on .mv { color: var(--accent-ink); }
-.odds-btn.locked { opacity: 0.55; }
-.odds-btn.locked .pr { color: var(--muted); }
-.odds-btn.big { height: 56px; }
-.odds-btn.big .lbl { font-size: 12px; font-weight: 700; color: var(--text-2); }
-.odds-btn.big.on .lbl { color: var(--accent-ink); }
+.challenge-btn:hover:not(:disabled) { border-color: #3d4a5e; }
+.challenge-btn .ln { font-size: 12.5px; font-weight: 700; color: var(--text); }
+.challenge-btn .pr { font-size: 13.5px; font-weight: 800; color: var(--accent); display: inline-flex; align-items: center; gap: 2px; font-variant-numeric: tabular-nums; }
+.challenge-btn .pr.solo { font-size: 15px; }
+.challenge-btn .mv { font-size: 8px; }
+.challenge-btn .mv.up { color: var(--accent); }
+.challenge-btn .mv.down { color: var(--loss); }
+.challenge-btn.on { background: var(--accent); border-color: transparent; }
+.challenge-btn.on .ln, .challenge-btn.on .pr, .challenge-btn.on .mv { color: var(--accent-ink); }
+.challenge-btn.locked { opacity: 0.55; }
+.challenge-btn.locked .pr { color: var(--muted); }
+.challenge-btn.big { height: 56px; }
+.challenge-btn.big .lbl { font-size: 12px; font-weight: 700; color: var(--text-2); }
+.challenge-btn.big.on .lbl { color: var(--accent-ink); }
 
 .pred-card { margin: 0 16px; }
 .pred-card .q { font-weight: 700; font-size: 15.5px; line-height: 1.3; margin: 6px 0 10px; }
@@ -489,11 +501,11 @@ label.list-row { cursor: pointer; }
 .research .r { text-align: right; justify-self: end; }
 .research .v { font-weight: 700; font-variant-numeric: tabular-nums; }
 
-/* ---------- Bet cards (My Bets) ---------- */
-.bet-card { margin: 0 16px; display: flex; flex-direction: column; gap: 10px; }
-.bet-top { display: flex; align-items: flex-start; gap: 10px; }
-.bet-top .t { font-weight: 800; font-size: 16px; line-height: 1.2; }
-.bet-top .odds { font-family: var(--font-display); font-weight: 800; font-size: 18px; color: var(--text-2); margin-left: auto; white-space: nowrap; font-variant-numeric: tabular-nums; }
+/* ---------- pledges cards (My pledges) ---------- */
+.pledge-card { margin: 0 16px; display: flex; flex-direction: column; gap: 10px; }
+.pledge-top { display: flex; align-items: flex-start; gap: 10px; }
+.pledge-top .t { font-weight: 800; font-size: 16px; line-height: 1.2; }
+.pledge-top .multiplier { font-family: var(--font-display); font-weight: 800; font-size: 18px; color: var(--text-2); margin-left: auto; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .leg { display: flex; gap: 10px; align-items: flex-start; }
 .leg + .leg { border-top: 1px dashed var(--stroke); padding-top: 10px; }
 .leg-dot { width: 20px; height: 20px; border-radius: 50%; flex: none; display: grid; place-items: center; margin-top: 1px; background: var(--raised); color: var(--text-2); }
@@ -518,8 +530,8 @@ label.list-row { cursor: pointer; }
 .stake-row > div + div { border-left: 1px solid var(--stroke); }
 .stake-row b { display: block; font-family: var(--font-display); font-weight: 800; font-size: 18px; font-variant-numeric: tabular-nums; }
 .stake-row span { font-size: 11px; font-weight: 700; color: var(--muted); }
-.bet-actions { display: flex; gap: 8px; }
-.bet-actions .btn { flex: 1; }
+.pledge-actions { display: flex; gap: 8px; }
+.pledge-actions .btn { flex: 1; }
 
 .record-card { margin: 0 16px; }
 .record-big { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
@@ -643,7 +655,7 @@ label.list-row { cursor: pointer; }
 .toast.out { opacity: 0; transform: translateY(-8px); transition: 0.25s; }
 @keyframes drop { from { transform: translateY(-16px); opacity: 0; } to { transform: none; opacity: 1; } }
 
-.slipbar {
+.commitment-bar {
   position: absolute; left: 12px; right: 12px;
   bottom: calc(var(--tabbar-h) + 26px + env(safe-area-inset-bottom, 0px));
   z-index: 6;
@@ -656,27 +668,27 @@ label.list-row { cursor: pointer; }
   font-weight: 800;
   animation: drop 0.25s ease;
 }
-.slipbar .n { width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; font-size: 13px; font-weight: 900; }
-.slipbar .o { margin-left: auto; font-family: var(--font-display); font-weight: 900; font-size: 19px; color: var(--accent); }
-.slipbar.parlay-finalize { background: var(--accent); border-color: transparent; color: var(--accent-ink); }
-.slipbar.parlay-finalize .n { background: rgba(3, 20, 10, 0.15); color: var(--accent-ink); }
-.slipbar.parlay-finalize .o { color: var(--accent-ink); }
-.build-parlay { width: calc(100% - 32px); min-height: 58px; margin: 0 16px; padding: 10px 14px; display: flex; align-items: center; gap: 12px; border: 1px solid rgba(34, 214, 110, 0.28); border-radius: 16px; background: linear-gradient(110deg, rgba(34, 214, 110, 0.13), rgba(34, 214, 110, 0.05)); color: var(--text); text-align: left; }
-.build-parlay > svg:first-child { color: var(--accent); flex: none; }
-.build-parlay > svg:last-child { color: var(--muted); margin-left: auto; flex: none; }
-.build-parlay span:not(.lr-icon) { display: grid; gap: 2px; }
-.build-parlay b { font-size: 14px; }
-.build-parlay small { color: var(--muted); font-size: 12px; }
-.build-parlay.active { background: var(--surface); border-color: var(--stroke); }
-.build-parlay.active .lr-icon { width: 34px; height: 34px; flex: none; }
-.build-parlay.active .link-btn { flex: none; }
+.commitment-bar .n { width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; font-size: 13px; font-weight: 900; }
+.commitment-bar .o { margin-left: auto; font-family: var(--font-display); font-weight: 900; font-size: 19px; color: var(--accent); }
+.commitment-bar.combo-goal-finalize { background: var(--accent); border-color: transparent; color: var(--accent-ink); }
+.commitment-bar.combo-goal-finalize .n { background: rgba(3, 20, 10, 0.15); color: var(--accent-ink); }
+.commitment-bar.combo-goal-finalize .o { color: var(--accent-ink); }
+.build-combo-goal { width: calc(100% - 32px); min-height: 58px; margin: 0 16px; padding: 10px 14px; display: flex; align-items: center; gap: 12px; border: 1px solid rgba(34, 214, 110, 0.28); border-radius: 16px; background: linear-gradient(110deg, rgba(34, 214, 110, 0.13), rgba(34, 214, 110, 0.05)); color: var(--text); text-align: left; }
+.build-combo-goal > svg:first-child { color: var(--accent); flex: none; }
+.build-combo-goal > svg:last-child { color: var(--muted); margin-left: auto; flex: none; }
+.build-combo-goal span:not(.lr-icon) { display: grid; gap: 2px; }
+.build-combo-goal b { font-size: 14px; }
+.build-combo-goal small { color: var(--muted); font-size: 12px; }
+.build-combo-goal.active { background: var(--surface); border-color: var(--stroke); }
+.build-combo-goal.active .lr-icon { width: 34px; height: 34px; flex: none; }
+.build-combo-goal.active .link-btn { flex: none; }
 
-/* Bet slip */
-.slip-leg { display: flex; gap: 10px; align-items: flex-start; padding: 12px; border-radius: 14px; background: var(--surface); border: 1px solid var(--stroke); }
-.slip-leg.changed { border-color: rgba(255, 201, 64, 0.6); }
-.slip-leg.closed { border-color: rgba(255, 90, 95, 0.5); opacity: 0.85; }
-.slip-leg .price { font-family: var(--font-display); font-weight: 900; font-size: 20px; color: var(--accent); white-space: nowrap; font-variant-numeric: tabular-nums; }
-.slip-leg .old { text-decoration: line-through; color: var(--muted); font-size: 14px; margin-right: 4px; }
+/* pledges commitment */
+.commitment-leg { display: flex; gap: 10px; align-items: flex-start; padding: 12px; border-radius: 14px; background: var(--surface); border: 1px solid var(--stroke); }
+.commitment-leg.changed { border-color: rgba(255, 201, 64, 0.6); }
+.commitment-leg.closed { border-color: rgba(255, 90, 95, 0.5); opacity: 0.85; }
+.commitment-leg .price { font-family: var(--font-display); font-weight: 900; font-size: 20px; color: var(--accent); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.commitment-leg .old { text-decoration: line-through; color: var(--muted); font-size: 14px; margin-right: 4px; }
 .stake-box { display: grid; grid-template-columns: 48px 1fr 48px; gap: 8px; align-items: center; }
 .stake-box .step { height: 52px; border-radius: 14px; background: var(--raised); border: 1px solid var(--stroke); display: grid; place-items: center; }
 .stake-input { position: relative; }
@@ -755,19 +767,19 @@ label.list-row { cursor: pointer; }
   width: calc(100% - 32px);
 }
 
-/* Floating button pinned to the bottom of a page (game detail, parlay builder) */
+/* Floating button pinned to the bottom of a page (game detail, Combo Goal builder) */
 .page-fab { position: sticky; bottom: 14px; z-index: 3; margin-top: auto; padding-top: 6px; }
 .page .page-scroll:has(.page-fab) { padding-bottom: 14px; } /* sticky offsets count the padding, so keep it small */
 .page-fab .btn { box-shadow: 0 14px 34px rgba(0, 0, 0, 0.55); }
 .page-fab .btn .count-pill { margin-right: 2px; }
 .flash { animation: flash 1.1s ease; }
 @keyframes flash { 0%, 60% { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); } 100% { box-shadow: none; } }
-.parlay-list .game-card { margin: 0; }
+.combo-goal-list .game-card { margin: 0; }
 .day-bar { margin-top: 10px; }
 .simulated-note { margin: 0 16px; }
 .day-chip { flex: none; }
-.parlay-days .hscroll { padding: 0; }
-.parlay-list .league-head { padding: 6px 0 0; }
+.combo-goal-days .hscroll { padding: 0; }
+.combo-goal-list .league-head { padding: 6px 0 0; }
 
 /* No connection */
 .net-banner {
@@ -807,8 +819,8 @@ a.btn, a.dn, a.sn { text-decoration: none; color: inherit; }
 .race-horse-copy { display: flex; flex-direction: column; min-width: 0; gap: 2px; }
 .race-horse-copy b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .race-horse-copy small { color: var(--text-2); font-size: 11px; }
-.race-odds { width: 106px; flex: none; }
-.race-odds .odds-btn { width: 100%; min-height: 48px; }
+.race-target { width: 106px; flex: none; }
+.race-target .challenge-btn { width: 100%; min-height: 48px; }
 .race-result { display: flex; flex-direction: column; gap: 5px; }
 .race-result > b { font-family: var(--font-display); font-size: 22px; }
 .race-winner { color: var(--accent); }
@@ -818,5 +830,5 @@ a.btn, a.dn, a.sn { text-decoration: none; color: inherit; }
   .race-caption { display: block; margin: 5px 0 0; }
   .race-entry { gap: 8px; }
   .race-silk { width: 34px; height: 34px; }
-  .race-odds { width: 88px; }
+  .race-target { width: 88px; }
 }

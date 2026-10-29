@@ -1,4 +1,4 @@
-/* TimeOut web demo — core helpers: storage, demo clock, hashing, formatting, odds math, icons. */
+/* TimeOut web demo — core helpers: storage, demo clock, hashing, formatting, challenge targets math, icons. */
 window.TO = window.TO || {};
 (function (TO) {
   'use strict';
@@ -132,6 +132,15 @@ window.TO = window.TO || {};
       if (!signed) return body;
       return line > 0 ? `+${body}` : body;
     },
+  };
+  TO.convertOddsToMultiplier = (americanOdds) => {
+    const value = Number(americanOdds);
+    if (!Number.isFinite(value) || value === 0) return 1;
+    return value > 0 ? 1 + value / 100 : 1 + 100 / Math.abs(value);
+  };
+  TO.multiplierText = (americanOdds) => {
+    const multiplier = TO.convertOddsToMultiplier(americanOdds);
+    return `${multiplier.toFixed(2).replace(/0+$/, '').replace(/\.$/, '')}x ${multiplier > 2 ? 'Bonus' : 'Target'}`;
   };
 
   // ---------- Formatting ----------
