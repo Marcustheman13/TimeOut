@@ -23,6 +23,14 @@ Full requirements: [docs/PRD - Prioritization & Design Sprint.pdf](docs/PRD%20-%
 
 ---
 
+## System Architecture
+
+How data moves through the customer-facing app, the planned admin portal and the external services. Solid boxes are built today, dashed boxes are planned.
+
+![TimeOut system architecture: the web and iOS apps talk to Supabase and the ESPN API, a planned Express admin portal on AWS connects to Supabase Postgres, and a planned AI weekly report goes out through an email service](docs/system-architecture.png)
+
+---
+
 ORIGINAL ERD
 
 <img width="1706" height="1040" alt="Sports Betting ERD" src="https://github.com/user-attachments/assets/1183be55-ab84-49b5-9a56-1c6e293e26a4" />
@@ -43,20 +51,21 @@ users → sessions is one-to-many (one user can be logged in on several devices)
 
 ## Tech Stack
 
+The [architecture diagram](#system-architecture) shows how these pieces connect.
+
 | Layer | What we use | Where it lives |
 | --- | --- | --- |
-| Frontend (now) | Plain HTML, CSS and JavaScript, no framework | [`TimeOut - Web/`](TimeOut%20-%20Web) |
-| Frontend (iOS) | Native SwiftUI app with the same screens and features as the web demo, plus real Screen Time blocking (FamilyControls) | [`TimeOut - iOS App/`](TimeOut%20-%20iOS%20App) |
-| Backend | Node.js + Express 5 REST API | [`server/src/`](server/src) |
-| Database | PostgreSQL | [`server/db/`](server/db) |
-| Auth | bcrypt password hashes + random session tokens sent as `Authorization: Bearer <token>` | [`server/src/auth.js`](server/src/auth.js) |
-| Database hosting | **Solo:** embedded PostgreSQL ([PGlite](https://pglite.dev)), saved in `server/.data/`, nothing to install. **Shared:** a free Supabase or Neon Postgres, picked with `DATABASE_URL` in `server/.env` | [`server/src/db.js`](server/src/db.js) |
+| Web app | Plain HTML, CSS and JavaScript, no framework. Hosted on GitHub Pages and deployed by GitHub Actions from `main` | [`TimeOut - Web/`](TimeOut%20-%20Web), [`pages.yml`](.github/workflows/pages.yml) |
+| iOS app | Native SwiftUI app with the same screens and features as the web app, plus real Screen Time blocking (FamilyControls, DeviceActivity) through Monitor and Shield extensions | [`TimeOut - iOS App/`](TimeOut%20-%20iOS%20App) |
+| Database | Supabase Postgres with row-level security. Bets and wallet changes go through RPC functions such as `timeout_place_bet` and `timeout_settle_bet` | [`js/api.js`](TimeOut%20-%20Web/js/api.js), [`API.swift`](TimeOut%20-%20iOS%20App/TimeOut/Services/API.swift), `server/db/supabase-*.sql` |
+| Auth | Supabase Auth: email + password accounts with an email-confirmation link. One login works on both apps | [`js/api.js`](TimeOut%20-%20Web/js/api.js), [`API.swift`](TimeOut%20-%20iOS%20App/TimeOut/Services/API.swift) |
+| Live sports data | ESPN's public API (no key needed), called directly by each app | [`js/live.js`](TimeOut%20-%20Web/js/live.js), [`LiveFeed.swift`](TimeOut%20-%20iOS%20App/TimeOut/Engine/LiveFeed.swift) |
+| Local dev server | Node.js + Express 5. Serves the web app at `localhost:3000` and handles teams and user search while it's running. Uses embedded PostgreSQL ([PGlite](https://pglite.dev)) unless `DATABASE_URL` is set. The live site doesn't use it | [`server/src/`](server/src) |
 
-**Why this fits our team.** We plan to turn the web demo into a native iPhone app, because blocking apps uses Apple's Screen Time APIs, which only work in a real iOS app.
-A hand-built REST API means the web page (`fetch`) and the Swift app (`URLSession`) call the **same `/api/...` endpoints**, so nothing we build now is thrown away.
-Rules like "you can't stake more minutes than you have" belong on the server, where users can't edit them.
-Express and Postgres are free, we can read every line of code and see every table, and the embedded database means a teammate can clone the repo and run it in two commands without creating any accounts.
-When we want everyone on one database, one person creates a free Supabase or Neon project and shares the connection string privately. No code changes.
+**Why this fits our team.** Blocking apps uses Apple's Screen Time APIs, which only work in a real iOS app, so we need a native iPhone app next to the web app.
+Supabase gives both apps the same accounts, tables and RPC functions without us running a server, so a bet placed on the website shows up on the phone.
+Rules like "you can't stake more minutes than you have" live in those RPC functions, where users can't edit them.
+The web app is static files, so GitHub Pages can host it, and row-level security is what makes it safe for the Supabase publishable key to sit in browser code.
 
 ---
 
@@ -139,7 +148,7 @@ Error cases to try: a wrong password shows *"That password is incorrect."*; an u
 ```
 TimeOut/
 ├── README.md                    ← you are here
-├── docs/                        ← PRD, ERD image
+├── docs/                        ← PRD, ERD image, architecture diagram
 ├── server/                      ← Express API + database
 │   ├── src/index.js             ← starts the server, serves the web demo, mounts /api routes
 │   ├── src/auth.js              ← /api/auth/register, /login, /me, /logout
@@ -186,6 +195,6 @@ All requests and responses are JSON. Errors look like `{ "error": { "code", "mes
 
 ## What's Still Stored Only in the Browser
 
-Only accounts and login use the database so far. Bets, the screen-time wallet, friends, challenges, teams and settings are still in the browser's `localStorage` ([`js/state.js`](TimeOut%20-%20Web/js/state.js)).
-To move a feature over: add its tables to `schema.sql`, add routes in `server/src/`, add a function in `js/api.js`, and call it from the screen.
-Good next slices: editing the profile (username/email/password/photo), placing a bet, and sending a friend request.
+Accounts, game bets, the screen-time wallet, settings and teams are saved in Supabase. Friends, friend requests, clean-day history, and race, prediction and to-do bets are still saved only on the device (`localStorage` on the web, [`js/state.js`](TimeOut%20-%20Web/js/state.js)).
+To move a feature over: add its tables and RPC functions in Supabase, add a function in `js/api.js` and `API.swift`, and call it from the screen.
+Good next slice: sending a friend request.
