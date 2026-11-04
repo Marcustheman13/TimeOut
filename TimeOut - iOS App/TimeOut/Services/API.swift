@@ -96,7 +96,7 @@ final class API {
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         let json = data.isEmpty ? JSON.null : JSON(data: data)
         guard (200..<300).contains(status) else {
-            let raw = json["msg"].text ?? json["message"].text ?? json["error_description"].text ?? json["error"].text ?? "Supabase request failed (\(status))."
+            let raw = json["msg"].text ?? json["message"].text ?? json["error_description"].text ?? json["error"].text ?? "Request failed (\(status))."
             throw Self.friendlyError(raw, errorCode: json["error_code"].text ?? json["code"].text, status: status)
         }
         return json
@@ -135,12 +135,22 @@ final class API {
         if m.contains("duplicate key") {
             return err("taken", "That's already taken. Try something else.")
         }
-        if m.contains("jwt") && m.contains("expired") {
+        if m.contains("jwt") {
             return err("bad_token", "Your session expired. Log in again.")
         }
+        // Our own database functions explain themselves. Everything else from the database is technical.
+        if code == "p0001" {
+            let known = ["sign in required": "Your session expired. Log in again.", "not enough challenge minutes": "You're out of pledge minutes for today. Pledges reopen at midnight.",
+                         "wallet is not set up": AppError.unavailable]
+            return AppError(code: "supabase_error", message: known[m] ?? raw, status: status, debug: raw)
+        }
+        let technical = code.hasPrefix("pgrst") || code.range(of: "^[0-9a-z]{5}$", options: .regularExpression) != nil || status >= 500
+            || m.range(of: "schema cache|relation |column |function |syntax|permission denied|violates|row-level|supabase|postgres|request failed", options: .regularExpression) != nil
+        if technical { return AppError(code: "supabase_error", message: AppError.unavailable, status: status, debug: raw) }
+        if status == 401 || status == 403 { return err("bad_token", "Your session expired. Log in again.") }
         var fields: [String: String] = [:]
         if m.contains("username") { fields["username"] = raw } else if m.contains("email") { fields["email"] = raw } else if m.contains("password") { fields["password"] = raw }
-        return AppError(code: status == 409 ? "taken" : "supabase_error", message: raw, fields: fields, status: status)
+        return AppError(code: status == 409 ? "taken" : "supabase_error", message: raw, fields: fields, status: status, debug: raw)
     }
 
     private func authRequest(_ path: String, _ body: [String: Any], auth: Bool = false) async throws -> JSON {
@@ -263,11 +273,11 @@ final class API {
         var walletRows: JSON
         do {
             walletRows = try await rest("wallets?select=\(bonus),tier_boosts_by_day,tier_insurance_by_week&user_id=eq.\(safe)&limit=1")
-        } catch let e as AppError where e.message.range(of: "tier_boosts_by_day|tier_insurance_by_week|column .*does not exist", options: .regularExpression) != nil {
+        } catch let e as AppError where e.raw.range(of: "tier_boosts_by_day|tier_insurance_by_week|column .*does not exist", options: .regularExpression) != nil {
             hasPerks = false
             do {
                 walletRows = try await rest("wallets?select=\(bonus)&user_id=eq.\(safe)&limit=1")
-            } catch let e2 as AppError where e2.message.range(of: "tier_bonus_day|tier_bonus_minutes|column .*does not exist", options: .regularExpression) != nil {
+            } catch let e2 as AppError where e2.raw.range(of: "tier_bonus_day|tier_bonus_minutes|column .*does not exist", options: .regularExpression) != nil {
                 hasBonus = false
                 walletRows = try await rest("wallets?select=\(base)&user_id=eq.\(safe)&limit=1")
             }
@@ -279,7 +289,7 @@ final class API {
         do {
             settingsRows = try await rest("user_settings?select=followed_sports,timezone,notifications_enabled,app_preferences&user_id=eq.\(safe)&limit=1")
             supportsAppPreferences = true
-        } catch let e as AppError where e.message.range(of: "app_preferences", options: .caseInsensitive) != nil {
+        } catch let e as AppError where e.raw.range(of: "app_preferences", options: .caseInsensitive) != nil {
             supportsAppPreferences = false
             settingsRows = try await rest("user_settings?select=followed_sports,timezone,notifications_enabled&user_id=eq.\(safe)&limit=1")
         }
@@ -370,9 +380,8 @@ final class API {
             try? await Task.sleep(for: .seconds(delay))
             saveTask = nil
             do { try await flushState() } catch {
-                let message = (error as? AppError)?.message ?? error.localizedDescription
-                if Self.isOutOfMinutes(message) { notify("minutes", .loss, "Out of challenge minutes", "Challenges reopen at midnight."); return }
-                notify("sync", .loss, "Couldn’t save to Supabase", message)
+                if Self.isOutOfMinutes((error as? AppError)?.raw ?? "") { notify("minutes", .loss, "Out of pledge minutes", "Pledges reopen at midnight."); return }
+                notify("sync", .warn, "Couldn't sync your changes", "They're saved on this device, and TimeOut will try again.")
             }
         }
     }
@@ -444,10 +453,10 @@ final class API {
             pendingState = nil
             refund(rejected.challengeId)
             switch rejected.reason {
-            case "perkMigration": notify("perk", .loss, "Tier perks need Supabase setup", "This challenge was not saved with its boost or insurance. Run the updated tier system migration, then reload the app.")
-            case "perkUsed": notify("perk", .warn, "Tier perk already used", "This boost or insurance was already used on another device.")
-            case "bonusMigration": notify("bonus", .loss, "Tier setup needed in Supabase", "This combo was not saved. Run the tier system migration in Supabase SQL Editor, then reload the app.")
-            default: notify("minutes", .loss, "Out of challenge minutes", "Challenges reopen at midnight.")
+            case "perkMigration": notify("perk", .loss, "That perk isn't available right now", "Your pledge wasn't saved and your minutes were returned. Try it again without the perk.")
+            case "perkUsed": notify("perk", .warn, "Perk already used", "You already used this perk on another device. Your pledge wasn't saved and your minutes were returned.")
+            case "bonusMigration": notify("bonus", .loss, "Your pledge wasn't saved", "Your minutes were returned. Please try again in a few minutes.")
+            default: notify("minutes", .loss, "Out of pledge minutes", "Pledges reopen at midnight. Your minutes were returned.")
             }
         } catch {
             pendingState = pendingState ?? data
@@ -471,31 +480,31 @@ final class API {
         args["p_use_insurance"] = challenge.insured
         args["p_multiplier"] = challenge.multiplier
         let perk = challenge.boosted || challenge.insured
-        func reject(_ message: String) -> Error {
-            if Self.isOutOfMinutes(message) {
+        func reject(_ error: AppError) -> Error {
+            if Self.isOutOfMinutes(error.raw) {
                 return RejectedChallenge(challengeId: challenge.id, reason: supportsTierBonusColumns == false && bonusToday > 0 ? "bonusMigration" : "minutes")
             }
-            return AppError(code: "supabase_error", message: message)
+            return error
         }
         var saved: JSON
         do {
             if perk && supportsTierPerkColumns == false { throw RejectedChallenge(challengeId: challenge.id, reason: "perkMigration") }
             saved = try await rest("rpc/timeout_place_challenge_with_perks", method: "POST", body: args)
         } catch let e as AppError {
-            if Self.rpcMissing(e.message, "timeout_place_challenge_with_perks") {
+            if Self.rpcMissing(e.raw, "timeout_place_challenge_with_perks") {
                 if perk { throw RejectedChallenge(challengeId: challenge.id, reason: "perkMigration") }
                 do {
                     saved = try await rest("rpc/\(bonusToday > 0 ? "timeout_place_challenge_with_tiers" : "timeout_place_challenge")", method: "POST", body: legacy)
-                } catch let e2 as AppError { throw reject(e2.message) }
-            } else if Self.rpcMissing(e.message, "timeout_place_challenge_with_tiers") && !perk {
-                do { saved = try await rest("rpc/timeout_place_challenge", method: "POST", body: legacy) } catch let e2 as AppError { throw reject(e2.message) }
-            } else if Self.perkExhausted(e.message) {
+                } catch let e2 as AppError { throw reject(e2) }
+            } else if Self.rpcMissing(e.raw, "timeout_place_challenge_with_tiers") && !perk {
+                do { saved = try await rest("rpc/timeout_place_challenge", method: "POST", body: legacy) } catch let e2 as AppError { throw reject(e2) }
+            } else if Self.perkExhausted(e.raw) {
                 throw RejectedChallenge(challengeId: challenge.id, reason: "perkUsed")
             } else {
-                throw reject(e.message)
+                throw reject(e)
             }
         }
-        guard let challengeId = saved.string ?? saved["id"].string else { throw AppError(code: "supabase_error", message: "Supabase did not return the saved challenge ID.") }
+        guard let challengeId = saved.string ?? saved["id"].string else { throw AppError(code: "supabase_error", message: AppError.unavailable, debug: "No challenge ID came back.") }
         update(challenge.id) { $0.supabaseId = challengeId; $0.supabaseSynced = false }
         return challengeId
     }
@@ -547,8 +556,8 @@ final class API {
     func deleteAccount() async throws {
         do {
             _ = try await rest("rpc/timeout_delete_account", method: "POST", body: [String: Any]())
-        } catch let e as AppError where Self.rpcMissing(e.message, "timeout_delete_account") {
-            throw AppError(code: "not_set_up", message: "Account deletion isn't set up on the server yet. Email the TimeOut team to delete your account.")
+        } catch let e as AppError where Self.rpcMissing(e.raw, "timeout_delete_account") {
+            throw AppError(code: "not_set_up", message: "We can't delete your account right now. Please try again later, or contact support from the Help page.")
         }
         pendingState = nil
         saveTask?.cancel(); saveTask = nil
@@ -623,8 +632,8 @@ final class API {
     private func friendCall(_ name: String, _ body: [String: Any]) async throws -> JSON {
         do {
             return try await rest("rpc/\(name)", method: "POST", body: body, timeout: 8)
-        } catch let e as AppError where Self.rpcMissing(e.message, name) {
-            throw AppError(code: "not_set_up", message: "Friends aren't set up on the server yet. Run server/db/apply-all-november-2026.sql in Supabase.")
+        } catch let e as AppError where Self.rpcMissing(e.raw, name) {
+            throw AppError(code: "not_set_up", message: "Friends aren't available right now. Please try again in a few minutes.")
         }
     }
 

@@ -156,7 +156,7 @@
   function serverAccountCard(s) {
     const line = (k, v, id) => `<div class="row-layout"><span class="muted">${k}</span><b${id ? ` id="${id}"` : ''}>${esc(String(v))}</b></div>`;
     return `<div class="card stack-s" id="db-account">
-      <div class="row-s">${icon('check', 16)}<b>Connected to Supabase</b></div>
+      <div class="row-s">${icon('check', 16)}<b>Your account is synced</b></div>
       ${line('User ID', s.id)}
       ${line('Member since', TO.fmtDate(Date.parse(s.createdAt)))}
     </div>`;
@@ -323,8 +323,8 @@
       St.updateAccount(patch);
       ui.toast({ kind: 'win', title: 'Account saved' });
     } catch (e) {
-      if (!(e instanceof TO.AppError)) throw e;
       acctErr = e.fields || {};
+      if (!Object.keys(acctErr).length) ui.toast({ kind: 'loss', title: 'Couldn\'t save your changes', msg: TO.friendlyMessage(e) });
     }
     refresh();
   };
@@ -338,8 +338,8 @@
       else St.updateAccount({ currentPassword: document.getElementById('acct-cur').value, newPassword });
       ui.toast({ kind: 'win', title: 'Password updated' });
     } catch (e) {
-      if (!(e instanceof TO.AppError)) throw e;
       acctErr = e.fields || {};
+      if (!Object.keys(acctErr).length) ui.toast({ kind: 'loss', title: 'Couldn\'t update your password', msg: TO.friendlyMessage(e) });
     }
     refresh();
   };
@@ -351,7 +351,7 @@
     if (!(await ui.confirm({ title: 'Delete your account?', body, confirm: 'Delete account', danger: true }))) return;
     if (server) {
       try { await TO.api.deleteAccount(); } catch (e) {
-        ui.toast({ kind: 'loss', title: 'Couldn\'t delete your account', msg: e.message });
+        ui.toast({ kind: 'loss', title: 'Couldn\'t delete your account', msg: TO.friendlyMessage(e) });
         return;
       }
     }
@@ -393,7 +393,7 @@
       ui.toast({ kind: 'win', title: 'Photo updated' });
       refresh();
       TO.app.renderChrome();
-    } catch (e) { ui.toast({ kind: 'loss', title: e.message }); }
+    } catch (e) { ui.toast({ kind: 'loss', title: 'Couldn\'t update your photo', msg: e instanceof TO.AppError ? e.message : 'That image could not be read.' }); }
   };
 
   function refresh() {

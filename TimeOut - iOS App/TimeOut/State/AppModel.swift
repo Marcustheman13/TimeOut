@@ -304,7 +304,7 @@ enum Invites {
                     do {
                         friendResult = try await API.shared.acceptFriendInvite(p.invite, code: p.code)
                         await AppModel.shared.syncSocial(quiet: true)
-                    } catch { failure = (error as? AppError)?.message ?? error.localizedDescription }
+                    } catch { failure = AppError.friendly(error) }
                 } else {
                     Store.shared.addFriend(p.invite)
                     friendResult = "friends"

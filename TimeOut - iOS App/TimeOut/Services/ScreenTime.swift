@@ -209,7 +209,7 @@ final class ScreenTime {
             if wl.todayLimit <= 0 || stillOver { markLimitReached(today: todayKey) }
             lastError = nil
         } catch {
-            lastError = "Couldn't start the screen time limit: \(error.localizedDescription)"
+            lastError = "We couldn't start your screen time limit. Close TimeOut, open it again, and try once more."
             defaults.removeObject(forKey: ScreenTimeShared.registeredKey)
         }
     }
@@ -291,7 +291,7 @@ final class ScreenTime {
             defaults.set(end.timeIntervalSince1970, forKey: ScreenTimeShared.overrideUntilKey)
             overrideUntil = end
         } catch {
-            lastError = "Couldn't unlock your apps: \(error.localizedDescription)"
+            lastError = "We couldn't unlock your apps. Please try again."
         }
     }
 

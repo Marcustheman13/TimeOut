@@ -80,7 +80,7 @@ final class SocialModel {
                 await AppModel.shared.syncSocial(quiet: true)
                 done()
             } catch {
-                UIState.shared.toast(.loss, "Couldn't update your friends", (error as? AppError)?.message ?? error.localizedDescription)
+                UIState.shared.toast(.loss, "Couldn't update your friends", AppError.friendly(error))
             }
         }
     }
@@ -94,7 +94,7 @@ final class SocialModel {
                     await AppModel.shared.syncSocial(quiet: true)
                     UIState.shared.toast(.win, result == "friends" ? "You and @\(u) are now friends" : "Friend request sent to @\(u)")
                 } catch {
-                    UIState.shared.toast(.loss, "Couldn't send that request", (error as? AppError)?.message ?? error.localizedDescription)
+                    UIState.shared.toast(.loss, "Couldn't send that request", AppError.friendly(error))
                 }
             }
             return
