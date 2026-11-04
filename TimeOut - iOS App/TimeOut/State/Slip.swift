@@ -1,13 +1,13 @@
 import Foundation
 import Observation
 
-/// The challenge slip (Screen 3). A port of the web demo's slip.js state and actions.
+/// The daily commitment (Screen 3). A port of the web app's commitment.js state and actions.
 @Observable
 final class Slip {
     static let shared = Slip()
 
     var picks: [SlipPick] = []
-    /// Picks stack up only in combo mode; otherwise a new pick replaces the old one.
+    /// Picks stack up only in Combo Goal mode; otherwise a new pick replaces the old one.
     var comboMode = false
     var pledgeMinutes: String?
     var boost = false
@@ -39,7 +39,7 @@ final class Slip {
         }
         let hasRace = picks.contains { $0.ref.hasPrefix("race-") }
         if comboMode && (sel.kind == "race" || hasRace) {
-            ui.toast(.warn, "Virtual races are single picks", "Place a virtual race challenge on its own, outside a combo.")
+            ui.toast(.warn, "Virtual races are single picks", "Use a virtual race pledge on its own, outside a Combo Goal.")
             return
         }
         let pick = SlipPick(selId: sel.id, price: sel.price, line: sel.line, ref: Self.refOf(sel))
@@ -50,16 +50,15 @@ final class Slip {
             afterChange()
             return
         }
-        if let same = picks.firstIndex(where: { $0.ref == pick.ref }) {
-            picks[same] = pick
-            ui.toast(.info, "Pick swapped", "A combo can only have one pick per game.", ms: 2600)
-        } else {
-            if picks.count >= Rules.maxPicks {
-                ui.toast(.warn, "Combos are limited to \(Rules.maxPicks) picks", "Remove a pick to add another.")
-                return
-            }
-            picks.append(pick)
+        if picks.contains(where: { $0.ref == pick.ref }) {
+            ui.toast(.warn, "One choice per matchup", "Remove the current choice before selecting another for this game.")
+            return
         }
+        if picks.count >= Rules.maxMatchupPicks {
+            ui.toast(.warn, "Combo Goals allow up to \(Rules.maxMatchupPicks) choices", "Remove a choice to add another.")
+            return
+        }
+        picks.append(pick)
         error = nil
         afterChange()
     }
@@ -110,7 +109,10 @@ final class Slip {
 
     var decimal: Double { picks.reduce(1.0) { $0 * PointValueMath.decimal($1.price) } }
 
-    struct Numbers { var wl: WalletView; var pledgeMinutes: Int?; var dec: Double; var american: Int; var mult: Double; var winnings: Int; var valid: Bool }
+    struct Numbers {
+        var wl: WalletView; var pledgeMinutes: Int?; var dec: Double; var american: Int; var mult: Double
+        var targetMultiplier: Double; var targetMinutes: Int; var capApplied: Bool; var winnings: Int; var valid: Bool
+    }
 
     func numbers() -> Numbers {
         let wl = Store.shared.wallet
@@ -119,9 +121,12 @@ final class Slip {
         var mult = wl.multiplier
         if boost && wl.boostsLeft > 0 { mult *= 1 + Rules.boostPercent }
         let s = pledgeMinutes ?? 0
-        let winnings = jsRoundInt(Double(jsRoundInt(Double(s) * dec) - s) * mult)
+        let rawTarget = s + jsRoundInt(Double(jsRoundInt(Double(s) * dec) - s) * mult)
+        let targetMinutes = min(rawTarget, Rules.maxAllowedMinutes)
         let valid = pledgeMinutes != nil && pledgeMinutes! >= 1 && pledgeMinutes! <= wl.balance && Net.shared.online
-        return Numbers(wl: wl, pledgeMinutes: pledgeMinutes, dec: dec, american: PointValueMath.fromDecimal(dec), mult: mult, winnings: winnings, valid: valid)
+        return Numbers(wl: wl, pledgeMinutes: pledgeMinutes, dec: dec, american: PointValueMath.fromDecimal(dec), mult: mult,
+                       targetMultiplier: (dec * 100).rounded() / 100, targetMinutes: targetMinutes, capApplied: rawTarget > Rules.maxAllowedMinutes,
+                       winnings: max(0, targetMinutes - s), valid: valid)
     }
 
     /// The pledge shown when the slip opens: the last pledge, capped to the balance.
@@ -179,15 +184,14 @@ final class Slip {
         let n = numbers()
         do {
             let challenge = try Store.shared.placeChallenge(picks: picks, pledgeMinutes: n.pledgeMinutes, boost: boost, insure: insure)
-            let label = challenge.picks.count > 1 ? "\(challenge.picks.count)-pick combo" : challenge.picks[0].label
-            let win = jsRoundInt(Double(jsRoundInt(Double(challenge.pledgeMinutes) * challenge.decimal) - challenge.pledgeMinutes) * challenge.multiplier)
-            ui.toast(.win, "Challenge placed", "\(label) · \(challenge.pledgeMinutes) min to earn \(win) min. It's in My Challenges.")
+            let label = challenge.picks.count > 1 ? "\(challenge.picks.count)-pick Combo Goal" : challenge.picks[0].label
+            ui.toast(.win, "Pledge locked in", "\(label) · \(challenge.pledgeMinutes) min committed. Track it in My Challenges.")
             clear()
             ui.closeSheet(.slip, silent: true)
             ui.closePage(.combo, silent: true)
         } catch let e as AppError {
             error = e.code == "value_changed" ? nil : e.message
-            if e.code == "value_changed" { ui.toast(.warn, "Point value changed", "Review the new point value and confirm again.") }
+            if e.code == "value_changed" { ui.toast(.warn, "Challenge target changed", "Review the new target and confirm again.") }
         } catch {}
     }
 }

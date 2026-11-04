@@ -171,7 +171,7 @@
       <div class="commitment-summary">
         <div class="row-layout small"><span>Committed Today</span><b>${n.valid ? pledgeMinutes : 0} min</b></div>
         <div class="row-layout small"><span>Combined Target</span><b class="green">${n.targetMultiplier.toFixed(2)}x</b></div>
-        <div class="row-layout small"><span>Tomorrow's Projected Allowance</span><b class="green">${n.valid ? n.targetMinutes : 0} min</b></div>
+        <div class="row-layout small"><span>Tomorrow's Projected Allowance</span><b class="green">${wl.tomorrowLimit + (n.valid ? n.winnings : 0)} min</b></div>
         ${n.capApplied ? '<span class="tag yellow">Max Daily Cap Applied (120m max)</span>' : ''}
       </div>
       <div class="outcomes">
@@ -179,6 +179,7 @@
         <div class="l"><span>If a challenge is missed</span><b>−${n.valid ? pledgeMinutes : 0} min</b><span>from tomorrow's phone time</span></div>
       </div>
       <div class="row-layout small"><span class="muted">Available today after pledge</span><b class="num">${n.valid ? after : wl.balance} of ${wl.balance} min</b></div>
+      ${n.mult > 1 ? `<div class="row-layout small"><span class="muted">Earned-minutes multiplier${commitment.boost ? ' (streak + boost)' : ' (clean streak)'}</span><b class="green">${TO.state.fmtMult(+n.mult.toFixed(3))}</b></div>` : ''}
       ${commitment.error ? `<div class="form-error">${esc(commitment.error)}</div>` : ''}`;
   }
 
@@ -189,7 +190,7 @@
     if (st.closed) return `<button class="btn primary full" disabled>Remove unavailable picks to continue</button>`;
     if (st.changed) return `<button class="btn warn full" data-act="commitment-accept">Accept updated target</button>`;
     const n = numbers();
-    if (n.wl.lockedOut || n.wl.balance <= 0) return `<button class="btn full" disabled>${icon('lock', 18)} Challenging locked until midnight</button>`;
+    if (n.wl.lockedOut || n.wl.balance <= 0) return `<button class="btn full" disabled>${icon('lock', 18)} New pledges resume at midnight</button>`;
     return `<button class="btn primary full" data-act="commitment-place" ${n.valid ? '' : 'disabled'}>${commitment.selectedPicks.length > 1 ? `Lock In ${commitment.selectedPicks.length}-Pick Combo Goal (${n.pledgeMinutes}m)` : `Confirm ${n.pledgeMinutes}m Pledge`}</button>${more}`;
   }
 
@@ -327,7 +328,7 @@
     } catch (e) {
       if (!(e instanceof TO.AppError)) throw e;
       commitment.error = e.code === 'value_changed' ? null : e.message;
-      if (e.code === 'value_changed') ui.toast({ kind: 'warn', title: 'Challenge target changed', msg: 'Review the new point value and confirm again.' });
+      if (e.code === 'value_changed') ui.toast({ kind: 'warn', title: 'Challenge target changed', msg: 'Review the new target and confirm again.' });
       ui.refreshSheet('commitment');
     }
   };

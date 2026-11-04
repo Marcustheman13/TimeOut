@@ -62,22 +62,22 @@ struct MyChallengesView: View {
             ScrollView {
                 VStack(spacing: 0) {
                     Color.clear.frame(height: 0).id("top")
-                    PageHead(title: "My Challenges", text: "Follow your open challenges live and see how every past challenge turned out.")
+                    PageHead(title: "My Challenges", text: "Follow active challenges and review your earned minutes.")
                     VStack(spacing: 14) {
                         RecordCard()
                         Seg {
                             SegButton(on: model.tab == "open", action: { model.tab = "open" }) {
-                                Text("Open challenges"); CountPill(n: open.count, off: open.isEmpty).scaleEffect(0.9)
+                                Text("Active"); CountPill(n: open.count, off: open.isEmpty).scaleEffect(0.9)
                             }
                             SegButton(on: model.tab == "history", action: { model.tab = "history" }) {
-                                Text("Challenge history"); CountPill(n: counts.all, off: true).scaleEffect(0.9)
+                                Text("Completed"); CountPill(n: counts.all, off: true).scaleEffect(0.9)
                             }
                         }
                         .gutter()
                         if model.tab == "open" {
                             if open.isEmpty {
-                                EmptyState(icon: .ticket, title: "No open challenges", text: "Go to Home and tap any point value to start a challenge. It takes two taps: pick a price, then tap Place challenge.") {
-                                    Button("Find a game") { ui.go("home") }.buttonStyle(.btn(.primary))
+                                EmptyState(icon: .target, title: "No active challenges", text: "Choose a challenge target from a matchup to start a pledge.") {
+                                    Button("Find a matchup") { ui.go("home") }.buttonStyle(.btn(.primary))
                                 }
                             } else {
                                 if !liveNow.isEmpty {
@@ -102,9 +102,9 @@ struct MyChallengesView: View {
                             }
                             .scrollIndicators(.hidden)
                             if resolved.isEmpty {
-                                EmptyState(icon: .chart, title: challenges.isEmpty ? "No resolved challenges yet" : "Nothing here yet",
-                                           text: "Challenges move here within a few minutes of their game ending, marked Won, Lost or Voided.") {
-                                    if challenges.isEmpty { Button("Place your first challenge") { ui.go("home") }.buttonStyle(.btn(.primary)) }
+                                EmptyState(icon: .chart, title: challenges.isEmpty ? "No completed challenges yet" : "Nothing here yet",
+                                           text: "Completed challenges appear here after the matchup ends.") {
+                                    if challenges.isEmpty { Button("Choose your first challenge") { ui.go("home") }.buttonStyle(.btn(.primary)) }
                                 }
                             } else {
                                 ForEach(resolved) { ChallengeCard(challenge: $0).gutter() }
@@ -173,7 +173,7 @@ func leagueShort(_ id: String) -> String {
     switch id {
     case "pred": return "PRED"
     case "todo": return "TO-DO"
-    case "combo": return "Combo"
+    case "combo": return "Combo Goal"
     case "race": return "RACE"
     default: return Sim.leagues[id]?.short ?? id.uppercased()
     }
@@ -218,7 +218,7 @@ struct ChallengeCard: View {
     private var open: some View {
         let single = challenge.picks.count == 1
         let st = ChallengeLogic.overallStanding(challenge)
-        let sub = single ? "\(challenge.picks[0].marketLabel) · \(challenge.picks[0].matchup)" : "Every pick must win"
+        let sub = single ? "\(challenge.picks[0].marketLabel) · \(challenge.picks[0].matchup)" : "Complete each selected target"
         return VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 10) {
                 VStack(alignment: .leading, spacing: 2) {
@@ -226,7 +226,7 @@ struct ChallengeCard: View {
                     Text(sub).font(.barlow(13)).foregroundStyle(Theme.text2)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                Text(PointValueMath.fmt(challenge.american)).font(.display(18, 800)).monospacedDigit().foregroundStyle(Theme.text2)
+                Text(PointValueMath.multiplierText(PointValueMath.fromDecimal(challenge.decimal))).font(.display(18, 800)).monospacedDigit().foregroundStyle(Theme.text2).lineLimit(1).fixedSize()
             }
             if challenge.boosted || challenge.multiplier > 1 {
                 HStack(spacing: 6) {
@@ -245,7 +245,7 @@ struct ChallengeCard: View {
                         PickDot(state: ls)
                         VStack(alignment: .leading, spacing: 6) {
                             VStack(alignment: .leading, spacing: 0) {
-                                (Text(l.label) + Text(" \(PointValueMath.fmt(l.price))").font(.barlow(14.5, 600)).foregroundStyle(Theme.muted)).font(.barlow(14.5, 700))
+                                (Text(l.label) + Text(" \(PointValueMath.multiplierText(l.price))").font(.barlow(14.5, 600)).foregroundStyle(Theme.muted)).font(.barlow(14.5, 700))
                                 Text("\(l.marketLabel) · \(l.matchup)").font(.barlow(12.5)).foregroundStyle(Theme.text2)
                             }
                             if l.result == "pending" { LiveBox(pick: l) } else { Text(l.final ?? "").font(.barlow(12.5, 700)).foregroundStyle(Theme.text2) }
@@ -255,11 +255,11 @@ struct ChallengeCard: View {
                 HStack { StandingTag(st: st); Spacer(); if challenge.insured { Tag("Insured", color: Theme.purple) } }
             }
             HStack(spacing: 0) {
-                pledgeCell("\(challenge.pledgeMinutes)", "Min pledged", Theme.text)
+                pledgeCell("\(challenge.pledgeMinutes)", "Min committed", Theme.text)
                 VRule()
-                pledgeCell("+\(ChallengeText.toWin(challenge))", "Min to win", Theme.accent)
+                pledgeCell("+\(ChallengeText.toWin(challenge))", "Target earned minutes", Theme.accent)
                 VRule()
-                pledgeCell(Fmt.time(challenge.placedAt), "Placed \(Fmt.day(challenge.placedAt).lowercased())", Theme.text)
+                pledgeCell(Fmt.time(challenge.placedAt), "Started \(Fmt.day(challenge.placedAt).lowercased())", Theme.text)
             }
             .fixedSize(horizontal: false, vertical: true)
             .padding(.vertical, 9).padding(.horizontal, 4)
@@ -291,17 +291,17 @@ struct ChallengeCard: View {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 6) {
                         StatusPill(status: challenge.status)
-                        if !single { Tag(challenge.kind == "todo" ? "To-do" : "Combo") }
+                        if !single { Tag(challenge.kind == "todo" ? "To-do" : "Combo Goal") }
                     }
                     Text(ChallengeText.title(challenge)).font(.barlow(16, 800))
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 VStack(alignment: .trailing, spacing: 0) {
-                    Text(PointValueMath.fmt(challenge.american)).font(.display(16, 800)).foregroundStyle(Theme.text2)
+                    Text(PointValueMath.multiplierText(PointValueMath.fromDecimal(challenge.decimal))).font(.display(16, 800)).foregroundStyle(Theme.text2)
                     switch challenge.status {
                     case "won": Text("+\(challenge.reward - challenge.pledgeMinutes) min").font(.display(22, 800)).foregroundStyle(Theme.accent)
                     case "lost": Text("−\(challenge.pledgeMinutes) min").font(.display(22, 800)).foregroundStyle(Theme.loss)
-                    default: Text("\(challenge.insurancePaid == true ? "Insurance refund" : "Pledge returned") · \(challenge.pledgeMinutes) min").font(.barlow(13, 700)).foregroundStyle(Theme.text2)
+                    default: Text("\(challenge.insurancePaid == true ? "Miss-one protection returned your minutes" : "Committed minutes returned") · \(challenge.pledgeMinutes) min").font(.barlow(13, 700)).foregroundStyle(Theme.text2)
                     }
                 }
             }
@@ -310,19 +310,19 @@ struct ChallengeCard: View {
                 HStack(alignment: .top, spacing: 10) {
                     PickDot(state: l.result)
                     VStack(alignment: .leading, spacing: 0) {
-                        (Text(l.label) + Text(" \(PointValueMath.fmt(l.price))").font(.barlow(14.5, 600)).foregroundStyle(Theme.muted)).font(.barlow(14.5, 700))
+                        (Text(l.label) + Text(" \(PointValueMath.multiplierText(l.price))").font(.barlow(14.5, 600)).foregroundStyle(Theme.muted)).font(.barlow(14.5, 700))
                         (Text(l.kind == "todo" ? l.marketLabel : l.matchup) + Text(l.final == nil ? "" : " · ") + Text(l.final ?? "").font(.barlow(12.5, 700)))
                             .font(.barlow(12.5)).foregroundStyle(Theme.text2)
                     }
                 }
             }
             if challenge.status == "void" {
-                Note(.warn, icon: .info, challenge.kind == "todo" ? "" : "The game was postponed or cancelled, so this challenge was voided and your full pledge came back.")
+                Note(.warn, icon: .info, challenge.kind == "todo" ? "" : "The game was postponed or cancelled, so your committed minutes were returned.")
             }
             HStack {
-                Text("\(challenge.pledgeMinutes) min pledgedd · placed \(Fmt.day(challenge.placedAt)) \(Fmt.time(challenge.placedAt))")
+                Text("\(challenge.pledgeMinutes) min committed · started \(Fmt.day(challenge.placedAt)) \(Fmt.time(challenge.placedAt))")
                 Spacer()
-                Text("Resolved \(Fmt.ago(challenge.resolvedAt ?? challenge.placedAt))")
+                Text("Updated \(Fmt.ago(challenge.resolvedAt ?? challenge.placedAt))")
             }
             .font(.barlow(11.5, 700)).foregroundStyle(Theme.muted)
             if !compact && challenge.kind != "todo" { shareButton }
@@ -374,13 +374,12 @@ struct NowPointValue: View {
     var body: some View {
         if pick.result == "pending" && pick.kind != "todo", let cur = Feed.currentSelection(pick.selId), let sel = cur.sel {
             if !cur.open {
-                Tag("Challenging closed")
+                Tag("Challenges closed")
             } else if sel.price == pick.price && sel.line == pick.line {
-                Tag("Point value now \(PointValueMath.fmt(sel.price))")
+                Tag("Target now \(PointValueMath.multiplierText(sel.price))")
             } else {
-                let better = PointValueMath.decimal(sel.price) < PointValueMath.decimal(pick.price)
-                let line = sel.market == "margin" || sel.market == "total" ? "\(PointValueMath.fmtLine(sel.line ?? 0, signed: sel.market == "margin")) " : ""
-                Tag("Point value now \(line)\(PointValueMath.fmt(sel.price))", better ? .green : .red)
+                let improved = PointValueMath.multiplier(sel.price) > PointValueMath.multiplier(pick.price)
+                Tag("Target now \(PointValueMath.multiplierText(sel.price))", improved ? .green : .red)
             }
         }
     }
@@ -478,12 +477,12 @@ struct ShareSheet: View {
 
     var body: some View {
         let challenge = Store.shared.data?.challenges.first { $0.id == challengeId }
-        SheetFrame("Share challenge", close: { UIState.shared.closeSheet(.share(challengeId)) }) {
+        SheetFrame("Share pledge", close: { UIState.shared.closeSheet(.share(challengeId)) }) {
             if let image {
                 Image(uiImage: image).resizable().scaledToFit()
                     .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                     .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Theme.stroke, lineWidth: 1))
-                    .accessibilityLabel("Challenge card image showing the teams, pick, point value and pledge")
+                    .accessibilityLabel("Pledge card image showing the teams, pick, target and pledge")
             } else {
                 Text("Creating image…").font(.barlow(13)).foregroundStyle(Theme.text2).card()
             }
@@ -497,8 +496,8 @@ struct ShareSheet: View {
                 .buttonStyle(.btn(.primary, full: true))
             }
             Button {
-                if let challenge, Clipboard.copy(ShareCard.text(challenge)) { UIState.shared.toast(.win, "Challenge copied", "Paste it into any chat.") }
-            } label: { BtnLabel("Copy challenge text", icon: .copy, iconSize: 16) }
+                if let challenge, Clipboard.copy(ShareCard.text(challenge)) { UIState.shared.toast(.win, "Pledge copied", "Paste it into any chat.") }
+            } label: { BtnLabel("Copy pledge text", icon: .copy, iconSize: 16) }
             .buttonStyle(.btn(.ghost, full: true))
         }
         .task {
@@ -510,8 +509,8 @@ struct ShareSheet: View {
 /// The 1080×1350 share image (teams, pick, point value and pledge), drawn like the web demo's canvas.
 enum ShareCard {
     static func text(_ challenge: Challenge) -> String {
-        let picks = challenge.picks.map { "\($0.label) (\(PointValueMath.fmt($0.price))) · \($0.matchup)" }.joined(separator: "\n")
-        return "My TimeOut \(challenge.picks.count > 1 ? "combo" : "challenge"):\n\(picks)\nOdds \(PointValueMath.fmt(challenge.american)) · \(challenge.pledgeMinutes) min of screen time to earn \(ChallengeText.toWin(challenge)) min"
+        let picks = challenge.picks.map { "\($0.label) (\(PointValueMath.multiplierText($0.price))) · \($0.matchup)" }.joined(separator: "\n")
+        return "My TimeOut \(challenge.picks.count > 1 ? "Combo Goal" : "pledge"):\n\(picks)\n\(PointValueMath.multiplierText(PointValueMath.fromDecimal(challenge.decimal))) · \(challenge.pledgeMinutes) min of screen time to earn \(ChallengeText.toWin(challenge)) min"
     }
 
     static func render(_ challenge: Challenge) -> UIImage {
@@ -562,7 +561,7 @@ enum ShareCard {
             // Wordmark
             let tw = text("Time", 80, 150, display(84, 900, italic: true), ui("#f2f5f9"))
             _ = text("Out", 80 + tw, 150, display(84, 900, italic: true), ui("#22d66e"))
-            _ = text("@\(Store.shared.account?.username ?? "")'s challenge", 80, 200, body(30), ui("#8c96a8"))
+            _ = text("@\(Store.shared.account?.username ?? "")'s pledge", 80, 200, body(30), ui("#8c96a8"))
 
             // Status pill
             let status = challenge.status.uppercased()
@@ -595,12 +594,12 @@ enum ShareCard {
                 _ = text("\(challenge.picks[0].marketLabel.uppercased()) · MY PICK", 110, y + 40, body(30), ui("#8c96a8"))
                 y = wrap(challenge.picks[0].label, 110, y + 130, W - 220, 90, 2, display(88), ui("#f2f5f9"))
             } else {
-                _ = text(challenge.picks.count > 1 ? "\(challenge.picks.count)-PICK COMBO" : "MY PICK", 110, y + 10, body(30), ui("#8c96a8"))
+                _ = text(challenge.picks.count > 1 ? "\(challenge.picks.count)-PICK COMBO GOAL" : "MY PICK", 110, y + 10, body(30), ui("#8c96a8"))
                 y += 80
                 for l in challenge.picks {
                     _ = text(l.label, 110, y + 30, display(60), ui("#f2f5f9"))
                     y = wrap("\(l.marketLabel) · \(l.matchup)", 110, y + 76, W - 360, 34, 2, body(28, 600), ui("#8c96a8"))
-                    _ = text(PointValueMath.fmt(l.price), W - 110, y - 60, display(50), ui("#22d66e"), align: .right)
+                    _ = text("\(PointValueMath.trimmedX(PointValueMath.multiplier(l.price)))x", W - 110, y - 60, display(50), ui("#22d66e"), align: .right)
                     y += 30
                 }
             }
@@ -612,13 +611,13 @@ enum ShareCard {
                 _ = text(label, x, by + 20, body(26), ui("#8c96a8"))
                 _ = text(value, x, by + 100, display(76), ui(color))
             }
-            col("VALUE", PointValueMath.fmt(challenge.american), 110, "#f2f5f9")
+            col("TARGET", "\(PointValueMath.trimmedX(challenge.decimal))x", 110, "#f2f5f9")
             col("PLEDGE", "\(challenge.pledgeMinutes) min", 420, "#f2f5f9")
             col(challenge.status == "lost" ? "LOST" : challenge.status == "won" ? "WON" : "TO WIN",
                 challenge.status == "lost" ? "−\(challenge.pledgeMinutes)" : "+\(challenge.status == "won" ? challenge.reward - challenge.pledgeMinutes : ChallengeText.toWin(challenge))", 730,
                 challenge.status == "lost" ? "#ff5a5f" : "#22d66e")
 
-            _ = text("Challenging screen time, not money.", W / 2, 1160, body(30, 600), ui("#8c96a8"), align: .center)
+            _ = text("Screen time on the line, not money.", W / 2, 1160, body(30, 600), ui("#8c96a8"), align: .center)
             _ = text("TimeOut", W / 2, 1230, display(40, 900, italic: true), ui("#22d66e"), align: .center)
         }
     }

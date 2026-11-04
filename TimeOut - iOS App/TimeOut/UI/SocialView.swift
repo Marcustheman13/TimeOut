@@ -56,16 +56,83 @@ final class SocialModel {
                       share: PrivacySettings(record: false, minutes: false, challenges: false), remote: true)
     }
 
+    /// The invite link, with this account's code when the server can provide one.
+    private func inviteLink() async -> String { Invites.friendLink(code: await API.shared.myInviteCode()) }
+
     func copyInvite() {
-        let link = Invites.friendLink()
-        _ = Clipboard.copy(link)
-        UIState.shared.toast(.win, "Invite link copied", link, ms: 5000)
+        Task {
+            let link = await inviteLink()
+            _ = Clipboard.copy(link)
+            UIState.shared.toast(.win, "Invite link copied", link, ms: 5000)
+        }
+    }
+
+    func shareInvite() {
+        Task { NativeShare.present(await inviteLink()) }
+    }
+
+    /// Runs a friend action on the server and refreshes, or uses this device's accounts in offline mode.
+    private func perform(_ server: @escaping () async throws -> Void, offline: () -> Void, done: @escaping () -> Void = {}) {
+        guard Store.shared.usesServerSocial else { offline(); done(); return }
+        Task {
+            do {
+                try await server()
+                await AppModel.shared.syncSocial(quiet: true)
+                done()
+            } catch {
+                UIState.shared.toast(.loss, "Couldn't update your friends", (error as? AppError)?.message ?? error.localizedDescription)
+            }
+        }
     }
 
     func addFriend(_ u: String) {
-        let rel = Store.shared.relation(u)
-        Store.shared.sendFriendRequest(u)
+        let store = Store.shared
+        if store.usesServerSocial {
+            Task {
+                do {
+                    let result = try await API.shared.sendFriendRequest(u)
+                    await AppModel.shared.syncSocial(quiet: true)
+                    UIState.shared.toast(.win, result == "friends" ? "You and @\(u) are now friends" : "Friend request sent to @\(u)")
+                } catch {
+                    UIState.shared.toast(.loss, "Couldn't send that request", (error as? AppError)?.message ?? error.localizedDescription)
+                }
+            }
+            return
+        }
+        let rel = store.relation(u)
+        store.sendFriendRequest(u)
         UIState.shared.toast(.win, rel == "incoming" ? "You and @\(u) are now friends" : "Friend request sent to @\(u)")
+    }
+
+    func cancelRequest(_ u: String) {
+        perform({ try await API.shared.cancelFriendRequest(u) }, offline: { Store.shared.cancelFriendRequest(u) })
+    }
+
+    func answerRequest(_ r: FriendRequest, accept: Bool) {
+        let from = r.from ?? ""
+        perform({ try await API.shared.answerFriendRequest(from, accept: accept) }, offline: {
+            if accept { Store.shared.acceptFriendRequest(r.id) } else { Store.shared.declineFriendRequest(r.id) }
+        }, done: {
+            if accept { UIState.shared.toast(.win, "You and @\(from) are now friends") }
+        })
+    }
+
+    func removeFriend(_ u: String, done: @escaping () -> Void) {
+        perform({ try await API.shared.removeFriend(u) }, offline: { Store.shared.removeFriend(u) }, done: done)
+    }
+
+    /// Sends the request again. On a real account that also moves it to the top of their list.
+    func resend(_ to: String) {
+        guard Store.shared.usesServerSocial else {
+            do {
+                try Store.shared.resendFriendRequest(to)
+                UIState.shared.toast(.win, "Request sent again to @\(to)", "You can send another one in an hour.")
+            } catch let e as AppError { UIState.shared.toast(.warn, "Not yet", e.message) } catch {}
+            return
+        }
+        perform({ _ = try await API.shared.sendFriendRequest(to) }, offline: {}, done: {
+            UIState.shared.toast(.win, "Request sent again to @\(to)", "You can send another one in an hour.")
+        })
     }
 }
 
@@ -87,8 +154,8 @@ struct SocialView: View {
                         MeCard()
                         FindCard()
                         Seg {
-                            SegButton(on: model.tab == "board", action: { model.tab = "board" }) { Text("Friends") }
-                            SegButton(on: model.tab == "requests", action: { model.tab = "requests" }) {
+                            SegButton(on: model.tab == "board", action: { model.tab = "board"; Task { await app.syncSocial() } }) { Text("Friends") }
+                            SegButton(on: model.tab == "requests", action: { model.tab = "requests"; Task { await app.syncSocial() } }) {
                                 Text("Requests")
                                 if reqCount > 0 { CountPill(n: reqCount, bg: Theme.live, fg: .white).scaleEffect(0.9) }
                             }
@@ -109,7 +176,12 @@ struct SocialView: View {
             }
             .scrollIndicators(.hidden)
             .scrollDismissesKeyboard(.immediately)
+            .refreshable {
+                await app.syncSocial()
+                await store.refreshTeams()
+            }
             .onChange(of: ui.scrollTopToken) { proxy.scrollTo("top", anchor: .top) }
+            .onAppear { Task { await app.syncSocial() } }
         }
     }
 }
@@ -163,9 +235,10 @@ struct FindCard: View {
             .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(focused ? Theme.accent : Theme.stroke, lineWidth: 1))
             SearchResults()
             HStack {
-                Text("Or share your invite link").font(.barlow(13)).foregroundStyle(Theme.text2).lineLimit(1)
+                Text("Or send your invite link").font(.barlow(13)).foregroundStyle(Theme.text2).lineLimit(1)
                 Spacer()
-                Button { model.copyInvite() } label: { BtnLabel("Copy link", icon: .link, iconSize: 14) }.buttonStyle(.btn(.ghost, .xs))
+                Button { model.shareInvite() } label: { BtnLabel("Share", icon: .share, iconSize: 14) }.buttonStyle(.btn(.primary, .xs))
+                Button { model.copyInvite() } label: { BtnLabel("Copy", icon: .link, iconSize: 14) }.buttonStyle(.btn(.ghost, .xs))
             }
             .padding(.top, 2)
         }
@@ -195,7 +268,7 @@ struct SearchResults: View {
                         VStack(alignment: .leading, spacing: 3) {
                             Text("No one found with the username \"\(q)\".").foregroundStyle(Theme.text).font(.barlow(13, 700))
                             Text("They might not be on TimeOut yet. Send them your invite link instead.")
-                            Button { model.copyInvite() } label: { BtnLabel("Copy invite link", icon: .link, iconSize: 14) }
+                            Button { model.shareInvite() } label: { BtnLabel("Share invite link", icon: .share, iconSize: 14) }
                                 .buttonStyle(.btn(.primary, .xs)).padding(.top, 5)
                         }
                     }
@@ -218,7 +291,7 @@ struct SearchResults: View {
                             .buttonStyle(.press)
                             switch rel {
                             case "friend": Tag("Friends", .green)
-                            case "requested": Button("Requested") { store.cancelFriendRequest(p.username) }.buttonStyle(.btn(.ghost, .xs))
+                            case "requested": Button("Requested") { model.cancelRequest(p.username) }.buttonStyle(.btn(.ghost, .xs))
                             case "incoming": Button("Accept") { model.addFriend(p.username) }.buttonStyle(.btn(.primary, .xs))
                             default: Button { model.addFriend(p.username) } label: { BtnLabel("Add", icon: .userPlus, iconSize: 14) }.buttonStyle(.btn(.primary, .xs))
                             }
@@ -237,7 +310,7 @@ struct Leaderboard: View {
         if store.data?.friends.isEmpty ?? true {
             EmptyState(icon: .users, title: "Keep up with your friends",
                        text: "Compare screen-time records and build teams that compete for a week or a season. Add your first friend to get started.") {
-                Button { SocialModel.shared.copyInvite() } label: { BtnLabel("Invite a friend", icon: .link, iconSize: 16) }.buttonStyle(.btn(.primary))
+                Button { SocialModel.shared.shareInvite() } label: { BtnLabel("Invite a friend", icon: .share, iconSize: 16) }.buttonStyle(.btn(.primary))
                 Button("Search usernames instead") { NotificationCenter.default.post(name: .focusSocialSearch, object: nil) }.buttonStyle(.btn(.quiet, .sm))
             }
         } else {
@@ -326,11 +399,8 @@ struct RequestsList: View {
                                     Text("\(p != nil && p!.name != from ? "\(p!.name) · " : "")Received \(Fmt.ago(r.at))").font(.barlow(11.5)).foregroundStyle(Theme.muted)
                                 }
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                                Button("Decline") { store.declineFriendRequest(r.id) }.buttonStyle(.btn(.ghost, .xs))
-                                Button("Accept") {
-                                    store.acceptFriendRequest(r.id)
-                                    UIState.shared.toast(.win, "You and @\(from) are now friends")
-                                }.buttonStyle(.btn(.primary, .xs))
+                                Button("Decline") { SocialModel.shared.answerRequest(r, accept: false) }.buttonStyle(.btn(.ghost, .xs))
+                                Button("Accept") { SocialModel.shared.answerRequest(r, accept: true) }.buttonStyle(.btn(.primary, .xs))
                             }
                             .padding(.vertical, 10).padding(.horizontal, 14)
                         }
@@ -354,14 +424,9 @@ struct RequestsList: View {
                                     if wait > 0 {
                                         Button {} label: { BtnLabel("Sent", icon: .check, iconSize: 13) }.buttonStyle(.btn(.ghost, .xs)).disabled(true)
                                     } else {
-                                        Button {
-                                            do {
-                                                try store.resendFriendRequest(to)
-                                                UIState.shared.toast(.win, "Request sent again to @\(to)", "You can send another one in an hour.")
-                                            } catch let e as AppError { UIState.shared.toast(.warn, "Not yet", e.message) } catch {}
-                                        } label: { BtnLabel("Send again", icon: .refresh, iconSize: 13) }.buttonStyle(.btn(.primary, .xs))
+                                        Button { SocialModel.shared.resend(to) } label: { BtnLabel("Send again", icon: .refresh, iconSize: 13) }.buttonStyle(.btn(.primary, .xs))
                                     }
-                                    Button("Cancel") { store.cancelFriendRequest(to) }.buttonStyle(.btn(.quiet, .xs))
+                                    Button("Cancel") { SocialModel.shared.cancelRequest(to) }.buttonStyle(.btn(.quiet, .xs))
                                 }
                             }
                             .padding(.vertical, 10).padding(.horizontal, 14)
@@ -476,8 +541,8 @@ struct ProfileSheet: View {
                     if share.challenges {
                         let picks = store.sharedPicks(p!)
                         VStack(alignment: .leading, spacing: 8) {
-                            Text("Open challenges they're sharing").eyebrow()
-                            if picks.isEmpty { Text("No open challenges right now.").font(.barlow(13)).foregroundStyle(Theme.text2) }
+                            Text("Active challenges they're sharing").eyebrow()
+                            if picks.isEmpty { Text("No active challenges right now.").font(.barlow(13)).foregroundStyle(Theme.text2) }
                             ForEach(picks, id: \.self) { k in
                                 HStack {
                                     VStack(alignment: .leading, spacing: 0) {
@@ -486,7 +551,7 @@ struct ProfileSheet: View {
                                     }
                                     Spacer()
                                     VStack(alignment: .trailing, spacing: 0) {
-                                        Text(PointValueMath.fmt(k.price)).font(.display(18, 800)).foregroundStyle(Theme.accent)
+                                        Text(PointValueMath.multiplierText(k.price)).font(.display(16, 800)).foregroundStyle(Theme.accent)
                                         Text("\(k.pledgeMinutes) min").font(.barlow(11.5)).foregroundStyle(Theme.muted)
                                     }
                                 }
@@ -494,7 +559,7 @@ struct ProfileSheet: View {
                             }
                         }
                     } else {
-                        Text("\(p!.name) keeps their open challenges private.").font(.barlow(13)).foregroundStyle(Theme.text2)
+                        Text("\(p!.name) keeps their active challenges private.").font(.barlow(13)).foregroundStyle(Theme.text2)
                     }
                 }
                 if isMe {
@@ -508,12 +573,11 @@ struct ProfileSheet: View {
                     Button("Remove friend") {
                         Task {
                             guard await ui.confirm("Remove @\(username)?", "You can add them again later.", confirm: "Remove", kind: .danger) else { return }
-                            store.removeFriend(username)
-                            ui.closeSheet(.profile(username))
+                            SocialModel.shared.removeFriend(username) { ui.closeSheet(.profile(username)) }
                         }
                     }.buttonStyle(.btn(.quiet, .sm, full: true))
                 case "requested":
-                    Button("Friend request sent · Cancel") { store.cancelFriendRequest(username) }.buttonStyle(.btn(.ghost, full: true))
+                    Button("Friend request sent · Cancel") { SocialModel.shared.cancelRequest(username) }.buttonStyle(.btn(.ghost, full: true))
                 default:
                     Button { SocialModel.shared.addFriend(username) } label: {
                         BtnLabel(rel == "incoming" ? "Accept friend request" : "Add friend", icon: .userPlus)
@@ -580,14 +644,15 @@ struct TeamSheet: View {
             }
         } foot: {
             if let t {
-                Button {
-                    _ = store.ensureTeamKey(t.id)
-                    if let team = store.data?.teams.first(where: { $0.id == t.id }) {
-                        let link = Invites.teamLink(team)
-                        _ = Clipboard.copy(link)
-                        ui.toast(.win, "Team link copied", link, ms: 5000)
-                    }
-                } label: { BtnLabel("Copy team link", icon: .link, iconSize: 16) }.buttonStyle(.btn(.ghost, .sm, full: true))
+                HStack(spacing: 8) {
+                    Button { teamLink(t) { NativeShare.present($0) } } label: { BtnLabel("Share team link", icon: .share, iconSize: 16) }.buttonStyle(.btn(.primary, .sm, full: true))
+                    Button {
+                        teamLink(t) { link in
+                            _ = Clipboard.copy(link)
+                            ui.toast(.win, "Team link copied", link, ms: 5000)
+                        }
+                    } label: { BtnLabel("Copy", icon: .link, iconSize: 16) }.buttonStyle(.btn(.ghost, .sm))
+                }
                 Button("Leave team") {
                     Task {
                         guard await ui.confirm("Leave this team?", "Your results stop counting toward its standings.", confirm: "Leave team", kind: .danger) else { return }
@@ -597,6 +662,15 @@ struct TeamSheet: View {
                 }.buttonStyle(.btn(.quiet, .sm, full: true))
             }
         }
+    }
+}
+
+extension TeamSheet {
+    /// Makes sure the team has a key, then builds a link that also carries this account's friend code.
+    fileprivate func teamLink(_ t: Squad, _ use: @escaping (String) -> Void) {
+        _ = store.ensureTeamKey(t.id)
+        guard let team = store.data?.teams.first(where: { $0.id == t.id }) else { return }
+        Task { use(Invites.teamLink(team, code: await API.shared.myInviteCode())) }
     }
 }
 
@@ -652,10 +726,10 @@ struct FlowLayout: Layout {
 struct TeamHowSheet: View {
     var body: some View {
         SheetFrame("How teams work", close: { UIState.shared.closeSheet(.teamHow) }) {
-            Text("Teams are how friends compete here without putting money on games. TimeOut puts screen time on the number instead of cash, and a team is the stretch of days you compare.")
+            Text("Teams are how friends compete here without putting money on games. TimeOut uses screen time instead of cash, and a team is the stretch of days you compare.")
                 .font(.barlow(14.5)).foregroundStyle(Theme.text2)
             HowCard(n: 1, title: "Pick a name and the dates", text: "Create a team for a week or a season. You can start it on your own and invite people later.")
-            HowCard(n: 2, title: "Minutes decide the standings", text: "Between the start and end dates, screen-time challenges count. Whoever comes out ahead on minutes leads. A side challenge with a friend does not count.")
+            HowCard(n: 2, title: "Minutes decide the standings", text: "Between the start and end dates, screen-time challenges count. Whoever earns the most minutes leads.")
             HowCard(n: 3, title: "Invite friends onto the roster", text: "Open the team and add a friend, or copy the team link. When they open it, you become friends and they join the roster.")
             HowCard(n: 4, title: "Leave whenever you want", text: "Leaving takes you off the standings. The team stays for everyone else.")
             Text("The team is saved on this device. When you're signed in, the roster is saved with your TimeOut account too, one member at a time, so it's still here the next time you open the app.")
@@ -690,7 +764,7 @@ struct NewTeamSheet: View {
                 } else {
                     FlowLayout(spacing: 8) {
                         ForEach(friends, id: \.self) { u in
-                            if let p = store.person(u) {
+                            if let p = SocialModel.shared.personFor(u) {
                                 PickFriend(photo: p.photo, name: u, on: members.contains(u)) {
                                     if members.contains(u) { members.removeAll { $0 == u } } else { members.append(u) }
                                 }

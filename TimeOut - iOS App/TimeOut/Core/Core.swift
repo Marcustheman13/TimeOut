@@ -167,6 +167,23 @@ enum PointValueMath {
 
     static func fmt(_ price: Int) -> String { price > 0 ? "+\(price)" : "\(price)" }
 
+    /// The value as a multiplier of the pledged minutes: +150 is 2.5x, -110 is 1.91x.
+    static func multiplier(_ price: Int) -> Double { price == 0 ? 1 : decimal(price) }
+
+    /// "1.91x Target", or "2.5x Bonus" above 2x. Same wording as the web app's TO.multiplierText.
+    static func multiplierText(_ price: Int) -> String {
+        let m = multiplier(price)
+        return "\(trimmedX(m))x \(m > 2 ? "Bonus" : "Target")"
+    }
+
+    /// 1.50 → "1.5", 2.00 → "2", 1.91 → "1.91".
+    static func trimmedX(_ value: Double) -> String {
+        var s = String(format: "%.2f", value)
+        while s.hasSuffix("0") { s.removeLast() }
+        if s.hasSuffix(".") { s.removeLast() }
+        return s
+    }
+
     static func fmtLine(_ line: Double, signed: Bool = true) -> String {
         let body = line == line.rounded() ? String(Int(line)) : String(format: "%.1f", line)
         if !signed { return body }

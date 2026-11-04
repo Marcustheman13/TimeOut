@@ -39,8 +39,26 @@
     app.tab = 'home';
     app.render();
     TO.live.refresh();
-    if (St.refreshTeams) St.refreshTeams();
+    app.syncSocial().then(() => { if (St.refreshTeams) St.refreshTeams(); });
     if (TO.invites) TO.invites.offer();
+  };
+
+  /** Friends and requests from the server, with a banner for anything new.
+   *  `quiet` is for after the user's own action, which already says what happened. */
+  app.syncSocial = async (quiet = false) => {
+    if (!TO.data || !St.usesServerSocial() || !TO.api.socialState) return;
+    const state = await TO.api.socialState();
+    if (!state || !TO.data) return;
+    const changes = St.applySocial(state);
+    if (!quiet && TO.data.settings.notify.friends) {
+      for (const u of changes.newRequests) ui.toast({ kind: 'info', title: `@${u} sent you a friend request`, msg: 'Open Social to accept it.' });
+      for (const u of changes.newFriends) ui.toast({ kind: 'win', title: `You and @${u} are now friends` });
+    }
+    if (inShell() && !isTyping()) {
+      app.renderChrome();
+      if (app.tab === 'social') app.renderView();
+    }
+    if (ui.sheetOpen('profile')) ui.refreshSheet('profile');
   };
 
   const inShell = () => !!document.getElementById('shell') && !!TO.data;
@@ -301,6 +319,7 @@
     if (remoteSync) return remoteSync;
     if (!force && Date.now() - remoteSyncAt < 30000) return;
     remoteSyncAt = Date.now();
+    app.syncSocial();
     remoteSync = TO.api.loadState().then((state) => {
       if (!state || !inShell()) return;
       St.adoptServerUser(TO.account.server, state);

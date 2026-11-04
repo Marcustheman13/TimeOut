@@ -32,9 +32,9 @@
   ];
   const tierPerks = (t) => {
     const list = [];
-    if (t.bonus) list.push(`+${t.bonus} challenge min a day`);
-    if (t.boosts) list.push(`${t.boosts} point-value boost${t.boosts === 1 ? '' : 's'} a day (+10% winnings)`);
-    if (t.insurance) list.push('Combo Goal insurance once a week');
+    if (t.bonus) list.push(`+${t.bonus} pledge min a day`);
+    if (t.boosts) list.push(`${t.boosts} allowance boost${t.boosts === 1 ? '' : 's'} a day (+10% earned minutes)`);
+    if (t.insurance) list.push('Miss-one protection once a week');
     return list.length ? list : ['Lock apps to earn perks'];
   };
   const tierById = (id) => TIERS.find((t) => t.id === id) || TIERS[0];
@@ -154,7 +154,16 @@
         for (const challenge of cached.challenges || []) {
           const key = challenge.supabaseId ? `db:${challenge.supabaseId}` : `id:${challenge.id}`;
           const saved = mergedChallenges.get(key);
-          mergedChallenges.set(key, saved ? Object.assign({}, saved, challenge) : challenge);
+          const combined = saved ? Object.assign({}, saved, challenge) : challenge;
+          // Another device already resolved it: the server's result beats a local copy that is still open.
+          if (saved && challenge.status === 'open' && saved.status !== 'open') {
+            Object.assign(combined, { status: saved.status, reward: saved.reward, resolvedAt: saved.resolvedAt, supabaseSynced: true });
+            combined.picks = (challenge.picks || []).map((pick) => {
+              const match = (saved.picks || []).find((p) => p.gameId === pick.gameId && p.market === pick.market && p.side === pick.side);
+              return match ? { ...pick, result: match.result } : pick;
+            });
+          }
+          mergedChallenges.set(key, combined);
         }
         const hasUnsyncedChallenges = (cached.challenges || []).some((challenge) => challenge.kind === 'sports' && !challenge.supabaseId);
         const remoteHasPreferences = remoteState.appPreferencesReady && Object.keys(remoteState.settings || {}).length > 1;
@@ -167,7 +176,10 @@
         ].filter((league) => S.REAL_LEAGUES.includes(league));
         if (savedSports.length) preferences.sports = [...new Set(savedSports)];
         remoteState = Object.assign({}, cached, remoteState, { challenges: [...mergedChallenges.values()], settings: preferences });
-        if (hasUnsyncedChallenges || !remoteState.wallet) remoteState.wallet = cached.wallet;
+        // The new day starts on the device. The server's wallet only moves to a new day when a challenge is
+        // placed, so a lagging server day must never pull this wallet back: that would close the same day
+        // again and bump the streak on every sync.
+        if (hasUnsyncedChallenges || !remoteState.wallet || remoteState.wallet.dayKey !== TO.dayKey()) remoteState.wallet = cached.wallet;
         else if (cached.wallet) {
           // Supabase currently owns the balance fields, while clean-day history is local-only.
           // Keep those local streak and usage ledgers when refreshing the server wallet.
@@ -197,6 +209,10 @@
             remoteState.wallet.bonusGranted = Math.max(localBonus, serverBonus);
           }
         }
+      }
+      else if (remoteState.wallet && remoteState.wallet.dayKey !== TO.dayKey()) {
+        // A wallet from an earlier day has nothing to say about today's balance.
+        Object.assign(remoteState.wallet, { dayKey: TO.dayKey(), balance: RULES.daily, lockedOut: false, bonusDay: null, bonusGranted: 0 });
       }
       delete remoteState.appPreferencesReady;
       TO.store.set(dataKey(id), remoteState);
@@ -302,12 +318,17 @@
         lowWarn: 10,
         notify: { resolved: true, friends: true, lowTime: true },
         privacy: { record: true, minutes: true, challenges: true },
+        deviceLockPoints: 0, // lock points from real Screen Time picks in the iPhone app
       },
       onboarded: false,
       friends: [],
       requestsIn: [],
       requestsOut: [],
       teams: [],
+      feedLive: false, // the Home "Live games only" switch; it works with whichever sport is picked
+      socialProfiles: {}, // friends' shared stats and team results, cached from the server
+      teamResults: {},
+      socialSynced: false,
     };
   }
 
@@ -347,6 +368,13 @@
     return d;
   }
 
+  /** The day a result counts for. The next day's limit moves, so a challenge on a later game pays when that game ends.
+   *  To-do combos belong to the day they were due. */
+  function creditDay(challenge) {
+    if (challenge.kind !== 'todo' && challenge.resolvedAt) return TO.dayKey(Number(challenge.resolvedAt));
+    return challenge.dayKey || (Number.isFinite(Number(challenge.placedAt)) ? TO.dayKey(Number(challenge.placedAt)) : null);
+  }
+
   function migrate(d) {
     renameSavedTerms(d);
     const f = freshData(TO.now());
@@ -364,12 +392,14 @@
     const resolvedNetByDay = {};
     for (const challenge of d.challenges || []) {
       if (challenge.status === 'open') continue;
-      const day = challenge.dayKey || (Number.isFinite(Number(challenge.placedAt)) ? TO.dayKey(Number(challenge.placedAt)) : null);
+      const day = creditDay(challenge);
       if (!day) continue;
       resolvedNetByDay[day] = (resolvedNetByDay[day] || 0) + (Number(challenge.reward || 0) - Number(challenge.pledgeMinutes || 0));
     }
-    Object.assign(d.wallet.netByDay, resolvedNetByDay);
-    if (!d.settings.lockedApps.length) d.settings.enforce = false; // nothing to block, so limits can't be on
+    d.wallet.netByDay = resolvedNetByDay;
+    if (!d.settings.lockedApps.length && !(d.settings.deviceLockPoints > 0)) d.settings.enforce = false; // nothing to block, so limits can't be on
+    // "Live" used to be one of the sport chips.
+    if (d.feedFilter === 'live') { d.feedFilter = 'all'; d.feedLive = true; }
     delete d.challengesIn;
     if (d.settings.notify) delete d.settings.notify.challenges;
     return d;
@@ -388,7 +418,8 @@
 
   function lockPoints(d = TO.data) {
     if (!d.settings.enforce) return 0;
-    return d.settings.lockedApps.reduce((sum, id) => sum + ((LOCKABLE.find((x) => x.id === id) || {}).pts || 0), 0);
+    const listed = d.settings.lockedApps.reduce((sum, id) => sum + ((LOCKABLE.find((x) => x.id === id) || {}).pts || 0), 0);
+    return Math.max(listed, Number(d.settings.deviceLockPoints) || 0); // the higher of this list and the real picks on an iPhone
   }
   const tier = (d = TO.data) => tierForPoints(lockPoints(d));
 
@@ -512,7 +543,7 @@
     const hadLocks = TO.data.settings.lockedApps.length > 0;
     o[parts[0]] = value;
     // App limits need something to block: they switch off with the last locked app and back on with the first.
-    if (path === 'lockedApps') TO.data.settings.enforce = value.length > 0 && (TO.data.settings.enforce || !hadLocks);
+    if (path === 'lockedApps') TO.data.settings.enforce = (value.length > 0 && (TO.data.settings.enforce || !hadLocks)) || (TO.data.settings.enforce && TO.data.settings.deviceLockPoints > 0);
     if (path === 'lockedApps' || path === 'enforce') grantTierBonus();
     save();
   }
@@ -557,7 +588,7 @@
     });
     const matchupIds = built.map((pick) => pick.gameId).filter(Boolean);
     if (new Set(matchupIds).size !== matchupIds.length) throw new AppError('duplicate_matchup', 'Choose only one target from each matchup.');
-    if (changed.length) throw new AppError('value_changed', 'The point values changed. Review the new point value and confirm again.', { changed });
+    if (changed.length) throw new AppError('value_changed', 'A challenge target changed. Review it and confirm again.', { changed });
     if (built.some((pick) => pick.kind === 'race') && built.length !== 1) {
       throw new AppError('race_single', 'Virtual race picks can only be placed as a single challenge.');
     }
@@ -665,7 +696,8 @@
     challenge.insurancePaid = !!res.insurancePaid;
     challenge.resolvedAt = now;
     const w = W();
-    w.netByDay[challenge.dayKey] = (w.netByDay[challenge.dayKey] || 0) + (challenge.reward - challenge.pledgeMinutes);
+    const day = creditDay(challenge);
+    w.netByDay[day] = (w.netByDay[day] || 0) + (challenge.reward - challenge.pledgeMinutes);
     // Voids and pushes return the pledge; wins and losses only affect the next day's limit.
     if (challenge.dayKey === w.dayKey && (challenge.status === 'void' || challenge.status === 'tie')) w.balance += challenge.reward;
     return challenge;
@@ -726,7 +758,14 @@
   const myStats = () => statsFor(TO.data.challenges);
 
   // ---------- People & friends ----------
+  // Real accounts get real people only. Demo profiles are for offline mode, where there is no server to find anyone on.
+  const usesServerSocial = () => !!(TO.account && TO.account.server);
+
   function person(username) {
+    if (usesServerSocial()) {
+      const p = (TO.data.socialProfiles || {})[String(username).toLowerCase()];
+      return p ? { ...p, photo: p.photo || TO.initialsAvatar(p.username), remote: true } : null;
+    }
     const fake = PEOPLE.find((p) => p.username.toLowerCase() === String(username).toLowerCase());
     if (fake) return fake;
     const acc = findAccountByUsername(username);
@@ -740,6 +779,7 @@
   /** Open picks a friend has shared (fake friends pick from the live board). */
   function sharedPicks(p, now = TO.now()) {
     if (!p || !p.share.challenges) return [];
+    if (p.remote) return p.picks || [];
     if (p.local) return (p.openChallenges || []).slice(0, 3).map((b) => ({ label: b.picks.map((l) => l.label).join(' + '), matchup: b.picks.length > 1 ? `${b.picks.length}-pick Combo Goal` : b.picks[0].matchup, price: b.american, pledgeMinutes: b.pledgeMinutes }));
     const games = S.board(now).filter((g) => (g.state === 'live' || g.state === 'scheduled') && !g.simulated);
     const rand = TO.rng(`${p.username}-${Math.floor(now / S.SLOT)}`);
@@ -758,7 +798,7 @@
 
   function searchPeople(query) {
     const q = String(query || '').trim().toLowerCase().replace(/^@/, '');
-    if (!q) return [];
+    if (!q || usesServerSocial()) return [];
     const me = TO.account.username.toLowerCase();
     const locals = Object.values(accounts()).filter((a) => a.username.toLowerCase() !== me).map((a) => ({ username: a.username, name: a.username, photo: a.photo, local: true }));
     return [...PEOPLE, ...locals].filter((p) => {
@@ -841,6 +881,31 @@
   const RESEND_WAIT = TO.HOUR;
   const resendWait = (req, now = TO.now()) => Math.max(0, req.at + RESEND_WAIT - now);
 
+  /** Replaces this browser's friends and requests with what the server says, and reports what's new since last time. */
+  function applySocial(state) {
+    const d = TO.data;
+    if (!d || !usesServerSocial() || !state) return { newRequests: [], newFriends: [] };
+    const friendsBefore = new Set(d.friends.map((u) => String(u).toLowerCase()));
+    const requestsBefore = new Set(d.requestsIn.map((r) => String(r.from).toLowerCase()));
+    // The first sync isn't news: it just brings the account up to date.
+    const changes = d.socialSynced ? {
+      newRequests: state.requestsIn.map((r) => r.username).filter((u) => !requestsBefore.has(u.toLowerCase())),
+      newFriends: state.friends.map((f) => f.username).filter((u) => !friendsBefore.has(u.toLowerCase())),
+    } : { newRequests: [], newFriends: [] };
+    d.friends = state.friends.map((f) => f.username);
+    d.socialProfiles = {};
+    for (const f of state.friends) d.socialProfiles[f.username.toLowerCase()] = f;
+    for (const r of [...state.requestsIn, ...state.requestsOut]) {
+      const key = r.username.toLowerCase();
+      if (!d.socialProfiles[key]) d.socialProfiles[key] = { username: r.username, name: r.name, photo: r.photo, w: 0, l: 0, net: 0, tier: 'rookie', streak: 0, share: { record: false, minutes: false, challenges: false }, picks: [] };
+    }
+    d.requestsIn = state.requestsIn.map((r) => ({ id: r.id, from: r.username, at: r.at }));
+    d.requestsOut = state.requestsOut.map((r) => ({ id: r.id, to: r.username, at: r.at }));
+    d.socialSynced = true;
+    saveQuiet();
+    return changes;
+  }
+
   function resendFriendRequest(username, now = TO.now()) {
     const req = TO.data.requestsOut.find((r) => r.to === username);
     if (!req) return false;
@@ -894,6 +959,8 @@
     const lastDay = TO.dayKey(Math.min(now, end - 1));
     return t.members.map((u) => {
       const mine = sameUser(u, TO.account.username);
+      const result = !mine && ((TO.data.teamResults || {})[t.id] || []).find((r) => sameUser(r.username, u));
+      if (result) return { username: u, me: false, net: result.net, w: result.w, l: result.l, hidden: !!result.hidden, photo: result.photo || TO.initialsAvatar(u), tier: result.tier || 'rookie' };
       const p = mine ? null : person(u);
       // A username from search that isn't a demo profile or an account on this device
       // still belongs on the roster. Don't borrow the current user's record for them.
@@ -1137,12 +1204,19 @@
         const kept = TO.data.teams.filter((t) => t.shareKey || !t.remote || seen.has(t.id));
         if (kept.length !== TO.data.teams.length) { TO.data.teams = kept; changed = true; }
       }
-      if (changed) {
-        saveQuiet();
-        if (TO.app) TO.app.render();
-        if (TO.ui && TO.ui.sheetOpen && TO.ui.sheetOpen('team')) TO.ui.refreshSheet('team');
-      }
-      return changed;
+      // Real results for everyone on each roster, for the team's dates.
+      const standings = TO.data && TO.api.teamStandings ? TO.data.teams.filter((t) => t.shareKey && t.remote).map(async (team) => {
+        const rows = await TO.api.teamStandings(team.id, team.shareKey);
+        if (rows && TO.data) { TO.data.teamResults[team.id] = rows; changed = true; }
+      }) : [];
+      return Promise.all(standings).then(() => {
+        if (changed) {
+          saveQuiet();
+          if (TO.app) TO.app.render();
+          if (TO.ui && TO.ui.sheetOpen && TO.ui.sheetOpen('team')) TO.ui.refreshSheet('team');
+        }
+        return changed;
+      });
     }).catch(() => false);
   }
 
@@ -1282,7 +1356,7 @@
     submitPledge, placeTodoCombo, completeTodo, resolve, outcome, combine, pickFromSelection,
     myStats, statsFor, person, sharedPicks, searchPeople, relation,
     sendFriendRequest, addFriend, acceptFriendRequest, declineFriendRequest, cancelFriendRequest, resendFriendRequest, resendWait, removeFriend,
-    socialTick,
+    socialTick, usesServerSocial, applySocial,
     teamStatus, teamStandings, createTeam, leaveTeam, inviteToTeam, joinTeam, refreshTeams, ensureTeamKey, sameUser, leaderboard,
     ensureDemoAccount, loginDemo, resetMyData, seedDemoData,
   };

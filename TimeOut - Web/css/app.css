@@ -372,6 +372,14 @@ label.list-row { cursor: pointer; }
 .mini-challenge .t { font-weight: 800; font-size: 14px; }
 
 .filterbar { position: sticky; top: 0; z-index: 4; background: var(--bg); padding: 10px 0; }
+.live-tile { margin: 10px 16px 0; height: 30px; padding: 0 10px; display: inline-flex; align-items: center; gap: 6px; border: 1px solid rgba(255, 59, 74, 0.55); border-radius: 8px; background: rgba(255, 59, 74, 0.13); color: var(--live); font-size: 13px; font-weight: 800; }
+.live-tile i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.live-tile .n { font-size: 12px; opacity: 0.8; font-variant-numeric: tabular-nums; }
+.live-tile.on { background: var(--live); border-color: transparent; color: #fff; }
+.setup-banner { margin: 4px 16px 0; padding: 14px; display: grid; gap: 10px; border: 1px solid rgba(34, 214, 110, 0.4); border-radius: 16px; background: linear-gradient(135deg, rgba(34, 214, 110, 0.17), rgba(34, 214, 110, 0.06)); }
+.setup-banner b { display: block; font-size: 16px; font-weight: 800; }
+.setup-banner p { margin: 2px 0 0; font-size: 13px; color: var(--text-2); }
+.setup-banner .sb-icon { width: 38px; height: 38px; flex: none; display: grid; place-items: center; border-radius: 11px; background: var(--accent); color: var(--accent-ink); }
 .cfb-select-label { display: block; margin: 9px 16px 4px; color: var(--muted); font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; }
 .cfb-select { display: block; width: calc(100% - 32px); height: 38px; margin: 0 16px; padding: 0 10px; color: var(--text); background: var(--surface); border: 1px solid var(--stroke); border-radius: 10px; font: inherit; font-weight: 700; }
 .league-head { display: flex; align-items: center; gap: 8px; padding: 6px 16px 0; }

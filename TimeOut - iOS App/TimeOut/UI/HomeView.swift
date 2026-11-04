@@ -1,23 +1,36 @@
 import SwiftUI
 
-/// Home's view state (the web demo keeps `feedDay` in home.js).
+/// Home's view state (the web app keeps `feedDay` in home.js).
 @Observable
 final class HomeModel {
     static let shared = HomeModel()
     /// Which day the board shows: 0 = today, 1 = tomorrow. Live games are always today.
     var feedDay = 0
+    /// Which market each game card has open, by game ID.
+    var marketTab: [String: String] = [:]
 
     var followed: [String] {
         let s = Store.shared.data?.settings.sports ?? []
         return s.isEmpty ? Sim.realLeagues : s
     }
 
+    /// The sport chip: "all" or a league.
     var activeFilter: String {
         let f = Store.shared.data?.feedFilter ?? "all"
-        return ["pred", "todo", "sim"].contains(f) ? "all" : f
+        return ["pred", "todo", "sim", "live"].contains(f) ? "all" : f
     }
 
-    var activeDay: Int { activeFilter == "live" ? 0 : feedDay }
+    /// The Live switch on its own line. It narrows whichever sport is picked.
+    var liveOnly: Bool { Store.shared.data?.feedLive ?? false }
+
+    var activeDay: Int { liveOnly ? 0 : feedDay }
+
+    /// "NBA", or "all sports".
+    var filterName: String {
+        let f = activeFilter
+        if f == "all" { return "all sports" }
+        return f == "ncaaf" ? "College Football" : Sim.leagues[f]?.short ?? f
+    }
 
     func boardGames(_ day: Int? = nil) -> [Game] {
         let leagues = Sim.leagueOrder.filter { $0 != "sim" && followed.contains($0) }
@@ -40,6 +53,12 @@ final class HomeModel {
 
     func setFilter(_ f: String) {
         Store.shared.setFeedFilter(f)
+        LiveFeed.shared.setViewingDay(activeDay)
+        UIState.shared.scrollToFilters()
+    }
+
+    func setLive(_ on: Bool) {
+        Store.shared.setFeedLive(on)
         LiveFeed.shared.setViewingDay(activeDay)
         UIState.shared.scrollToFilters()
     }
@@ -69,15 +88,16 @@ struct HomeView: View {
             ScrollView {
                 LazyVStack(spacing: 14, pinnedViews: [.sectionHeaders]) {
                     Color.clear.frame(height: 0).id("top")
+                    ScreenTimeSetupBanner()
                     WalletCard(wl: wl)
-                    if wl.appsLocked { AppLockBanner(wl: wl) }
+                    if wl.appsLocked && ScreenTime.shared.isEnforcing { AppLockBanner(wl: wl) }
                     StatusStrip(wl: wl)
                     OpenChallengesStrip()
                     Section {
                         VStack(spacing: 12) {
                             BuildComboControl()
                             if live.offline {
-                                Note(.blue, icon: .info, "Live ESPN point value can't be reached here, so these are simulated games with real team names. Everything else works the same.").gutter()
+                                Note(.blue, icon: .info, "Live matchup targets can't be reached here, so these are simulated games with real team names. Everything else works the same.").gutter()
                             }
                             FeedList(games: games)
                         }
@@ -105,11 +125,11 @@ struct WalletCard: View {
     var body: some View {
         if wl.lockedOut || wl.balance <= 0 {
             VStack(alignment: .leading, spacing: 0) {
-                HStack(spacing: 6) { Icon(.lock, 14); Text("OUT OF CHALLENGING MINUTES").font(.barlow(12, 900)).tracking(0.72) }
+                HStack(spacing: 6) { Icon(.lock, 14); Text("OUT OF PLEDGE MINUTES").font(.barlow(12, 900)).tracking(0.72) }
                     .foregroundStyle(Theme.loss)
-                Text("Challenging is locked. It reopens at midnight.").font(.barlow(16, 700)).padding(.top, 8)
+                Text("Pledges are paused. They reopen at midnight.").font(.barlow(16, 700)).padding(.top, 8)
                 Countdown(target: TO.nextMidnight()).font(.display(46, 900)).padding(.top, 6)
-                Text("Your open challenges still resolve and count toward tomorrow's phone time.").font(.barlow(13)).foregroundStyle(Theme.text2).padding(.top, 4)
+                Text("Active challenges still resolve and update tomorrow's phone time.").font(.barlow(13)).foregroundStyle(Theme.text2).padding(.top, 4)
                 WalletStats(wl: wl)
             }
             .card(16, border: Theme.loss.opacity(0.45))
@@ -120,7 +140,7 @@ struct WalletCard: View {
                 HStack(alignment: .bottom) {
                     VStack(alignment: .leading, spacing: 4) {
                         HStack(spacing: 8) {
-                            Text("Challenging balance today").eyebrow()
+                            Text("Available minutes today").eyebrow()
                             if wl.bonusToday > 0 { Text("+\(wl.bonusToday) min \(wl.tier.title) bonus included").font(.barlow(11.5, 700)).foregroundStyle(Theme.accent) }
                         }
                         HStack(alignment: .lastTextBaseline, spacing: 3) {
@@ -138,7 +158,7 @@ struct WalletCard: View {
                 Bar(pct: pct).padding(.top, 12)
                 WalletStats(wl: wl)
                 Button { HowItWorks.open() } label: {
-                    HStack(spacing: 6) { Icon(.info, 14); Text("You challenge with tomorrow's phone time. How it works") }
+                    HStack(spacing: 6) { Icon(.info, 14); Text("Pledges use tomorrow's phone time. How it works") }
                         .font(.barlow(12.5, 600)).foregroundStyle(Theme.text2)
                 }
                 .buttonStyle(.press)
@@ -160,9 +180,9 @@ struct WalletStats: View {
         VStack(spacing: 0) {
             HRule()
             HStack(spacing: 0) {
-                stat(s?.enforce == true ? "\(wl.phoneLeft) min" : "Off", "Phone time left", pColor)
+                stat(ScreenTime.shared.isEnforcing ? "\(wl.phoneLeft) min" : "Off", "Phone time left", pColor)
                 VRule()
-                stat("\(wl.atRisk) min", "In open challenges", wl.atRisk > 0 ? Theme.warn : Theme.text)
+                stat("\(wl.atRisk) min", "Committed to active challenges", wl.atRisk > 0 ? Theme.warn : Theme.text)
                 VRule()
                 stat("\(wl.tomorrowLimit) min", "Tomorrow's limit", tColor)
             }
@@ -175,9 +195,73 @@ struct WalletStats: View {
     private func stat(_ value: String, _ label: String, _ color: Color) -> some View {
         VStack(spacing: 0) {
             Text(value).font(.display(20, 800)).monospacedDigit().foregroundStyle(color)
-            Text(label).font(.barlow(11, 700)).foregroundStyle(Theme.muted)
+            Text(label).font(.barlow(11, 700)).foregroundStyle(Theme.muted).multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
+        .padding(.horizontal, 2)
+    }
+}
+
+/// The big prompt at the top of Home until Screen Time can really block apps. Tapping it opens the setup sheet.
+struct ScreenTimeSetupBanner: View {
+    private var st: ScreenTime { .shared }
+
+    var body: some View {
+        let step = st.setupStep
+        if step != .done {
+            Button { UIState.shared.openSheet(.screenTimeApps) } label: {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(alignment: .top, spacing: 12) {
+                        Icon(.shield, 20).foregroundStyle(Theme.accentInk)
+                            .frame(width: 38, height: 38)
+                            .background(Theme.accent, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(title(step)).font(.barlow(16, 800)).foregroundStyle(Theme.text)
+                            Text(detail(step)).font(.barlow(13)).foregroundStyle(Theme.text2).fixedSize(horizontal: false, vertical: true)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    HStack(spacing: 8) {
+                        Text(action(step)).font(.barlow(14, 800)).foregroundStyle(Theme.accentInk)
+                            .frame(maxWidth: .infinity).frame(height: 40)
+                            .background(Theme.accent, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                    }
+                }
+                .padding(14)
+                .background(LinearGradient(colors: [Theme.accent.opacity(0.17), Theme.accent.opacity(0.06)], startPoint: .topLeading, endPoint: .bottomTrailing),
+                            in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Theme.accent.opacity(0.4), lineWidth: 1))
+            }
+            .buttonStyle(.press)
+            .padding(.top, 4)
+            .gutter()
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isButton)
+        }
+    }
+
+    private func title(_ step: ScreenTime.SetupStep) -> String {
+        switch step {
+        case .allow: return st.status == .denied ? "Screen Time access is off" : "Set up Screen Time"
+        case .pick: return "Choose the apps to block"
+        default: return "App limits are off"
+        }
+    }
+
+    private func detail(_ step: ScreenTime.SetupStep) -> String {
+        switch step {
+        case .allow: return "TimeOut can't block anything yet. Allow Screen Time, pick your apps, and your limits become real. It takes about 30 seconds."
+        case .pick: return "One step left. Pick the apps TimeOut locks when today's phone time runs out."
+        default: return "Your apps won't lock when your phone time runs out, and your tier stays at Rookie."
+        }
+    }
+
+    private func action(_ step: ScreenTime.SetupStep) -> String {
+        switch step {
+        case .allow: return "Set up in 30 seconds"
+        case .pick: return "Choose apps"
+        default: return "Turn limits back on"
+        }
     }
 }
 
@@ -243,7 +327,7 @@ struct OpenChallengesStrip: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 HStack(spacing: 6) {
-                    Text("Open challenges").font(.barlow(17, 800))
+                    Text("Active challenges").font(.barlow(17, 800))
                     CountPill(n: open.count, off: open.isEmpty)
                 }
                 Spacer(minLength: 0)
@@ -253,7 +337,7 @@ struct OpenChallengesStrip: View {
             }
             .gutter()
             if open.isEmpty {
-                Text("No open challenges. Tap any point value below to start one.").font(.barlow(13)).foregroundStyle(Theme.text2)
+                Text("No active challenges. Choose a matchup target below to begin.").font(.barlow(13)).foregroundStyle(Theme.text2)
                     .card(12).gutter()
             } else {
                 ScrollView(.horizontal) {
@@ -268,22 +352,22 @@ struct OpenChallengesStrip: View {
 struct MiniChallenge: View {
     var challenge: Challenge
     var body: some View {
-        let title = challenge.kind == "todo" ? "To-do combo (\(challenge.picks.count))" : challenge.picks.count > 1 ? "\(challenge.picks.count)-pick combo" : (challenge.picks.first?.label ?? "")
+        let title = challenge.kind == "todo" ? "To-do Combo Goal (\(challenge.picks.count))" : challenge.picks.count > 1 ? "\(challenge.picks.count)-pick Combo Goal" : (challenge.picks.first?.label ?? "")
         let pick = challenge.picks.first { $0.result == "pending" } ?? challenge.picks.first ?? Pick(selId: "", kind: "game", market: "winner", price: 100, label: "", marketLabel: "", matchup: "")
-        let win = jsRoundInt(Double(challenge.pledgeMinutes) * challenge.decimal) - challenge.pledgeMinutes
+        let win = ChallengeText.toWin(challenge)
         Button { UIState.shared.go("challenges") } label: {
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
                     Text(title).font(.barlow(14, 800)).lineLimit(1)
                     Spacer(minLength: 6)
-                    Text(PointValueMath.fmt(challenge.american)).font(.display(15, 800)).foregroundStyle(Theme.text2)
+                    Text(PointValueMath.multiplierText(PointValueMath.fromDecimal(challenge.decimal))).font(.display(15, 800)).foregroundStyle(Theme.text2).lineLimit(1).fixedSize()
                 }
                 line(pick).font(.barlow(13, 600)).foregroundStyle(Theme.text2).lineLimit(1)
                 Spacer(minLength: 0)
                 HStack(spacing: 6) {
                     Text("\(challenge.pledgeMinutes) min").foregroundStyle(Theme.text2)
                     Icon(.chevR, 12)
-                    if win > 0 { Text("win \(ChallengeText.toWin(challenge)) min").foregroundStyle(Theme.accent) }
+                    if win > 0 { Text("win \(win) min").foregroundStyle(Theme.accent) }
                 }
                 .font(.barlow(13, 700))
             }
@@ -329,20 +413,23 @@ struct FilterBar: View {
 
     var body: some View {
         let f = home.activeFilter
+        let on = home.liveOnly
+        // With Live on, each sport's number is how many games it has live right now.
+        let today = home.boardGames(0)
         VStack(alignment: .leading, spacing: 0) {
             ScrollView(.horizontal) {
                 HStack(spacing: 8) {
-                    Chip(label: "Live", on: f == "live", n: games.filter { $0.state == .live }.count, icon: .radio) { home.setFilter("live") }
                     Chip(label: "All", on: f == "all", icon: .grid) { home.setFilter("all") }
                     ForEach(Sim.leagueOrder.filter { $0 != "sim" && home.followed.contains($0) }, id: \.self) { l in
                         Chip(label: l == "ncaaf" ? "College Football" : Sim.leagues[l]!.short, on: f == l,
-                             n: games.filter { $0.league == l && $0.state != .final }.count) { home.setFilter(l) }
+                             n: on ? today.filter { $0.league == l && $0.state == .live }.count : games.filter { $0.league == l && $0.state != .final }.count) { home.setFilter(l) }
                     }
                     Chip(label: "Edit", icon: .sliders, dashed: true) { SettingsModel.open("sports") }
                 }
                 .padding(.horizontal, 16)
             }
             .scrollIndicators(.hidden)
+            LiveTile(games: today).frame(maxWidth: .infinity, alignment: .leading).padding(.top, 10).gutter()
             DayBar().padding(.top, 10)
             if (f == "ncaaf" || f == "all") && !live.offline {
                 Text("COLLEGE FOOTBALL").font(.barlow(11, 800)).tracking(0.55).foregroundStyle(Theme.muted)
@@ -371,6 +458,33 @@ struct FilterBar: View {
     }
 }
 
+/// The small red Live tile, on its own line. It filters whichever sport is picked above it.
+struct LiveTile: View {
+    var games: [Game]
+    private var home: HomeModel { .shared }
+
+    var body: some View {
+        let on = home.liveOnly
+        let f = home.activeFilter
+        let n = games.filter { $0.state == .live && (f == "all" || $0.league == f) }.count
+        Button { home.setLive(!on) } label: {
+            HStack(spacing: 6) {
+                Circle().fill(on ? .white : Theme.live).frame(width: 7, height: 7)
+                Text("Live").font(.barlow(13, 800))
+                if n > 0 { Text("\(n)").font(.barlow(12, 800)).monospacedDigit().opacity(0.8) }
+            }
+            .foregroundStyle(on ? .white : Theme.live)
+            .padding(.horizontal, 10).frame(height: 30)
+            .background(on ? Theme.live : Theme.live.opacity(0.13), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Theme.live.opacity(on ? 0 : 0.55), lineWidth: 1))
+            .fixedSize()
+        }
+        .buttonStyle(.press)
+        .accessibilityLabel("Live games only, \(n) live now in \(home.filterName)")
+        .accessibilityAddTraits(on ? .isSelected : [])
+    }
+}
+
 /// Today and tomorrow. Counts are games still to be played that day, in the sports being shown.
 struct DayBar: View {
     var inset = true
@@ -379,7 +493,7 @@ struct DayBar: View {
 
     var body: some View {
         let f = home.activeFilter
-        if f != "live" && !live.offline {
+        if !home.liveOnly && !live.offline {
             ScrollView(.horizontal) {
                 HStack(spacing: 8) {
                     ForEach(0...LiveFeed.upcomingDays, id: \.self) { i in
@@ -401,10 +515,10 @@ struct BuildComboControl: View {
         if !slip.comboMode {
             Button { slip.toggleComboMode() } label: {
                 HStack(spacing: 12) {
-                    Icon(.ticket, 18).foregroundStyle(Theme.accent)
+                    Icon(.target, 18).foregroundStyle(Theme.accent)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Build combo").font(.barlow(14, 700))
-                        Text("Select picks from multiple games").font(.barlow(12)).foregroundStyle(Theme.muted)
+                        Text("Build a Combo Goal").font(.barlow(14, 700))
+                        Text("Link choices from up to four matchups").font(.barlow(12)).foregroundStyle(Theme.muted)
                     }
                     Spacer(minLength: 0)
                     Icon(.chevR, 18).foregroundStyle(Theme.muted)
@@ -420,10 +534,10 @@ struct BuildComboControl: View {
             .gutter()
         } else {
             HStack(spacing: 12) {
-                LrIcon(icon: .ticket, size: 34, iconSize: 18)
+                LrIcon(icon: .target, size: 34, iconSize: 18)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Choose your combo picks").font(.barlow(14, 700))
-                    Text("\(slip.picks.count) of \(Rules.maxPicks) picks · choose one challenge per game").font(.barlow(12)).foregroundStyle(Theme.muted)
+                    Text("Choose Combo Goal picks").font(.barlow(14, 700))
+                    Text("\(slip.picks.count) of \(Rules.maxMatchupPicks) choices · one per matchup").font(.barlow(12)).foregroundStyle(Theme.muted)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 Button("Cancel") { slip.toggleComboMode() }.font(.barlow(13.5, 700)).foregroundStyle(Theme.accent).buttonStyle(.press)
@@ -461,7 +575,8 @@ struct FeedList: View {
 
     var body: some View {
         let f = home.activeFilter
-        let list = f == "live" ? games.filter { $0.state == .live } : f == "all" ? games : games.filter { $0.league == f }
+        let inSport = f == "all" ? games : games.filter { $0.league == f }
+        let list = home.liveOnly ? inSport.filter { $0.state == .live } : inSport
         if list.isEmpty {
             EmptyBoard(filter: f)
         } else if f == "all" {
@@ -483,10 +598,12 @@ struct EmptyBoard: View {
 
     var body: some View {
         let day = home.activeDay
+        let isLive = home.liveOnly
         let when = day == 0 ? "today" : day == 1 ? "tomorrow" : "on \(home.dayLabel(day))"
         let loading = day > 0 && live.upcomingIsLoading
-        let title = filter == "live" ? "No live games right now" : loading ? "Loading the schedule…" : "Sorry, no games are happening for this sport \(when)."
-        let next: Int? = filter != "live" && !loading
+        let liveTitle = filter == "all" ? "No live games right now" : "No live \(home.filterName) games right now"
+        let title = isLive ? liveTitle : loading ? "Loading the schedule…" : "Sorry, no games are happening for this sport \(when)."
+        let next: Int? = !isLive && !loading
             ? (0...LiveFeed.upcomingDays).first { i in i != day && home.boardGames(i).contains { filter == "all" || $0.league == filter } }
             : nil
         if live.failed {
@@ -494,8 +611,10 @@ struct EmptyBoard: View {
                 Button("Try again") { live.refresh(force: true) }.buttonStyle(.btn(.primary))
             }
         } else {
-            EmptyState(icon: loading ? .clock : .target, title: title, text: filter == "live" ? "Check back when a game is underway." : nil) {
-                if let next {
+            EmptyState(icon: loading ? .clock : .target, title: title, text: isLive ? "Check back when a game is underway." : nil) {
+                if isLive {
+                    Button("Show all games") { home.setLive(false) }.buttonStyle(.btn(.primary))
+                } else if let next {
                     Button("See games \(next == 1 ? "tomorrow" : "on \(home.dayLabel(next))")") { home.setDay(next) }.buttonStyle(.btn(.primary))
                 }
             }
@@ -519,9 +638,9 @@ struct GameStatusText: View {
         case .final:
             Text(g.statusText)
         case .canceled:
-            HStack(spacing: 6) { Icon(.alert, 13); Text("Canceled · all challenges cancelled, pledged minutes returned") }.foregroundStyle(Theme.warn)
+            HStack(spacing: 6) { Icon(.alert, 13); Text("Canceled · all challenges cancelled, committed minutes returned") }.foregroundStyle(Theme.warn)
         case .postponed:
-            HStack(spacing: 6) { Icon(.alert, 13); Text("Postponed · all challenges cancelled, pledged minutes returned") }.foregroundStyle(Theme.warn)
+            HStack(spacing: 6) { Icon(.alert, 13); Text("Postponed · all challenges cancelled, committed minutes returned") }.foregroundStyle(Theme.warn)
         }
     }
 }
@@ -534,12 +653,12 @@ struct GameCard: View {
         let _ = live.version
         let g = game
         let o = Feed.pointValue(g.id)
-        let bettable = g.state == .live || g.state == .scheduled
+        let open = (g.state == .live || g.state == .scheduled) && !o.suspended
         let mine = HomeModel.myOpenChallenges(on: g.id)
         return VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
                 GameStatusText(g: g).lineLimit(1)
-                if o.suspended && g.state == .live { Tag("Challenging closed", icon: .lock) }
+                if o.suspended && g.state == .live { Tag("Challenges closed", icon: .lock) }
                 Spacer(minLength: 0)
                 Text(g.otherConferenceLive ? "LIVE · \(g.conferenceName.isEmpty ? "UNRANKED" : g.conferenceName)" : g.simulated ? "SIMULATED" : Sim.leagues[g.league]?.short ?? "")
                     .font(.barlow(11, 800)).tracking(0.44).foregroundStyle(Theme.muted)
@@ -549,26 +668,26 @@ struct GameCard: View {
             .frame(minHeight: 18)
             .padding(.bottom, 8)
 
-            if bettable {
-                if g.eventID != nil { espnBody(g, o) } else { simBody(g, o) }
+            if open {
+                MatchupBody(g: g, o: o)
             } else {
                 VStack(spacing: 0) {
-                    finalRow(g.away, g.awayScore, g.awayScore > g.homeScore, g)
-                    finalRow(g.home, g.homeScore, g.homeScore > g.awayScore, g)
+                    closedRow(g.away, g.awayScore, g.awayScore >= g.homeScore, g)
+                    closedRow(g.home, g.homeScore, g.homeScore >= g.awayScore, g)
                 }
                 if g.state == .postponed {
-                    Note(.warn, icon: .info, "This game was postponed. Every challenge on it is void and the full pledge goes back to the player.").padding(.top, 6)
+                    Note(.warn, icon: .info, "This game was postponed. Any related pledge will be returned.").padding(.top, 6)
                 }
             }
 
             HStack {
                 if !mine.isEmpty {
-                    HStack(spacing: 4) { Icon(.ticket, 14); Text("You have \(mine.count == 1 ? "a challenge" : "\(mine.count) challenges") on this game") }
+                    HStack(spacing: 4) { Icon(.target, 14); Text("\(mine.count) active challenge\(mine.count == 1 ? "" : "s") here") }
                         .foregroundStyle(Theme.accent)
                 }
                 Spacer(minLength: 0)
                 Button { GameModel.open(g.id) } label: {
-                    HStack(spacing: 6) { Text("Stats & all point value"); Icon(.chevR, 14) }.font(.barlow(12.5, 700)).foregroundStyle(Theme.accent)
+                    HStack(spacing: 6) { Text("Stats & challenge details"); Icon(.chevR, 14) }.font(.barlow(12.5, 700)).foregroundStyle(Theme.accent)
                 }
                 .buttonStyle(.press)
             }
@@ -580,158 +699,131 @@ struct GameCard: View {
         .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Theme.stroke, lineWidth: 1))
     }
 
-    private func finalRow(_ team: Team, _ score: Int, _ won: Bool, _ g: Game) -> some View {
+    private func closedRow(_ team: Team, _ score: Int, _ leading: Bool, _ g: Game) -> some View {
         Button { GameModel.open(g.id) } label: {
             HStack(spacing: 8) {
                 TeamBadge(team: team)
-                Text(team.name).font(.barlow(14.5, 700)).foregroundStyle(won ? Theme.text : Theme.text2).lineLimit(1)
+                Text(team.name).font(.barlow(14.5, 700)).foregroundStyle(leading ? Theme.text : Theme.text2).lineLimit(1)
                 Spacer(minLength: 0)
-                if g.state == .final {
-                    Text("\(score)").font(.display(23, 900)).monospacedDigit().foregroundStyle(won ? Theme.text : Theme.text2).padding(.trailing, 2)
+                if g.state == .final || g.state == .live {
+                    Text("\(score)").font(.display(23, 900)).monospacedDigit().foregroundStyle(leading ? Theme.text : Theme.text2).padding(.trailing, 2)
                 }
             }
             .frame(height: 46)
         }
         .buttonStyle(.press)
     }
+}
 
-    /// ESPN layout: teams and scores on the left, a 2-column grid of every price on the right.
-    @ViewBuilder private func espnBody(_ g: Game, _ o: PointValueBoard) -> some View {
-        let picks: [(Selection?, String, Bool)] = {
-            var p: [(Selection?, String, Bool)] = [
-                (o.margin.first { $0.side == "away" }, "Away · \(g.away.abbr)", false),
-                (o.margin.first { $0.side == "home" }, "Home · \(g.home.abbr)", false),
-                (o.total.first { $0.side == "higher" }, "Higher", false),
-                (o.total.first { $0.side == "lower" }, "Lower", false),
-                (o.winner.first { $0.side == "away" }, "Away to win · \(g.away.abbr)", true),
-                (o.winner.first { $0.side == "home" }, "Home to win · \(g.home.abbr)", true),
-            ]
-            if g.sport == "soccer" { p.append((o.winner.first { $0.side == "draw" }, "Draw", true)) }
-            return p
-        }()
-        FrColumns(left: 0.9, right: 1.2, minLeft: 112, spacing: 9) {
-            VStack(spacing: 0) {
-                liveTeam(g, g.away, g.awayScore, g.homeScore, "away")
-                liveTeam(g, g.home, g.homeScore, g.awayScore, "home")
+/// The open game card: both teams, then Match Winner / Margin / Total Points tabs with two choices.
+struct MatchupBody: View {
+    var g: Game
+    var o: PointValueBoard
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                team(g.away, g.awayScore)
+                Text("@").font(.barlow(12, 700)).foregroundStyle(Theme.text2)
+                team(g.home, g.homeScore)
             }
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 5), GridItem(.flexible(), spacing: 5)], spacing: 5) {
-                ForEach(picks.indices, id: \.self) { i in
-                    let (sel, label, ml) = picks[i]
-                    if let sel {
-                        PointValueButton(sel: sel, suspended: o.suspended, move: o.move[sel.id], big: true, label: label, compact: true)
-                    } else {
-                        UnavailablePointValue(label: label, text: ml ? "N/A" : "—", compact: true)
-                    }
+            .padding(.top, 8).padding(.bottom, 4)
+            Group {
+                if g.state == .live {
+                    HStack(spacing: 4) { LiveTag(); Text("· \(g.awayScore)–\(g.homeScore) · \(g.clock)") }
+                } else {
+                    Text("\(Fmt.day(g.start)) · \(Fmt.time(g.start))")
                 }
             }
+            .font(.barlow(12, 700)).foregroundStyle(Theme.text2)
+            .padding(.top, 4).padding(.bottom, 4)
+            ChallengeChoices(g: g, o: o, title: { sel in MatchupText.cardLabel(sel, g) })
         }
     }
 
-    private func liveTeam(_ g: Game, _ team: Team, _ score: Int, _ opponent: Int, _ side: String) -> some View {
-        HStack(spacing: 5) {
-            Button { GameModel.open(g.id) } label: {
-                HStack(spacing: 7) {
-                    LiveLogo(team: team)
-                    Text(team.name).font(.barlow(12, 700)).lineLimit(1).truncationMode(.tail)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .buttonStyle(.press)
-            .accessibilityLabel("Open \(team.name) game stats")
-            Text(g.state == .scheduled ? "–" : "\(score)")
-                .font(.display(23, 900)).monospacedDigit()
-                .foregroundStyle(g.state == .live && score < opponent ? Theme.text2 : Theme.text)
-                .frame(minWidth: 23, alignment: .trailing)
-                .contentTransition(.numericText())
-                .animation(.easeOut(duration: 0.6), value: score)
-        }
-        .frame(height: 48)
-    }
-
-    /// Simulated layout: a grid with margin / total / money columns.
-    @ViewBuilder private func simBody(_ g: Game, _ o: PointValueBoard) -> some View {
-        let Sp = Sim.sports[g.sport]!
-        let cols: [(String, [Selection])] = [
-            o.margin.count == 2 ? (Sp.marginLabel, o.margin) : nil,
-            o.total.count == 2 ? ("Total", o.total) : nil,
-            o.winner.filter { $0.side != "draw" }.count == 2 ? ("Money", o.winner.filter { $0.side != "draw" }) : nil,
-        ].compactMap { $0 }
-        let w: CGFloat = cols.count == 2 ? 66 : 60
-        let draw = o.winner.first { $0.side == "draw" }
-        VStack(spacing: 5) {
-            HStack(spacing: 5) {
+    private func team(_ t: Team, _ score: Int) -> some View {
+        Button { GameModel.open(g.id) } label: {
+            HStack(spacing: 7) {
+                TeamBadge(team: t, size: 30)
+                Text(t.name).font(.barlow(14, 750)).lineLimit(1).truncationMode(.tail)
                 Spacer(minLength: 0)
-                ForEach(cols.indices, id: \.self) { i in
-                    Text(cols[i].0.uppercased()).font(.barlow(10, 800)).tracking(0.4).foregroundStyle(Theme.muted).frame(width: w)
+                if g.state == .live {
+                    Text("\(score)").font(.barlow(19, 800)).monospacedDigit()
+                        .contentTransition(.numericText()).animation(.easeOut(duration: 0.6), value: score)
                 }
             }
-            ForEach(["away", "home"], id: \.self) { side in
-                let team = side == "away" ? g.away : g.home
-                let row = side == "away" ? 0 : 1
-                let score = side == "home" ? g.homeScore : g.awayScore
-                let opp = side == "home" ? g.awayScore : g.homeScore
-                HStack(spacing: 5) {
-                    Button { GameModel.open(g.id) } label: {
-                        HStack(spacing: 8) {
-                            TeamBadge(team: team)
-                            Text(g.state == .live ? team.abbr : team.name).font(.barlow(14.5, 700)).lineLimit(1)
-                            Spacer(minLength: 0)
-                            if g.state == .live {
-                                Text("\(score)").font(.display(23, 900)).monospacedDigit().foregroundStyle(score < opp ? Theme.text2 : Theme.text)
-                                    .padding(.trailing, 2).contentTransition(.numericText()).animation(.easeOut(duration: 0.6), value: score)
-                            }
-                        }
-                        .frame(height: 46)
-                    }
-                    .buttonStyle(.press)
-                    ForEach(cols.indices, id: \.self) { i in
-                        let sel = cols[i].1[row]
-                        PointValueButton(sel: sel, suspended: o.suspended, move: o.move[sel.id], label: team.name).frame(width: w)
-                    }
-                }
-            }
-            if let draw {
-                HStack(spacing: 5) {
-                    Text("Draw").font(.barlow(14.5, 700)).foregroundStyle(Theme.text2).frame(maxWidth: .infinity, alignment: .leading).frame(height: 40)
-                    PointValueButton(sel: draw, suspended: o.suspended, move: o.move[draw.id], label: "Draw").frame(width: w)
-                }
-            }
-            if cols.isEmpty {
-                Text("Challenging lines are not available for this game yet.").font(.barlow(11.5)).foregroundStyle(Theme.muted)
-                    .frame(maxWidth: .infinity, alignment: .leading).padding(.top, 6).padding(.horizontal, 2)
-            }
+            .frame(maxWidth: .infinity)
         }
+        .buttonStyle(.press)
+        .accessibilityLabel("Open \(t.name) game stats")
     }
 }
 
-/// Two columns sized like CSS `minmax(minLeft, left fr) minmax(0, right fr)`.
-struct FrColumns: Layout {
-    var left: CGFloat
-    var right: CGFloat
-    var minLeft: CGFloat
-    var spacing: CGFloat
-
-    private func widths(_ total: CGFloat) -> (CGFloat, CGFloat) {
-        let free = max(0, total - spacing)
-        var l = free * left / (left + right)
-        if l < minLeft { l = min(minLeft, free) }
-        return (l, free - l)
+enum MatchupText {
+    /// The label on a Home card, same as the web app.
+    static func cardLabel(_ sel: Selection, _ g: Game) -> String {
+        let team = sel.side == "away" ? g.away.name : g.home.name
+        switch sel.market {
+        case "winner": return "\(team) to win"
+        case "margin": return marginText(team, sel.line ?? 0)
+        default: return "Combined score \(sel.side == "higher" ? "above" : "below") \(PointValueMath.fmtLine(sel.line ?? 0, signed: false))"
+        }
     }
 
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let total = proposal.width ?? 360
-        let (l, r) = widths(total)
-        let h = subviews.enumerated().map { i, s in s.sizeThatFits(ProposedViewSize(width: i == 0 ? l : r, height: nil)).height }.max() ?? 0
-        return CGSize(width: total, height: h)
+    /// The label on the game page, same as the web app.
+    static func detailLabel(_ sel: Selection, _ g: Game) -> String {
+        let team = sel.side == "away" ? g.away.name : g.home.name
+        switch sel.market {
+        case "winner": return "\(team) · Outright Winner"
+        case "margin": return marginText(team, sel.line ?? 0)
+        default: return "\(sel.side == "higher" ? "Total Score Over" : "Total Score Under") \(PointValueMath.fmtLine(sel.line ?? 0, signed: false))"
+        }
     }
 
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        let (l, r) = widths(bounds.width)
-        for (i, s) in subviews.enumerated() {
-            let w = i == 0 ? l : r
-            let size = s.sizeThatFits(ProposedViewSize(width: w, height: nil))
-            let x = i == 0 ? bounds.minX : bounds.minX + l + spacing
-            s.place(at: CGPoint(x: x, y: bounds.midY - size.height / 2), proposal: ProposedViewSize(width: w, height: size.height))
+    private static func marginText(_ team: String, _ line: Double) -> String {
+        line < 0 ? "\(team) to win by \(Int(abs(line).rounded(.up)))+" : "\(team) to stay within \(Int(line.rounded(.down)))"
+    }
+}
+
+/// Tabs for each market a game has, and the two choices in the open one.
+struct ChallengeChoices: View {
+    var g: Game
+    var o: PointValueBoard
+    var title: (Selection) -> String
+    private var home: HomeModel { .shared }
+
+    var body: some View {
+        let tabs: [(String, String, [Selection])] = [("winner", "Match Winner", o.winner), ("margin", "Margin", o.margin), ("total", "Total Points", o.total)]
+            .map { ($0.0, $0.1, $0.2.filter { $0.side != "draw" }) }
+            .filter { $0.2.count >= 2 }
+        let current = tabs.first { $0.0 == home.marketTab[g.id] } ?? tabs.first
+        if let current {
+            VStack(spacing: 8) {
+                HStack(spacing: 5) {
+                    ForEach(tabs, id: \.0) { tab in
+                        let on = tab.0 == current.0
+                        Button { home.marketTab[g.id] = tab.0 } label: {
+                            Text(tab.1).font(.barlow(12, 750)).lineLimit(1).minimumScaleFactor(0.8)
+                                .foregroundStyle(on ? Theme.accentInk : Theme.text2)
+                                .frame(maxWidth: .infinity).frame(minHeight: 34)
+                                .background(on ? Theme.accent : .clear, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        }
+                        .buttonStyle(.press)
+                        .accessibilityAddTraits(on ? .isSelected : [])
+                    }
+                }
+                .padding(4)
+                .background(Theme.raised, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                HStack(spacing: 7) {
+                    ForEach(Array(current.2.prefix(2)), id: \.id) { sel in
+                        ChallengeChoiceButton(sel: sel, suspended: o.suspended, big: true, label: title(sel))
+                    }
+                }
+            }
+            .padding(.top, 4)
+        } else {
+            Text("Challenge targets are not available for this game yet.").font(.barlow(12)).foregroundStyle(Theme.muted)
+                .frame(maxWidth: .infinity, alignment: .leading).padding(.top, 6)
         }
     }
 }

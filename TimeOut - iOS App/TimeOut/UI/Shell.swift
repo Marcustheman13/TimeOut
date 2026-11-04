@@ -86,7 +86,7 @@ struct TopBar: View {
                 .background(locked ? Theme.raised : Theme.accent, in: Capsule())
             }
             .buttonStyle(.press)
-            .accessibilityLabel(locked ? "Challenging locked until midnight" : "\(wl.balance) minutes available to challenge")
+            .accessibilityLabel(locked ? "New pledges resume at midnight" : "\(wl.balance) minutes available to pledge")
         }
         .padding(.leading, 8).padding(.trailing, 14)
         .frame(height: 52)
@@ -115,7 +115,7 @@ struct TabBar: View {
         let social = d?.requestsIn.count ?? 0
         HStack(spacing: 4) {
             tab("home", "Home", .home, badge: 0, green: false)
-            tab("challenges", "My Challenges", .ticket, badge: open, green: true)
+            tab("challenges", "My Challenges", .target, badge: open, green: true)
             tab("social", "Social", .users, badge: social, green: false)
         }
         .padding(6)
@@ -166,7 +166,7 @@ struct TabBar: View {
     }
 }
 
-/// The bar above the tab bar while picks are on a closed slip ("Challenge Slip" / "Finalize Combo").
+/// The bar above the tab bar while picks are on a closed commitment.
 struct SlipBar: View {
     private var slip: Slip { .shared }
     private var ui: UIState { .shared }
@@ -174,26 +174,27 @@ struct SlipBar: View {
 
     var body: some View {
         let _ = live.version
-        let showCombo = slip.comboMode && slip.picks.count > 1 && !ui.sheetOpen(.slip)
+        let showCombo = slip.comboMode && !slip.picks.isEmpty && !ui.sheetOpen(.slip)
         let showSlip = !slip.picks.isEmpty && !slip.comboMode && !ui.sheetOpen(.slip)
         if showCombo || showSlip {
             let st = slip.status()
-            let price = PointValueMath.fmt(PointValueMath.fromDecimal(slip.decimal))
+            let target = "\(String(format: "%.2f", slip.decimal))x Target"
+            let title = showCombo ? (slip.picks.count > 1 ? "Review Combo Goal" : "Review Single Matchup Pledge") : "Daily Commitment"
             Button { slip.open() } label: {
                 HStack(spacing: 10) {
                     Text("\(slip.picks.count)").font(.barlow(13, 900))
                         .foregroundStyle(Theme.accentInk)
                         .frame(width: 26, height: 26)
                         .background(showCombo ? Theme.accentInk.opacity(0.15) : Theme.accent, in: Circle())
-                    Text(showCombo ? "Finalize Combo" : "Challenge Slip").font(.barlow(15, 800))
+                    Text(title).font(.barlow(15, 800)).lineLimit(1).minimumScaleFactor(0.85)
                     Spacer(minLength: 0)
                     if showCombo {
-                        Text(st.closed ? "Pick unavailable" : st.changed ? "Point value changed" : price).font(.display(19, 900))
+                        Text(st.closed ? "Choice unavailable" : st.changed ? "Target updated" : target).font(.display(17, 900)).lineLimit(1)
                     } else if st.changed || st.closed {
-                        HStack(spacing: 4) { Icon(.alert, 15); Text(st.closed ? "Pick unavailable" : "Point value changed") }
+                        HStack(spacing: 4) { Icon(.alert, 15); Text(st.closed ? "Choice unavailable" : "Target updated") }
                             .font(.barlow(13, 800)).foregroundStyle(Theme.warn)
                     } else {
-                        Text(price).font(.display(19, 900)).foregroundStyle(Theme.accent)
+                        Text(target).font(.display(17, 900)).foregroundStyle(Theme.accent).lineLimit(1)
                     }
                 }
                 .foregroundStyle(showCombo ? Theme.accentInk : Theme.text)
@@ -206,7 +207,7 @@ struct SlipBar: View {
             .buttonStyle(.press)
             .padding(.horizontal, 12)
             .transition(.move(edge: .bottom).combined(with: .opacity))
-            .accessibilityLabel(showCombo ? "Finalize \(slip.picks.count) pick combo" : "Open challenge slip")
+            .accessibilityLabel(title)
         }
     }
 }
@@ -279,7 +280,7 @@ struct PageHost: View {
         case .game(let id):
             guard let g = Feed.game(id) else { return "" }
             return "\(g.away.abbr) @ \(g.home.abbr)"
-        case .combo: return "Build a combo"
+        case .combo: return "Build a Combo Goal"
         case .settings(let s): return SettingsModel.sections[s]?.title ?? ""
         }
     }
@@ -376,7 +377,6 @@ struct SheetHost: View {
         case .slip: SlipSheet()
         case .share(let id): ShareSheet(challengeId: id)
         case .how: HowItWorksSheet()
-        case .locked: LockedAppsSheet()
         case .profile(let u): ProfileSheet(username: u)
         case .team(let id): TeamSheet(id: id)
         case .teamNew: NewTeamSheet()
@@ -462,13 +462,13 @@ struct ToastView: View {
     }
 }
 
-/// Red banner while offline; the slip refuses challenges until the connection returns.
+/// Red banner while offline; the commitment refuses pledges until the connection returns.
 struct NetBanner: View {
     var body: some View {
         VStack {
             HStack(spacing: 10) {
                 Icon(.wifiOff, 17)
-                Text(md("**No internet connection.** Challenging is paused until you're back online.")).font(.barlow(13, 600))
+                Text(md("**No internet connection.** New pledges pause until you're back online.")).font(.barlow(13, 600))
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .foregroundStyle(.white)

@@ -7,7 +7,8 @@
 
   const view = { tab: 'open', filter: 'all' };
 
-  const toWin = (b) => Math.round((Math.round(b.pledgeMinutes * b.decimal) - b.pledgeMinutes) * (b.multiplier || 1));
+  // Minutes a win would add, after the 120-minute cap.
+  const toWin = (b) => Math.max(0, Math.min(b.pledgeMinutes + Math.round((Math.round(b.pledgeMinutes * b.decimal) - b.pledgeMinutes) * (b.multiplier || 1)), TO.MAX_ALLOWED_MINUTES) - b.pledgeMinutes);
   const challengeTitle = (b) => (b.kind === 'todo' ? `To-do Combo Goal · ${b.picks.length} task${b.picks.length === 1 ? '' : 's'}` : b.picks.length > 1 ? `${b.picks.length}-pick Combo Goal` : b.picks[0].label);
 
   function pickStanding(pick) {
@@ -70,7 +71,7 @@
     if (pick.result !== 'pending' || pick.kind === 'todo') return '';
     const cur = S.currentSelection(pick.selId);
     if (!cur || !cur.sel) return '';
-    if (!cur.open) return `<span class="tag">Challenging closed</span>`;
+    if (!cur.open) return `<span class="tag">Challenges closed</span>`;
     if (cur.sel.price === pick.price && cur.sel.line === pick.line) return `<span class="tag">Target now ${TO.multiplierText(cur.sel.price)}</span>`;
     const improved = TO.convertPointValueToMultiplier(cur.sel.price) > TO.convertPointValueToMultiplier(pick.price);
     return `<span class="tag ${improved ? 'green' : 'red'}">Target now ${TO.multiplierText(cur.sel.price)}</span>`;
@@ -116,7 +117,7 @@
     if (pledge.status === 'won') result = `<span class="display green" style="font-size:22px">+${pledge.reward - pledge.pledgeMinutes} min</span>`;
     else if (pledge.status === 'lost') result = `<span class="display red" style="font-size:22px">−${pledge.pledgeMinutes} min</span>`;
     else result = `<span class="small bold muted">${pledge.insurancePaid ? 'Miss-one protection returned your minutes' : 'Committed minutes returned'} · ${pledge.pledgeMinutes} min</span>`;
-    const picks = pledge.picks.map((l) => `<div class="pick"><span class="pick-dot ${l.result}">${icon({ won: 'check', lost: 'x' }[l.result] || 'minus', 12)}</span><div class="grow"><div class="lt">${esc(l.label)} <span class="faint" style="font-weight:600">${TO.pointValue.fmt(l.price)}</span></div><div class="lm">${esc(l.kind === 'todo' ? l.marketLabel : l.matchup)}${l.final ? ` · <b>${esc(l.final)}</b>` : ''}</div></div></div>`).join('');
+    const picks = pledge.picks.map((l) => `<div class="pick"><span class="pick-dot ${l.result}">${icon({ won: 'check', lost: 'x' }[l.result] || 'minus', 12)}</span><div class="grow"><div class="lt">${esc(l.label)} <span class="faint" style="font-weight:600">${TO.multiplierText(l.price)}</span></div><div class="lm">${esc(l.kind === 'todo' ? l.marketLabel : l.matchup)}${l.final ? ` · <b>${esc(l.final)}</b>` : ''}</div></div></div>`).join('');
     const why = pledge.status === 'void' ? `<div class="note warn">${icon('info', 15)}<span>${pledge.kind === 'todo' ? '' : 'The game was postponed or cancelled, so your committed minutes were returned.'}</span></div>` : '';
     return `<div class="card pledge-card">
       <div class="pledge-top"><div class="grow"><div class="row-s" style="margin-bottom:4px">${ui.statusPill(pledge.status)}${single ? '' : `<span class="tag">${pledge.kind === 'todo' ? 'To-do' : 'Combo Goal'}</span>`}</div><div class="t">${esc(challengeTitle(pledge))}</div></div><div style="text-align:right"><div class="multiplier" style="font-size:16px">${TO.multiplierText(TO.pointValue.fromDecimal(pledge.decimal))}</div>${result}</div></div>
@@ -237,9 +238,10 @@
     ctx.strokeStyle = '#283141'; ctx.lineWidth = 3; ctx.stroke();
 
     let y = 340;
-    const single = pledge.picks.length === 1 && pledge.picks[0].kind === 'game';
+    const single = pledge.picks.length === 1 && pledge.picks[0].kind === 'game' && !!S.game(pledge.picks[0].gameId);
     if (single) {
       const g = S.game(pledge.picks[0].gameId);
+      if (!g) return null;
       const disc = (team, cx) => {
         ctx.beginPath(); ctx.arc(cx, y + 90, 90, 0, Math.PI * 2); ctx.fillStyle = team.color; ctx.fill();
         ctx.lineWidth = 6; ctx.strokeStyle = 'rgba(255,255,255,0.15)'; ctx.stroke();
@@ -267,7 +269,7 @@
         ctx.font = `600 28px ${B}`; ctx.fillStyle = '#8c96a8';
         y = wrapText(ctx, `${l.marketLabel} · ${l.matchup}`, 110, y + 76, W - 360, 34, 2);
         ctx.font = `900 50px ${D}`; ctx.fillStyle = '#22d66e'; ctx.textAlign = 'right';
-        ctx.fillText(TO.pointValue.fmt(l.price), W - 110, y - 60);
+        ctx.fillText(`${TO.convertPointValueToMultiplier(l.price).toFixed(2).replace(/0+$/, '').replace(/\.$/, '')}x`, W - 110, y - 60);
         ctx.textAlign = 'left';
         y += 30;
       }
@@ -280,12 +282,12 @@
       ctx.font = `700 26px ${B}`; ctx.fillStyle = '#8c96a8'; ctx.fillText(label, x, by + 20);
       ctx.font = `900 76px ${D}`; ctx.fillStyle = color; ctx.fillText(value, x, by + 100);
     };
-    col('VALUE', TO.pointValue.fmt(pledge.american), 110, '#f2f5f9');
+    col('TARGET', `${Number(pledge.decimal).toFixed(2).replace(/0+$/, '').replace(/\.$/, '')}x`, 110, '#f2f5f9');
     col('PLEDGE', `${pledge.pledgeMinutes} min`, 420, '#f2f5f9');
     col(pledge.status === 'lost' ? 'LOST' : pledge.status === 'won' ? 'WON' : 'TO WIN', pledge.status === 'lost' ? `−${pledge.pledgeMinutes}` : `+${pledge.status === 'won' ? pledge.reward - pledge.pledgeMinutes : toWin(pledge)}`, 730, pledge.status === 'lost' ? '#ff5a5f' : '#22d66e');
 
     ctx.font = `600 30px ${B}`; ctx.fillStyle = '#8c96a8'; ctx.textAlign = 'center';
-    ctx.fillText('Challenging screen time, not money.', W / 2, 1160);
+    ctx.fillText('Screen time on the line, not money.', W / 2, 1160);
     ctx.font = `italic 900 40px ${D}`; ctx.fillStyle = '#22d66e';
     ctx.fillText('TimeOut', W / 2, 1230);
     ctx.textAlign = 'left';
@@ -293,9 +295,9 @@
   }
 
   function shareText(pledge) {
-    const picks = pledge.picks.map((l) => `${l.label} (${TO.pointValue.fmt(l.price)}) · ${l.matchup}`).join('\n');
+    const picks = pledge.picks.map((l) => `${l.label} (${TO.multiplierText(l.price)}) · ${l.matchup}`).join('\n');
     const pledgeMinutes = `${pledge.pledgeMinutes} min of screen time to earn ${toWin(pledge)} min`;
-    return `My TimeOut ${pledge.picks.length > 1 ? 'combo-goal' : 'pledge'}:\n${picks}\nOdds ${TO.pointValue.fmt(pledge.american)} · ${pledgeMinutes}`;
+    return `My TimeOut ${pledge.picks.length > 1 ? 'Combo Goal' : 'pledge'}:\n${picks}\n${TO.multiplierText(TO.pointValue.fromDecimal(pledge.decimal))} · ${pledgeMinutes}`;
   }
 
   TO.actions.share = async (el) => {
@@ -305,7 +307,7 @@
     ui.sheet('share', {
       render: () => ({
         title: 'Share pledge',
-        body: `${url ? `<img class="share-img" src="${url}" alt="pledge card image showing the teams, pick, point value and pledge">` : '<div class="card muted small">Creating image…</div>'}
+        body: `${url ? `<img class="share-img" src="${url}" alt="pledge card image showing the teams, pick, target and pledge">` : '<div class="card muted small">Creating image…</div>'}
           <div class="small muted">${ui.embedded ? 'To save the image, right-click it or press and hold it.' : 'Save the image and post it anywhere.'}</div>
           <textarea class="textarea sr" id="share-text" readonly>${esc(shareText(pledge))}</textarea>`,
         foot: `${!ui.embedded && url ? `<a class="btn primary full" href="${url}" download="timeout-pledge.png" data-act="share-saved">${icon('share', 18)} Save image</a>` : ''}
@@ -317,7 +319,7 @@
   };
   TO.actions['share-copy'] = async () => {
     const ok = await ui.copy(document.getElementById('share-text').value);
-    ui.toast({ kind: ok ? 'win' : 'info', title: ok ? 'pledge copied' : 'Copy the text manually', msg: ok ? 'Paste it into any chat.' : '' });
+    ui.toast({ kind: ok ? 'win' : 'info', title: ok ? 'Pledge copied' : 'Copy the text manually', msg: ok ? 'Paste it into any chat.' : '' });
   };
   TO.actions['share-saved'] = () => { /* default link behavior downloads the image */ };
 
