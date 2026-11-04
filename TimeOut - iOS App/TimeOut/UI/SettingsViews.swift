@@ -468,7 +468,7 @@ struct NotificationsSection: View {
                 ScreenTime.shared.sync()
             }
         }
-        Text("Screen time warnings always arrive on time. Results and friend requests arrive when iOS next wakes TimeOut, usually within an hour or two, and right away when you open it.")
+        Text("Challenge results and friend requests usually arrive within about a minute, even when TimeOut is closed.")
             .font(.barlow(11.5)).foregroundStyle(Theme.muted)
             .onAppear { Task { await notifier.refreshAccess() } }
     }
