@@ -24,7 +24,7 @@
   ui.avatar = (src, cls = '') => `<img class="avatar ${cls}" src="${esc(src)}" alt="">`;
 
   ui.statusPill = (status) => {
-    const label = { won: 'Won', lost: 'Lost', void: 'Void', push: 'Push', open: 'Open' }[status] || status;
+    const label = { won: 'Won', lost: 'Lost', void: 'Void', tie: 'Tie', open: 'Open' }[status] || status;
     return `<span class="status-pill ${status}">${label.toUpperCase()}</span>`;
   };
 
@@ -40,8 +40,8 @@
       return `<span>${TO.fmtDay(g.start)} · ${TO.fmtTime(g.start)}</span>${mins <= 60 ? `<span class="faint">· starts in ${mins < 1 ? '<1' : mins} min</span>` : ''}`;
     }
     if (g.state === 'final') return `<span>${esc(g.statusText)}</span>`;
-    if (g.state === 'canceled') return `<span class="yellow row-s">${icon('alert', 13)} Canceled · all bets voided, stakes returned</span>`;
-    return `<span class="yellow row-s">${icon('alert', 13)} Postponed · all bets voided, stakes returned</span>`;
+    if (g.state === 'canceled') return `<span class="yellow row-s">${icon('alert', 13)} Canceled · all challenges cancelled, pledged minutes returned</span>`;
+    return `<span class="yellow row-s">${icon('alert', 13)} Postponed · all challenges cancelled, pledged minutes returned</span>`;
   };
 
   /** One matchup choice. Tapping adds or removes it from the daily commitment. */
@@ -49,9 +49,9 @@
     const on = TO.comboGoalBuilder.has(sel.id);
     const locked = suspended;
     let ln = '';
-    if (sel.market === 'spread') ln = sel.line < 0 ? `Win by ${Math.ceil(Math.abs(sel.line))}+` : `Stay within ${Math.floor(sel.line)}`;
-    if (sel.market === 'total') ln = `Total Score ${sel.side === 'over' ? 'Over' : 'Under'} ${TO.odds.fmtLine(sel.line, false)}`;
-    const mult = TO.convertOddsToMultiplier(sel.price);
+    if (sel.market === 'margin') ln = sel.line < 0 ? `Win by ${Math.ceil(Math.abs(sel.line))}+` : `Stay within ${Math.floor(sel.line)}`;
+    if (sel.market === 'total') ln = `Total Score ${sel.side === 'higher' ? 'Higher' : 'Lower'} ${TO.pointValue.fmtLine(sel.line, false)}`;
+    const mult = TO.convertPointValueToMultiplier(sel.price);
     const inner = locked
       ? `${icon('lock', 14)}`
       : `${big && label ? `<span class="lbl">${esc(label)}</span>` : ''}${ln ? `<span class="ln">${ln}</span>` : ''}<span class="pr ${ln || (big && label) ? '' : 'solo'}">${TO.multiplierText(sel.price)}</span>`;
@@ -190,7 +190,7 @@
   /** For actions that need a connection (placing pledges). False, with a toast, when offline. */
   TO.net.guard = () => {
     if (TO.net.online()) return true;
-    ui.toast({ kind: 'loss', title: 'No internet connection', msg: 'Betting is paused until you\'re back online.' });
+    ui.toast({ kind: 'loss', title: 'No internet connection', msg: 'Challenging is paused until you\'re back online.' });
     return false;
   };
 

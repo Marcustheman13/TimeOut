@@ -22,10 +22,10 @@ final class Net {
         monitor.start(queue: DispatchQueue(label: "timeout.net"))
     }
 
-    /// For actions that need a connection (placing bets). False, with a toast, when offline.
+    /// For actions that need a connection (placing challenges). False, with a toast, when offline.
     func guardOnline() -> Bool {
         if online { return true }
-        UIState.shared.toast(.loss, "No internet connection", "Betting is paused until you're back online.")
+        UIState.shared.toast(.loss, "No internet connection", "Challenging is paused until you're back online.")
         return false
     }
 }
@@ -52,7 +52,7 @@ enum SheetKind: Hashable {
 }
 
 /// Full-screen pages that slide in over the shell (`ui.openPage`).
-enum PageKind: Hashable { case game(String), parlay, settings(String) }
+enum PageKind: Hashable { case game(String), combo, settings(String) }
 
 struct ConfirmRequest: Identifiable {
     let id = UUID()
@@ -79,7 +79,7 @@ final class UIState {
     private(set) var scrollTopToken = 0
     /// Bumped to scroll Home's feed to the filter bar.
     private(set) var scrollFilterToken = 0
-    /// Bumped to jump to the game page's markets ("Make a bet").
+    /// Bumped to jump to the game page's markets ("Make a challenge").
     private(set) var flashMarketsToken = 0
 
     // MARK: Toasts
@@ -133,7 +133,7 @@ final class UIState {
         }
     }
 
-    /// Closes a sheet. `silent` skips its close behavior (closing the bet slip normally throws the picks away).
+    /// Closes a sheet. `silent` skips its close behavior (closing the challenge slip normally throws the picks away).
     func closeSheet(_ kind: SheetKind, silent: Bool = false) {
         guard sheets.contains(kind) else { return }
         withAnimation(.easeOut(duration: 0.22)) { sheets.removeAll { $0 == kind } }
@@ -166,7 +166,7 @@ final class UIState {
 
     private func sameType(_ a: PageKind, _ b: PageKind) -> Bool {
         switch (a, b) {
-        case (.game, .game), (.settings, .settings), (.parlay, .parlay): return true
+        case (.game, .game), (.settings, .settings), (.combo, .combo): return true
         default: return false
         }
     }
@@ -174,7 +174,7 @@ final class UIState {
     func closePage(_ kind: PageKind, silent: Bool = false) {
         guard pages.contains(kind) else { return }
         withAnimation(.easeOut(duration: 0.24)) { pages.removeAll { $0 == kind } }
-        if !silent, kind == .parlay, !Slip.shared.legs.isEmpty, !sheetOpen(.slip) { Slip.shared.open() }
+        if !silent, kind == .combo, !Slip.shared.picks.isEmpty, !sheetOpen(.slip) { Slip.shared.open() }
     }
 
     func closeAllPages() {

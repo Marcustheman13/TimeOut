@@ -2,46 +2,46 @@ import SwiftUI
 import UIKit
 
 @Observable
-final class BetsModel {
-    static let shared = BetsModel()
+final class ChallengesModel {
+    static let shared = ChallengesModel()
     var tab = "open"
     var filter = "all"
 }
 
-enum BetLogic {
-    static func legStanding(_ leg: Leg) -> String {
-        if leg.result != "pending" { return leg.result }
-        if leg.kind == "todo" { return "upcoming" }
-        if leg.kind == "race" {
-            guard let race = Races.shared.get(leg.raceId), race.status != "open" else { return "upcoming" }
-            if race.status == "running" { return race.winnerId == leg.horseId ? "winning" : "losing" }
+enum ChallengeLogic {
+    static func pickStanding(_ pick: Pick) -> String {
+        if pick.result != "pending" { return pick.result }
+        if pick.kind == "todo" { return "upcoming" }
+        if pick.kind == "race" {
+            guard let race = Races.shared.get(pick.raceId), race.status != "open" else { return "upcoming" }
+            if race.status == "running" { return race.winnerId == pick.horseId ? "winning" : "losing" }
             return "even"
         }
-        return Feed.liveStanding(leg)
+        return Feed.liveStanding(pick)
     }
 
-    static func overallStanding(_ bet: Bet) -> String {
-        let sts = bet.legs.filter { $0.result == "pending" }.map { legStanding($0) }
+    static func overallStanding(_ challenge: Challenge) -> String {
+        let sts = challenge.picks.filter { $0.result == "pending" }.map { pickStanding($0) }
         if sts.contains("losing") { return "losing" }
         if !sts.isEmpty && sts.allSatisfy({ $0 == "winning" }) { return "winning" }
         if sts.allSatisfy({ $0 == "upcoming" }) { return "upcoming" }
         return "even"
     }
 
-    static func gameLeg(_ leg: Leg) -> Bool { leg.kind == "race" || leg.kind == "game" || (leg.kind == "sports" && leg.gameId != nil) }
+    static func gamePick(_ pick: Pick) -> Bool { pick.kind == "race" || pick.kind == "game" || (pick.kind == "sports" && pick.gameId != nil) }
 
-    static func isLive(_ bet: Bet) -> Bool {
-        bet.legs.contains { leg in
-            leg.result == "pending" && (leg.kind == "race" ? Races.shared.get(leg.raceId)?.status == "running"
-                                        : gameLeg(leg) && leg.gameId.flatMap { Feed.game($0) }?.state == .live)
+    static func isLive(_ challenge: Challenge) -> Bool {
+        challenge.picks.contains { pick in
+            pick.result == "pending" && (pick.kind == "race" ? Races.shared.get(pick.raceId)?.status == "running"
+                                        : gamePick(pick) && pick.gameId.flatMap { Feed.game($0) }?.state == .live)
         }
     }
 }
 
-struct MyBetsView: View {
+struct MyChallengesView: View {
     private var store: Store { .shared }
     private var live: LiveFeed { .shared }
-    private var model: BetsModel { .shared }
+    private var model: ChallengesModel { .shared }
     private var ui: UIState { .shared }
     private var app: AppModel { .shared }
 
@@ -50,44 +50,44 @@ struct MyBetsView: View {
         let _ = live.detailsVersion
         let _ = app.tick
         let _ = Races.shared.version
-        let bets = (store.data?.bets ?? []).filter { ($0.kind == "sports" || $0.kind == "race") && !$0.legs.isEmpty && $0.legs.allSatisfy { BetLogic.gameLeg($0) } }
-        let open = bets.filter { $0.status == "open" }.sorted { $0.placedAt > $1.placedAt }
-        let liveNow = open.filter { BetLogic.isLive($0) }
-        let otherOpen = open.filter { !BetLogic.isLive($0) }
-        let allSettled = bets.filter { $0.status != "open" }.sorted { ($0.settledAt ?? 0) > ($1.settledAt ?? 0) }
+        let challenges = (store.data?.challenges ?? []).filter { ($0.kind == "sports" || $0.kind == "race") && !$0.picks.isEmpty && $0.picks.allSatisfy { ChallengeLogic.gamePick($0) } }
+        let open = challenges.filter { $0.status == "open" }.sorted { $0.placedAt > $1.placedAt }
+        let liveNow = open.filter { ChallengeLogic.isLive($0) }
+        let otherOpen = open.filter { !ChallengeLogic.isLive($0) }
+        let allSettled = challenges.filter { $0.status != "open" }.sorted { ($0.resolvedAt ?? 0) > ($1.resolvedAt ?? 0) }
         let counts = (all: allSettled.count, won: allSettled.filter { $0.status == "won" }.count, lost: allSettled.filter { $0.status == "lost" }.count,
                       void: allSettled.filter { $0.status != "won" && $0.status != "lost" }.count)
-        let settled = model.filter == "all" ? allSettled : allSettled.filter { model.filter == "void" ? ($0.status == "void" || $0.status == "push") : $0.status == model.filter }
+        let resolved = model.filter == "all" ? allSettled : allSettled.filter { model.filter == "void" ? ($0.status == "void" || $0.status == "tie") : $0.status == model.filter }
         return ScrollViewReader { proxy in
             ScrollView {
                 VStack(spacing: 0) {
                     Color.clear.frame(height: 0).id("top")
-                    PageHead(title: "My Bets", text: "Follow your open bets live and see how every past bet turned out.")
+                    PageHead(title: "My Challenges", text: "Follow your open challenges live and see how every past challenge turned out.")
                     VStack(spacing: 14) {
                         RecordCard()
                         Seg {
                             SegButton(on: model.tab == "open", action: { model.tab = "open" }) {
-                                Text("Open bets"); CountPill(n: open.count, off: open.isEmpty).scaleEffect(0.9)
+                                Text("Open challenges"); CountPill(n: open.count, off: open.isEmpty).scaleEffect(0.9)
                             }
                             SegButton(on: model.tab == "history", action: { model.tab = "history" }) {
-                                Text("Bet history"); CountPill(n: counts.all, off: true).scaleEffect(0.9)
+                                Text("Challenge history"); CountPill(n: counts.all, off: true).scaleEffect(0.9)
                             }
                         }
                         .gutter()
                         if model.tab == "open" {
                             if open.isEmpty {
-                                EmptyState(icon: .ticket, title: "No open bets", text: "Go to Home and tap any odds to start a bet. It takes two taps: pick a price, then tap Place bet.") {
+                                EmptyState(icon: .ticket, title: "No open challenges", text: "Go to Home and tap any point value to start a challenge. It takes two taps: pick a price, then tap Place challenge.") {
                                     Button("Find a game") { ui.go("home") }.buttonStyle(.btn(.primary))
                                 }
                             } else {
                                 if !liveNow.isEmpty {
                                     HStack(spacing: 6) { LiveTag(text: ""); Text("Live now").eyebrow(); CountPill(n: liveNow.count) }
                                         .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 16).padding(.top, 4)
-                                    ForEach(liveNow) { BetCard(bet: $0).gutter() }
+                                    ForEach(liveNow) { ChallengeCard(challenge: $0).gutter() }
                                 }
                                 if !otherOpen.isEmpty {
                                     Text("Upcoming").eyebrow().frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 16).padding(.top, 4)
-                                    ForEach(otherOpen) { BetCard(bet: $0).gutter() }
+                                    ForEach(otherOpen) { ChallengeCard(challenge: $0).gutter() }
                                 }
                             }
                         } else {
@@ -101,13 +101,13 @@ struct MyBetsView: View {
                                 .padding(.horizontal, 16)
                             }
                             .scrollIndicators(.hidden)
-                            if settled.isEmpty {
-                                EmptyState(icon: .chart, title: bets.isEmpty ? "No settled bets yet" : "Nothing here yet",
-                                           text: "Bets move here within a few minutes of their game ending, marked Won, Lost or Voided.") {
-                                    if bets.isEmpty { Button("Place your first bet") { ui.go("home") }.buttonStyle(.btn(.primary)) }
+                            if resolved.isEmpty {
+                                EmptyState(icon: .chart, title: challenges.isEmpty ? "No resolved challenges yet" : "Nothing here yet",
+                                           text: "Challenges move here within a few minutes of their game ending, marked Won, Lost or Voided.") {
+                                    if challenges.isEmpty { Button("Place your first challenge") { ui.go("home") }.buttonStyle(.btn(.primary)) }
                                 }
                             } else {
-                                ForEach(settled) { BetCard(bet: $0).gutter() }
+                                ForEach(resolved) { ChallengeCard(challenge: $0).gutter() }
                             }
                         }
                     }
@@ -173,7 +173,7 @@ func leagueShort(_ id: String) -> String {
     switch id {
     case "pred": return "PRED"
     case "todo": return "TO-DO"
-    case "parlay": return "PARLAY"
+    case "combo": return "Combo"
     case "race": return "RACE"
     default: return Sim.leagues[id]?.short ?? id.uppercased()
     }
@@ -198,14 +198,14 @@ struct RecordBig: View {
     }
 }
 
-/// An open bet (live standing, live box, stake row) or a settled one (result and legs).
-struct BetCard: View {
-    var bet: Bet
+/// An open challenge (live standing, live box, pledge row) or a resolved one (result and picks).
+struct ChallengeCard: View {
+    var challenge: Challenge
     var compact = false
 
     var body: some View {
         Group {
-            if bet.status == "open" { open } else { history }
+            if challenge.status == "open" { open } else { history }
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -216,60 +216,60 @@ struct BetCard: View {
     // MARK: Open
 
     private var open: some View {
-        let single = bet.legs.count == 1
-        let st = BetLogic.overallStanding(bet)
-        let sub = single ? "\(bet.legs[0].marketLabel) · \(bet.legs[0].matchup)" : "Every pick must win"
+        let single = challenge.picks.count == 1
+        let st = ChallengeLogic.overallStanding(challenge)
+        let sub = single ? "\(challenge.picks[0].marketLabel) · \(challenge.picks[0].matchup)" : "Every pick must win"
         return VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 10) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(BetText.title(bet)).font(.barlow(16, 800))
+                    Text(ChallengeText.title(challenge)).font(.barlow(16, 800))
                     Text(sub).font(.barlow(13)).foregroundStyle(Theme.text2)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                Text(OddsMath.fmt(bet.american)).font(.display(18, 800)).monospacedDigit().foregroundStyle(Theme.text2)
+                Text(PointValueMath.fmt(challenge.american)).font(.display(18, 800)).monospacedDigit().foregroundStyle(Theme.text2)
             }
-            if bet.boosted || bet.multiplier > 1 {
+            if challenge.boosted || challenge.multiplier > 1 {
                 HStack(spacing: 6) {
-                    if bet.boosted { Tag("Boosted", .blue, icon: .bolt) }
-                    if bet.multiplier > 1 && !bet.boosted { Tag("\(Fmt.mult(bet.multiplier)) streak", .green) }
+                    if challenge.boosted { Tag("Boosted", .blue, icon: .bolt) }
+                    if challenge.multiplier > 1 && !challenge.boosted { Tag("\(Fmt.mult(challenge.multiplier)) streak", .green) }
                 }
             }
             if single {
-                LiveBox(leg: bet.legs[0])
-                HStack { StandingTag(st: st); Spacer(); NowOdds(leg: bet.legs[0]) }
+                LiveBox(pick: challenge.picks[0])
+                HStack { StandingTag(st: st); Spacer(); NowPointValue(pick: challenge.picks[0]) }
             } else {
-                ForEach(Array(bet.legs.enumerated()), id: \.offset) { i, l in
+                ForEach(Array(challenge.picks.enumerated()), id: \.offset) { i, l in
                     if i > 0 { DashedRule() }
-                    let ls = BetLogic.legStanding(l)
+                    let ls = ChallengeLogic.pickStanding(l)
                     HStack(alignment: .top, spacing: 10) {
-                        LegDot(state: ls)
+                        PickDot(state: ls)
                         VStack(alignment: .leading, spacing: 6) {
                             VStack(alignment: .leading, spacing: 0) {
-                                (Text(l.label) + Text(" \(OddsMath.fmt(l.price))").font(.barlow(14.5, 600)).foregroundStyle(Theme.muted)).font(.barlow(14.5, 700))
+                                (Text(l.label) + Text(" \(PointValueMath.fmt(l.price))").font(.barlow(14.5, 600)).foregroundStyle(Theme.muted)).font(.barlow(14.5, 700))
                                 Text("\(l.marketLabel) · \(l.matchup)").font(.barlow(12.5)).foregroundStyle(Theme.text2)
                             }
-                            if l.result == "pending" { LiveBox(leg: l) } else { Text(l.final ?? "").font(.barlow(12.5, 700)).foregroundStyle(Theme.text2) }
+                            if l.result == "pending" { LiveBox(pick: l) } else { Text(l.final ?? "").font(.barlow(12.5, 700)).foregroundStyle(Theme.text2) }
                         }
                     }
                 }
-                HStack { StandingTag(st: st); Spacer(); if bet.insured { Tag("Insured", color: Theme.purple) } }
+                HStack { StandingTag(st: st); Spacer(); if challenge.insured { Tag("Insured", color: Theme.purple) } }
             }
             HStack(spacing: 0) {
-                stakeCell("\(bet.stake)", "Min staked", Theme.text)
+                pledgeCell("\(challenge.pledgeMinutes)", "Min pledged", Theme.text)
                 VRule()
-                stakeCell("+\(BetText.toWin(bet))", "Min to win", Theme.accent)
+                pledgeCell("+\(ChallengeText.toWin(challenge))", "Min to win", Theme.accent)
                 VRule()
-                stakeCell(Fmt.time(bet.placedAt), "Placed \(Fmt.day(bet.placedAt).lowercased())", Theme.text)
+                pledgeCell(Fmt.time(challenge.placedAt), "Placed \(Fmt.day(challenge.placedAt).lowercased())", Theme.text)
             }
             .fixedSize(horizontal: false, vertical: true)
             .padding(.vertical, 9).padding(.horizontal, 4)
             .background(Theme.bg, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Theme.stroke, lineWidth: 1))
-            if !compact && bet.kind != "todo" { shareButton }
+            if !compact && challenge.kind != "todo" { shareButton }
         }
     }
 
-    private func stakeCell(_ v: String, _ l: String, _ c: Color) -> some View {
+    private func pledgeCell(_ v: String, _ l: String, _ c: Color) -> some View {
         VStack(spacing: 0) {
             Text(v).font(.display(18, 800)).monospacedDigit().foregroundStyle(c)
             Text(l).font(.barlow(11, 700)).foregroundStyle(Theme.muted)
@@ -278,54 +278,54 @@ struct BetCard: View {
     }
 
     private var shareButton: some View {
-        Button { UIState.shared.openSheet(.share(bet.id)) } label: { BtnLabel("Share", icon: .share, iconSize: 16) }
+        Button { UIState.shared.openSheet(.share(challenge.id)) } label: { BtnLabel("Share", icon: .share, iconSize: 16) }
             .buttonStyle(.btn(.ghost, .sm, full: true))
     }
 
     // MARK: History
 
     private var history: some View {
-        let single = bet.legs.count == 1
+        let single = challenge.picks.count == 1
         return VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 10) {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 6) {
-                        StatusPill(status: bet.status)
-                        if !single { Tag(bet.kind == "todo" ? "To-do" : "Parlay") }
+                        StatusPill(status: challenge.status)
+                        if !single { Tag(challenge.kind == "todo" ? "To-do" : "Combo") }
                     }
-                    Text(BetText.title(bet)).font(.barlow(16, 800))
+                    Text(ChallengeText.title(challenge)).font(.barlow(16, 800))
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 VStack(alignment: .trailing, spacing: 0) {
-                    Text(OddsMath.fmt(bet.american)).font(.display(16, 800)).foregroundStyle(Theme.text2)
-                    switch bet.status {
-                    case "won": Text("+\(bet.payout - bet.stake) min").font(.display(22, 800)).foregroundStyle(Theme.accent)
-                    case "lost": Text("−\(bet.stake) min").font(.display(22, 800)).foregroundStyle(Theme.loss)
-                    default: Text("\(bet.insurancePaid == true ? "Insurance refund" : "Stake returned") · \(bet.stake) min").font(.barlow(13, 700)).foregroundStyle(Theme.text2)
+                    Text(PointValueMath.fmt(challenge.american)).font(.display(16, 800)).foregroundStyle(Theme.text2)
+                    switch challenge.status {
+                    case "won": Text("+\(challenge.reward - challenge.pledgeMinutes) min").font(.display(22, 800)).foregroundStyle(Theme.accent)
+                    case "lost": Text("−\(challenge.pledgeMinutes) min").font(.display(22, 800)).foregroundStyle(Theme.loss)
+                    default: Text("\(challenge.insurancePaid == true ? "Insurance refund" : "Pledge returned") · \(challenge.pledgeMinutes) min").font(.barlow(13, 700)).foregroundStyle(Theme.text2)
                     }
                 }
             }
-            ForEach(Array(bet.legs.enumerated()), id: \.offset) { i, l in
+            ForEach(Array(challenge.picks.enumerated()), id: \.offset) { i, l in
                 if i > 0 { DashedRule() }
                 HStack(alignment: .top, spacing: 10) {
-                    LegDot(state: l.result)
+                    PickDot(state: l.result)
                     VStack(alignment: .leading, spacing: 0) {
-                        (Text(l.label) + Text(" \(OddsMath.fmt(l.price))").font(.barlow(14.5, 600)).foregroundStyle(Theme.muted)).font(.barlow(14.5, 700))
+                        (Text(l.label) + Text(" \(PointValueMath.fmt(l.price))").font(.barlow(14.5, 600)).foregroundStyle(Theme.muted)).font(.barlow(14.5, 700))
                         (Text(l.kind == "todo" ? l.marketLabel : l.matchup) + Text(l.final == nil ? "" : " · ") + Text(l.final ?? "").font(.barlow(12.5, 700)))
                             .font(.barlow(12.5)).foregroundStyle(Theme.text2)
                     }
                 }
             }
-            if bet.status == "void" {
-                Note(.warn, icon: .info, bet.kind == "todo" ? "" : "The game was postponed or cancelled, so this bet was voided and your full stake came back.")
+            if challenge.status == "void" {
+                Note(.warn, icon: .info, challenge.kind == "todo" ? "" : "The game was postponed or cancelled, so this challenge was voided and your full pledge came back.")
             }
             HStack {
-                Text("\(bet.stake) min staked · placed \(Fmt.day(bet.placedAt)) \(Fmt.time(bet.placedAt))")
+                Text("\(challenge.pledgeMinutes) min pledgedd · placed \(Fmt.day(challenge.placedAt)) \(Fmt.time(challenge.placedAt))")
                 Spacer()
-                Text("Settled \(Fmt.ago(bet.settledAt ?? bet.placedAt))")
+                Text("Resolved \(Fmt.ago(challenge.resolvedAt ?? challenge.placedAt))")
             }
             .font(.barlow(11.5, 700)).foregroundStyle(Theme.muted)
-            if !compact && bet.kind != "todo" { shareButton }
+            if !compact && challenge.kind != "todo" { shareButton }
         }
     }
 }
@@ -339,15 +339,15 @@ struct DashedRule: View {
     }
 }
 
-struct LegDot: View {
+struct PickDot: View {
     var state: String
     var body: some View {
-        let icon: IconName = ["won": .check, "lost": .x, "void": .minus, "push": .minus, "winning": .trend, "losing": .trend][state] ?? .clock
+        let icon: IconName = ["won": .check, "lost": .x, "void": .minus, "tie": .minus, "winning": .trend, "losing": .trend][state] ?? .clock
         let (bg, fg): (Color, Color) = {
             switch state {
             case "won": return (Theme.accent, Theme.accentInk)
             case "lost": return (Theme.loss, .white)
-            case "void", "push": return (Theme.muted, .white)
+            case "void", "tie": return (Theme.muted, .white)
             case "winning": return (Theme.accentSoft, Theme.accent)
             case "losing": return (Theme.lossSoft, Theme.loss)
             default: return (Theme.raised, Theme.text2)
@@ -369,26 +369,26 @@ struct StandingTag: View {
     }
 }
 
-struct NowOdds: View {
-    var leg: Leg
+struct NowPointValue: View {
+    var pick: Pick
     var body: some View {
-        if leg.result == "pending" && leg.kind != "todo", let cur = Feed.currentSelection(leg.selId), let sel = cur.sel {
+        if pick.result == "pending" && pick.kind != "todo", let cur = Feed.currentSelection(pick.selId), let sel = cur.sel {
             if !cur.open {
-                Tag("Betting closed")
-            } else if sel.price == leg.price && sel.line == leg.line {
-                Tag("Odds now \(OddsMath.fmt(sel.price))")
+                Tag("Challenging closed")
+            } else if sel.price == pick.price && sel.line == pick.line {
+                Tag("Point value now \(PointValueMath.fmt(sel.price))")
             } else {
-                let better = OddsMath.decimal(sel.price) < OddsMath.decimal(leg.price)
-                let line = sel.market == "spread" || sel.market == "total" ? "\(OddsMath.fmtLine(sel.line ?? 0, signed: sel.market == "spread")) " : ""
-                Tag("Odds now \(line)\(OddsMath.fmt(sel.price))", better ? .green : .red)
+                let better = PointValueMath.decimal(sel.price) < PointValueMath.decimal(pick.price)
+                let line = sel.market == "margin" || sel.market == "total" ? "\(PointValueMath.fmtLine(sel.line ?? 0, signed: sel.market == "margin")) " : ""
+                Tag("Point value now \(line)\(PointValueMath.fmt(sel.price))", better ? .green : .red)
             }
         }
     }
 }
 
-/// Live score and key stats for a leg, so users can follow a bet without leaving My Bets.
+/// Live score and key stats for a pick, so users can follow a challenge without leaving My Challenges.
 struct LiveBox: View {
-    var leg: Leg
+    var pick: Pick
 
     var body: some View {
         content
@@ -399,13 +399,13 @@ struct LiveBox: View {
     }
 
     @ViewBuilder private var content: some View {
-        if leg.kind == "race" {
-            let race = Races.shared.get(leg.raceId)
-            let horse = Races.shared.horse(leg.horseId)
-            let status = race == nil ? "Race result unavailable" : race!.status == "open" ? "Bets open" : race!.status == "running" ? "Race in progress" : "Race #\(race!.number) finished"
+        if pick.kind == "race" {
+            let race = Races.shared.get(pick.raceId)
+            let horse = Races.shared.horse(pick.horseId)
+            let status = race == nil ? "Race result unavailable" : race!.status == "open" ? "Challenges open" : race!.status == "running" ? "Race in progress" : "Race #\(race!.number) finished"
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
-                    Text("\(horse.name) · \(leg.matchup)").font(.barlow(13, 700))
+                    Text("\(horse.name) · \(pick.matchup)").font(.barlow(13, 700))
                     Spacer()
                     if race?.status == "running" { LiveTag(text: status.uppercased()) } else { Text(status).font(.barlow(13)).foregroundStyle(Theme.text2) }
                 }
@@ -413,7 +413,7 @@ struct LiveBox: View {
                     Text("Current leader: \(Races.shared.horse(w).name)").font(.barlow(13)).foregroundStyle(Theme.text2)
                 }
             }
-        } else if let id = leg.gameId, let g = Feed.game(id) {
+        } else if let id = pick.gameId, let g = Feed.game(id) {
             Button { GameModel.open(g.id) } label: {
                 VStack(alignment: .leading, spacing: 8) {
                     head(g)
@@ -432,7 +432,7 @@ struct LiveBox: View {
             .onAppear { if g.eventID != nil { LiveFeed.shared.loadDetails(g.id) } }
         } else {
             VStack(alignment: .leading, spacing: 0) {
-                Text(leg.matchup.isEmpty ? "Sports game" : leg.matchup).font(.barlow(13, 700))
+                Text(pick.matchup.isEmpty ? "Sports game" : pick.matchup).font(.barlow(13, 700))
                 Text("Loading the latest score…").font(.barlow(13)).foregroundStyle(Theme.text2)
             }
         }
@@ -473,48 +473,48 @@ struct LiveBox: View {
 // MARK: - Share
 
 struct ShareSheet: View {
-    var betId: String
+    var challengeId: String
     @State private var image: UIImage?
 
     var body: some View {
-        let bet = Store.shared.data?.bets.first { $0.id == betId }
-        SheetFrame("Share bet", close: { UIState.shared.closeSheet(.share(betId)) }) {
+        let challenge = Store.shared.data?.challenges.first { $0.id == challengeId }
+        SheetFrame("Share challenge", close: { UIState.shared.closeSheet(.share(challengeId)) }) {
             if let image {
                 Image(uiImage: image).resizable().scaledToFit()
                     .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                     .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Theme.stroke, lineWidth: 1))
-                    .accessibilityLabel("Bet card image showing the teams, pick, odds and stake")
+                    .accessibilityLabel("Challenge card image showing the teams, pick, point value and pledge")
             } else {
                 Text("Creating image…").font(.barlow(13)).foregroundStyle(Theme.text2).card()
             }
             Text("Save the image and post it anywhere.").font(.barlow(13)).foregroundStyle(Theme.text2)
         } foot: {
-            if let image, let bet {
-                ShareLink(item: Image(uiImage: image), subject: Text("My TimeOut bet"), message: Text(ShareCard.text(bet)),
-                          preview: SharePreview("My TimeOut bet", image: Image(uiImage: image))) {
+            if let image, let challenge {
+                ShareLink(item: Image(uiImage: image), subject: Text("My TimeOut challenge"), message: Text(ShareCard.text(challenge)),
+                          preview: SharePreview("My TimeOut challenge", image: Image(uiImage: image))) {
                     BtnLabel("Share image", icon: .share)
                 }
                 .buttonStyle(.btn(.primary, full: true))
             }
             Button {
-                if let bet, Clipboard.copy(ShareCard.text(bet)) { UIState.shared.toast(.win, "Bet copied", "Paste it into any chat.") }
-            } label: { BtnLabel("Copy bet text", icon: .copy, iconSize: 16) }
+                if let challenge, Clipboard.copy(ShareCard.text(challenge)) { UIState.shared.toast(.win, "Challenge copied", "Paste it into any chat.") }
+            } label: { BtnLabel("Copy challenge text", icon: .copy, iconSize: 16) }
             .buttonStyle(.btn(.ghost, full: true))
         }
         .task {
-            if let bet { image = ShareCard.render(bet) }
+            if let challenge { image = ShareCard.render(challenge) }
         }
     }
 }
 
-/// The 1080×1350 share image (teams, pick, odds and stake), drawn like the web demo's canvas.
+/// The 1080×1350 share image (teams, pick, point value and pledge), drawn like the web demo's canvas.
 enum ShareCard {
-    static func text(_ bet: Bet) -> String {
-        let picks = bet.legs.map { "\($0.label) (\(OddsMath.fmt($0.price))) · \($0.matchup)" }.joined(separator: "\n")
-        return "My TimeOut \(bet.legs.count > 1 ? "parlay" : "bet"):\n\(picks)\nOdds \(OddsMath.fmt(bet.american)) · \(bet.stake) min of screen time to win \(BetText.toWin(bet)) min"
+    static func text(_ challenge: Challenge) -> String {
+        let picks = challenge.picks.map { "\($0.label) (\(PointValueMath.fmt($0.price))) · \($0.matchup)" }.joined(separator: "\n")
+        return "My TimeOut \(challenge.picks.count > 1 ? "combo" : "challenge"):\n\(picks)\nOdds \(PointValueMath.fmt(challenge.american)) · \(challenge.pledgeMinutes) min of screen time to earn \(ChallengeText.toWin(challenge)) min"
     }
 
-    static func render(_ bet: Bet) -> UIImage {
+    static func render(_ challenge: Challenge) -> UIImage {
         let W: CGFloat = 1080, H: CGFloat = 1350
         let format = UIGraphicsImageRendererFormat()
         format.scale = 1
@@ -562,11 +562,11 @@ enum ShareCard {
             // Wordmark
             let tw = text("Time", 80, 150, display(84, 900, italic: true), ui("#f2f5f9"))
             _ = text("Out", 80 + tw, 150, display(84, 900, italic: true), ui("#22d66e"))
-            _ = text("@\(Store.shared.account?.username ?? "")'s bet", 80, 200, body(30), ui("#8c96a8"))
+            _ = text("@\(Store.shared.account?.username ?? "")'s challenge", 80, 200, body(30), ui("#8c96a8"))
 
             // Status pill
-            let status = bet.status.uppercased()
-            let pillColor = ["OPEN": "#1d2430", "WON": "#22d66e", "LOST": "#ff5a5f", "VOID": "#5e687a", "PUSH": "#5e687a"][status] ?? "#1d2430"
+            let status = challenge.status.uppercased()
+            let pillColor = ["OPEN": "#1d2430", "WON": "#22d66e", "LOST": "#ff5a5f", "VOID": "#5e687a", "TIE": "#5e687a"][status] ?? "#1d2430"
             let pw = width(status, body(30, 900)) + 48
             ui(pillColor).setFill()
             UIBezierPath(roundedRect: CGRect(x: W - 80 - pw, y: 104, width: pw, height: 56), cornerRadius: 28).fill()
@@ -578,7 +578,7 @@ enum ShareCard {
             ui("#283141").setStroke(); card.lineWidth = 3; card.stroke()
 
             var y: CGFloat = 340
-            if bet.legs.count == 1 && bet.legs[0].kind == "game", let g = bet.legs[0].gameId.flatMap({ Feed.game($0) }) {
+            if challenge.picks.count == 1 && challenge.picks[0].kind == "game", let g = challenge.picks[0].gameId.flatMap({ Feed.game($0) }) {
                 func disc(_ team: Team, _ cx: CGFloat) {
                     let circle = UIBezierPath(arcCenter: CGPoint(x: cx, y: y + 90), radius: 90, startAngle: 0, endAngle: .pi * 2, clockwise: true)
                     ui(team.color).setFill(); circle.fill()
@@ -592,15 +592,15 @@ enum ShareCard {
                 _ = text(sub, W / 2, y + 160, body(26), ui("#8c96a8"), align: .center)
                 y += 320
                 ui("#283141").setFill(); c.fill(CGRect(x: 110, y: y - 20, width: W - 220, height: 3))
-                _ = text("\(bet.legs[0].marketLabel.uppercased()) · MY PICK", 110, y + 40, body(30), ui("#8c96a8"))
-                y = wrap(bet.legs[0].label, 110, y + 130, W - 220, 90, 2, display(88), ui("#f2f5f9"))
+                _ = text("\(challenge.picks[0].marketLabel.uppercased()) · MY PICK", 110, y + 40, body(30), ui("#8c96a8"))
+                y = wrap(challenge.picks[0].label, 110, y + 130, W - 220, 90, 2, display(88), ui("#f2f5f9"))
             } else {
-                _ = text(bet.legs.count > 1 ? "\(bet.legs.count)-PICK PARLAY" : "MY PICK", 110, y + 10, body(30), ui("#8c96a8"))
+                _ = text(challenge.picks.count > 1 ? "\(challenge.picks.count)-PICK COMBO" : "MY PICK", 110, y + 10, body(30), ui("#8c96a8"))
                 y += 80
-                for l in bet.legs {
+                for l in challenge.picks {
                     _ = text(l.label, 110, y + 30, display(60), ui("#f2f5f9"))
                     y = wrap("\(l.marketLabel) · \(l.matchup)", 110, y + 76, W - 360, 34, 2, body(28, 600), ui("#8c96a8"))
-                    _ = text(OddsMath.fmt(l.price), W - 110, y - 60, display(50), ui("#22d66e"), align: .right)
+                    _ = text(PointValueMath.fmt(l.price), W - 110, y - 60, display(50), ui("#22d66e"), align: .right)
                     y += 30
                 }
             }
@@ -612,13 +612,13 @@ enum ShareCard {
                 _ = text(label, x, by + 20, body(26), ui("#8c96a8"))
                 _ = text(value, x, by + 100, display(76), ui(color))
             }
-            col("ODDS", OddsMath.fmt(bet.american), 110, "#f2f5f9")
-            col("STAKE", "\(bet.stake) min", 420, "#f2f5f9")
-            col(bet.status == "lost" ? "LOST" : bet.status == "won" ? "WON" : "TO WIN",
-                bet.status == "lost" ? "−\(bet.stake)" : "+\(bet.status == "won" ? bet.payout - bet.stake : BetText.toWin(bet))", 730,
-                bet.status == "lost" ? "#ff5a5f" : "#22d66e")
+            col("VALUE", PointValueMath.fmt(challenge.american), 110, "#f2f5f9")
+            col("PLEDGE", "\(challenge.pledgeMinutes) min", 420, "#f2f5f9")
+            col(challenge.status == "lost" ? "LOST" : challenge.status == "won" ? "WON" : "TO WIN",
+                challenge.status == "lost" ? "−\(challenge.pledgeMinutes)" : "+\(challenge.status == "won" ? challenge.reward - challenge.pledgeMinutes : ChallengeText.toWin(challenge))", 730,
+                challenge.status == "lost" ? "#ff5a5f" : "#22d66e")
 
-            _ = text("Betting screen time, not money.", W / 2, 1160, body(30, 600), ui("#8c96a8"), align: .center)
+            _ = text("Challenging screen time, not money.", W / 2, 1160, body(30, 600), ui("#8c96a8"), align: .center)
             _ = text("TimeOut", W / 2, 1230, display(40, 900, italic: true), ui("#22d66e"), align: .center)
         }
     }

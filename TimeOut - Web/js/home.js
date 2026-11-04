@@ -11,7 +11,7 @@
   const followed = () => TO.data.settings.sports?.length ? TO.data.settings.sports : S.REAL_LEAGUES;
   const offDay = () => TO.store.get('timeout.offDay', false);
   const activeFilter = () => ['pred', 'todo', 'sim'].includes(TO.data.feedFilter) ? 'all' : (TO.data.feedFilter || 'all');
-  const sportsOnly = (bet) => bet.kind === 'race' || (bet.kind === 'sports' && bet.legs.every((leg) => leg.gameId && S.game(leg.gameId)?.league !== 'sim'));
+  const sportsOnly = (challenge) => challenge.kind === 'race' || (challenge.kind === 'sports' && challenge.picks.every((pick) => pick.gameId && S.game(pick.gameId)?.league !== 'sim'));
 
   // Which day the board shows: 0 = today, 1 = tomorrow. Live games are always today.
   let feedDay = 0;
@@ -41,8 +41,8 @@
     return `<div class="hscroll day-bar" data-hkey="days" aria-label="Pick a day">${chips.join('')}</div>`;
   }
 
-  function myOpenBetOn(ref) {
-    return TO.data.bets.filter((b) => b.status === 'open' && b.legs.some((l) => l.gameId === ref || l.predId === ref || l.raceId === ref));
+  function myOpenChallengeOn(ref) {
+    return TO.data.challenges.filter((b) => b.status === 'open' && b.picks.some((l) => l.gameId === ref || l.predId === ref || l.raceId === ref));
   }
 
   // ---------- Wallet header (PRD: screen time + current pledges always at the top) ----------
@@ -93,37 +93,37 @@
     return `<button class="status-strip" data-act="settings" data-section="status">${parts.join('')}<span style="margin-left:auto" class="faint">${icon('chevR', 16)}</span></button>`;
   }
 
-  function miniBet(bet) {
-    const title = bet.kind === 'todo' ? `To-do Combo Goal (${bet.legs.length})` : bet.legs.length > 1 ? `${bet.legs.length}-pick Combo Goal` : bet.legs[0].label;
+  function miniChallenge(challenge) {
+    const title = challenge.kind === 'todo' ? `To-do Combo Goal (${challenge.picks.length})` : challenge.picks.length > 1 ? `${challenge.picks.length}-pick Combo Goal` : challenge.picks[0].label;
     let line = '';
-    const leg = bet.legs.find((l) => l.result === 'pending') || bet.legs[0];
-    if (bet.kind === 'todo') line = `${bet.legs.filter((l) => l.result === 'won').length}/${bet.legs.length} done · due midnight`;
-    else if (leg.kind === 'pred') line = `Resolves in ${TO.fmtIn(leg.start - TO.now())}`;
-    else if (leg.kind === 'race') {
-      const race = TO.races.get(leg.raceId);
-      line = race && race.status === 'running' ? `<span class="live">LIVE</span> Virtual Race #${race.number}` : `Virtual Race #${String(leg.raceId).replace('race-', '')} · ${race && race.status === 'final' ? 'Finished' : 'Starting soon'}`;
+    const pick = challenge.picks.find((l) => l.result === 'pending') || challenge.picks[0];
+    if (challenge.kind === 'todo') line = `${challenge.picks.filter((l) => l.result === 'won').length}/${challenge.picks.length} done · due midnight`;
+    else if (pick.kind === 'pred') line = `Resolves in ${TO.fmtIn(pick.start - TO.now())}`;
+    else if (pick.kind === 'race') {
+      const race = TO.races.get(pick.raceId);
+      line = race && race.status === 'running' ? `<span class="live">LIVE</span> Virtual Race #${race.number}` : `Virtual Race #${String(pick.raceId).replace('race-', '')} · ${race && race.status === 'final' ? 'Finished' : 'Starting soon'}`;
     }
     else {
-      const g = S.game(leg.gameId);
+      const g = S.game(pick.gameId);
       if (!g) line = 'Loading the latest score…';
       else if (g.state === 'live') line = `<span class="live">LIVE</span> ${g.away.abbr} ${g.awayScore} – ${g.home.abbr} ${g.homeScore} · ${esc(g.clock)}`;
       else if (g.state === 'scheduled') line = `${g.away.abbr} @ ${g.home.abbr} · ${TO.fmtTime(g.start)}`;
       else line = `${g.away.abbr} ${g.awayScore} – ${g.home.abbr} ${g.homeScore} · ${esc(g.statusText)}`;
     }
-    const bottom = `<div class="row-s small bold"><span class="muted">${bet.stake} min</span>${icon('chevR', 12)}<span class="green">${Math.round(bet.stake * bet.decimal) - bet.stake > 0 ? `win ${Math.round((Math.round(bet.stake * bet.decimal) - bet.stake) * (bet.multiplier || 1))} min` : ''}</span></div>`;
+    const bottom = `<div class="row-s small bold"><span class="muted">${challenge.pledgeMinutes} min</span>${icon('chevR', 12)}<span class="green">${Math.round(challenge.pledgeMinutes * challenge.decimal) - challenge.pledgeMinutes > 0 ? `win ${Math.round((Math.round(challenge.pledgeMinutes * challenge.decimal) - challenge.pledgeMinutes) * (challenge.multiplier || 1))} min` : ''}</span></div>`;
     return `<button class="card tight mini-challenge" data-act="tab" data-tab="challenges">
-      <div class="row-layout"><span class="t ellipsis">${esc(title)}</span><span class="display muted" style="font-size:15px">${TO.multiplierText(TO.odds.fromDecimal(bet.decimal))}</span></div>
+      <div class="row-layout"><span class="t ellipsis">${esc(title)}</span><span class="display muted" style="font-size:15px">${TO.multiplierText(TO.pointValue.fromDecimal(challenge.decimal))}</span></div>
       <div class="small muted row-s ellipsis" style="font-weight:600">${line}</div>
       <div style="margin-top:auto">${bottom}</div>
     </button>`;
   }
 
-  function openBetsStrip() {
-    const open = TO.data.bets.filter((b) => b.status === 'open' && sportsOnly(b)).sort((a, b) => b.placedAt - a.placedAt);
+  function openChallengesStrip() {
+    const open = TO.data.challenges.filter((b) => b.status === 'open' && sportsOnly(b)).sort((a, b) => b.placedAt - a.placedAt);
     return `<div class="stack-s open-challenges">
       <div class="section-title"><div class="row-s"><h2>Active challenges</h2><span class="count-pill ${open.length ? '' : 'off'}">${open.length}</span></div>${open.length ? `<button class="link-btn" data-act="tab" data-tab="challenges">See all</button>` : ''}</div>
       ${open.length
-        ? `<div class="hscroll mini-challenges" data-hkey="minichallenges">${open.map(miniBet).join('')}</div>`
+        ? `<div class="hscroll mini-challenges" data-hkey="minichallenges">${open.map(miniChallenge).join('')}</div>`
         : `<div class="card tight small muted" style="margin:0 16px">No active challenges. Choose a matchup target below to begin.</div>`}
     </div>`;
   }
@@ -154,22 +154,22 @@
   }
 
   function gameCard(g) {
-    const o = S.odds(g.id);
+    const o = S.pointValue(g.id);
     const bettable = (g.state === 'live' || g.state === 'scheduled') && !o.suspended;
-    const mine = myOpenBetOn(g.id);
+    const mine = myOpenChallengeOn(g.id);
     let body;
     if (bettable) {
-      const tabs = [['ml','Match Winner',o.moneyline],['spread','Margin',o.spread],['total','Total Points',o.total]].filter(([, , choices]) => choices.length >= 2);
+      const tabs = [['winner','Match Winner',o.winner],['margin','Margin',o.margin],['total','Total Points',o.total]].filter(([, , choices]) => choices.length >= 2);
       const chosen = activeChallenge.get(g.id) || tabs[0]?.[0];
       const current = tabs.find(([key]) => key === chosen) || tabs[0];
       const choices = current ? current[2].filter((sel) => sel.side !== 'draw').slice(0, 2) : [];
       const choiceLabel = (sel) => {
-        if (sel.market === 'ml') return `${sel.side === 'away' ? g.away.name : g.home.name} to win`;
-        if (sel.market === 'spread') {
+        if (sel.market === 'winner') return `${sel.side === 'away' ? g.away.name : g.home.name} to win`;
+        if (sel.market === 'margin') {
           const team = sel.side === 'away' ? g.away.name : g.home.name;
           return sel.line < 0 ? `${team} to win by ${Math.ceil(Math.abs(sel.line))}+` : `${team} to stay within ${Math.floor(sel.line)}`;
         }
-        return `${sel.side === 'over' ? 'Over' : 'Under'} ${sel.line} pts`;
+        return `Combined score ${sel.side === 'higher' ? 'above' : 'below'} ${sel.line}`;
       };
       const statusLine = g.state === 'live' ? `<span class="live">LIVE</span> · ${g.awayScore}–${g.homeScore} · ${esc(g.clock)}` : `${esc(TO.fmtDay(g.start))} · ${esc(TO.fmtTime(g.start))}`;
       body = `<div class="matchup-head">
@@ -209,7 +209,7 @@
     </div>`;
   }
 
-  function buildParlayControl() {
+  function buildComboControl() {
     const builder = TO.comboGoalBuilder;
     if (!builder.comboGoalMode) return `<button class="build-combo-goal" data-act="toggle-combo-goal">${icon('target', 18)}<span><b>Build a Combo Goal</b><small>Link choices from up to four matchups</small></span>${icon('chevR', 18)}</button>`;
     return `<div class="build-combo-goal active"><span class="lr-icon">${icon('target', 18)}</span><span class="grow"><b>Choose Combo Goal picks</b><small>${builder.selectedPicks.length} of ${TO.RULES.maxMatchupPicks} choices · one per matchup</small></span><button class="link-btn" data-act="toggle-combo-goal">Cancel</button></div>`;
@@ -241,10 +241,10 @@
       ${walletCard(wl)}
       ${lock}
       ${statusStrip(wl)}
-      ${openBetsStrip()}
+      ${openChallengesStrip()}
       <div class="stack feed" style="gap:12px">
         ${filterBar(games)}
-        ${buildParlayControl()}
+        ${buildComboControl()}
         ${TO.live.offline ? `<div class="note blue simulated-note">${icon('info', 16)}<span>Live matchup targets can't be reached here, so these are simulated games with real team names. Everything else works the same.</span></div>` : ''}
         ${feed(games)}
       </div>

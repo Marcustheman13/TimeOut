@@ -168,7 +168,7 @@ final class API {
         Slip.shared.clear()
         Store.shared.logout()
         AppModel.shared.boot()
-        UIState.shared.toast(.warn, "Your session expired", "Log in again to keep your bets in sync.")
+        UIState.shared.toast(.warn, "Your session expired", "Log in again to keep your challenges in sync.")
     }
 
     private func rest(_ path: String, method: String = "GET", body: Any? = nil, extra: [String: String] = [:], timeout: TimeInterval? = nil) async throws -> JSON {
@@ -257,7 +257,7 @@ final class API {
         var hasBonus = true, hasPerks = true
         let base = "balance_minutes,current_day,is_locked,streak"
         let bonus = "\(base),tier_bonus_day,tier_bonus_minutes"
-        async let betRowsTask = rest("bets?select=*,bet_legs(*)&user_id=eq.\(safe)&order=placed_at.desc")
+        async let challengeRowsTask = rest("challenges?select=*,challenge_picks(*)&user_id=eq.\(safe)&order=placed_at.desc")
         var walletRows: JSON
         do {
             walletRows = try await rest("wallets?select=\(bonus),tier_boosts_by_day,tier_insurance_by_week&user_id=eq.\(safe)&limit=1")
@@ -270,7 +270,7 @@ final class API {
                 walletRows = try await rest("wallets?select=\(base)&user_id=eq.\(safe)&limit=1")
             }
         }
-        let betRows = try await betRowsTask
+        let challengeRows = try await challengeRowsTask
         supportsTierBonusColumns = hasBonus
         supportsTierPerkColumns = hasPerks
         var settingsRows: JSON
@@ -281,34 +281,36 @@ final class API {
             supportsAppPreferences = false
             settingsRows = try await rest("user_settings?select=followed_sports,timezone,notifications_enabled&user_id=eq.\(safe)&limit=1")
         }
-        let statusMap = ["pending": "open", "won": "won", "lost": "lost", "pushed": "push", "voided": "void", "cancelled": "void"]
-        let resultMap = ["pending": "pending", "win": "won", "loss": "lost", "push": "push", "void": "void"]
+        // "pushed" and "push" are the previous database labels, kept so a database that has not
+        // run server/db/rename-challenge-vocabulary.sql still loads.
+        let statusMap = ["pending": "open", "won": "won", "lost": "lost", "tied": "tie", "pushed": "tie", "voided": "void", "cancelled": "void"]
+        let resultMap = ["pending": "pending", "win": "won", "loss": "lost", "tie": "tie", "push": "tie", "void": "void"]
         var state = RemoteState()
-        state.bets = betRows.array.map { row in
-            let legs: [Leg] = row["bet_legs"].array.map { leg in
-                let eventId = leg["espn_event_id"].string ?? ""
-                let market = leg["market"].string ?? "ml", side = leg["side"].string ?? ""
-                let line = leg["line"].number
-                var l = Leg(selId: "\(eventId)|\(market)|\(side)", kind: "game", market: market, price: Int(leg["accepted_odds"].number ?? 100),
-                            label: "\(market) · \(side)\(leg["line"].isNull ? "" : " \(leg["line"].string ?? "")")", marketLabel: market, matchup: leg["matchup"].string ?? "")
-                l.gameId = eventId; l.league = leg["league"].string; l.side = side; l.line = line
-                l.result = resultMap[leg["result"].string ?? ""] ?? "pending"
+        state.challenges = challengeRows.array.map { row in
+            let picks: [Pick] = row["challenge_picks"].array.map { pick in
+                let eventId = pick["espn_event_id"].string ?? ""
+                let market = pick["market"].string ?? "winner", side = pick["side"].string ?? ""
+                let line = pick["line"].number
+                var l = Pick(selId: "\(eventId)|\(market)|\(side)", kind: "game", market: market, price: Int(pick["accepted_value"].number ?? 100),
+                            label: "\(market) · \(side)\(pick["line"].isNull ? "" : " \(pick["line"].string ?? "")")", marketLabel: market, matchup: pick["matchup"].string ?? "")
+                l.gameId = eventId; l.league = pick["league"].string; l.side = side; l.line = line
+                l.result = resultMap[pick["result"].string ?? ""] ?? "pending"
                 return l
             }
-            let decimal = row["combined_odds"].number ?? 1
+            let decimal = row["combined_value"].number ?? 1
             let placedAt = LiveFeed.parseDate(row["placed_at"].string) ?? TO.now()
-            var bet = Bet(id: "supabase-\(row["id"].string ?? "")", kind: "sports", placedAt: placedAt, dayKey: TO.dayKey(placedAt),
-                          stake: Int(row["stake_minutes"].number ?? 0), legs: legs, decimal: decimal, american: OddsMath.fromDecimal(decimal))
-            bet.supabaseId = row["id"].string
-            bet.boosted = row["boosted"].truthy
-            bet.insured = row["insured"].truthy
-            bet.multiplier = row["multiplier"].number ?? 1
-            bet.status = statusMap[row["status"].string ?? ""] ?? "open"
-            bet.payout = Int(row["actual_payout_minutes"].number ?? 0)
-            bet.potentialPayout = Int(row["potential_payout_minutes"].number ?? 0)
-            bet.settledAt = LiveFeed.parseDate(row["settled_at"].string)
-            bet.supabaseSynced = row["status"].string != "pending"
-            return bet
+            var challenge = Challenge(id: "supabase-\(row["id"].string ?? "")", kind: "sports", placedAt: placedAt, dayKey: TO.dayKey(placedAt),
+                          pledgeMinutes: Int(row["pledge_minutes"].number ?? 0), picks: picks, decimal: decimal, american: PointValueMath.fromDecimal(decimal))
+            challenge.supabaseId = row["id"].string
+            challenge.boosted = row["boosted"].truthy
+            challenge.insured = row["insured"].truthy
+            challenge.multiplier = row["multiplier"].number ?? 1
+            challenge.status = statusMap[row["status"].string ?? ""] ?? "open"
+            challenge.reward = Int(row["actual_reward_minutes"].number ?? 0)
+            challenge.potentialReward = Int(row["potential_reward_minutes"].number ?? 0)
+            challenge.resolvedAt = LiveFeed.parseDate(row["resolved_at"].string)
+            challenge.supabaseSynced = row["status"].string != "pending"
+            return challenge
         }
         let wallet = walletRows[0]
         if wallet.isObject {
@@ -366,7 +368,7 @@ final class API {
             saveTask = nil
             do { try await flushState() } catch {
                 let message = (error as? AppError)?.message ?? error.localizedDescription
-                if Self.isOutOfMinutes(message) { notify("minutes", .loss, "Out of betting minutes", "Betting reopens at midnight."); return }
+                if Self.isOutOfMinutes(message) { notify("minutes", .loss, "Out of challenge minutes", "Challenges reopen at midnight."); return }
                 notify("sync", .loss, "Couldn’t save to Supabase", message)
             }
         }
@@ -379,17 +381,17 @@ final class API {
     }
 
     private static func isOutOfMinutes(_ m: String) -> Bool {
-        m.range(of: "insufficient|not enough|out of (betting )?(minutes|balance)|betting minutes", options: [.regularExpression, .caseInsensitive]) != nil
+        m.range(of: "insufficient|not enough|out of (challenging )?(minutes|balance)|challenge minutes", options: [.regularExpression, .caseInsensitive]) != nil
     }
     private static func rpcMissing(_ m: String, _ name: String) -> Bool {
         m.range(of: name, options: .caseInsensitive) != nil
             && m.range(of: "schema cache|function.*(not found|does not exist|could not find)", options: [.regularExpression, .caseInsensitive]) != nil
     }
     private static func perkExhausted(_ m: String) -> Bool {
-        m.range(of: "no odds boosts left|no parlay insurance left", options: [.regularExpression, .caseInsensitive]) != nil
+        m.range(of: "no point-value boosts left|no combo protection left", options: [.regularExpression, .caseInsensitive]) != nil
     }
 
-    private struct RejectedBet: Error { var betId: String; var reason: String }
+    private struct RejectedChallenge: Error { var challengeId: String; var reason: String }
 
     func flushState() async throws {
         saveTask?.cancel(); saveTask = nil
@@ -400,7 +402,7 @@ final class API {
             var settingsValue: [String: Any] = [
                 "followed_sports": data.settings.sports,
                 "timezone": TimeZone.current.identifier,
-                "notifications_enabled": data.settings.notify.settled || data.settings.notify.friends || data.settings.notify.lowTime,
+                "notifications_enabled": data.settings.notify.resolved || data.settings.notify.friends || data.settings.notify.lowTime,
             ]
             if supportsAppPreferences { settingsValue["app_preferences"] = Store.dictionary(data.settings) }
             let snapshotData = try JSONSerialization.data(withJSONObject: settingsValue, options: [.sortedKeys])
@@ -409,35 +411,35 @@ final class API {
                 _ = try await rest("user_settings?user_id=eq.\(Self.enc(id))", method: "PATCH", body: settingsValue, extra: ["Prefer": "return=minimal"])
                 lastSettingsSnapshot = snapshot
             }
-            for bet in data.bets {
-                guard bet.kind == "sports", bet.stake > 0, !bet.legs.isEmpty,
-                      bet.legs.allSatisfy({ ($0.kind == "game" || $0.kind == "sports") && $0.gameId != nil }) else { continue }
-                var supabaseId = bet.supabaseId
-                if supabaseId == nil && !placing.contains(bet.id) {
-                    placing.insert(bet.id)
-                    defer { placing.remove(bet.id) }
-                    supabaseId = try await placeRemote(bet, data)
+            for challenge in data.challenges {
+                guard challenge.kind == "sports", challenge.pledgeMinutes > 0, !challenge.picks.isEmpty,
+                      challenge.picks.allSatisfy({ ($0.kind == "game" || $0.kind == "sports") && $0.gameId != nil }) else { continue }
+                var supabaseId = challenge.supabaseId
+                if supabaseId == nil && !placing.contains(challenge.id) {
+                    placing.insert(challenge.id)
+                    defer { placing.remove(challenge.id) }
+                    supabaseId = try await placeRemote(challenge, data)
                 }
-                guard let sid = supabaseId, bet.status != "open", bet.supabaseSynced != true, !settling.contains(sid) else { continue }
+                guard let sid = supabaseId, challenge.status != "open", challenge.supabaseSynced != true, !settling.contains(sid) else { continue }
                 settling.insert(sid)
                 defer { settling.remove(sid) }
-                let status = ["push": "pushed", "void": "voided"][bet.status] ?? bet.status
-                let legs: [[String: Any]] = bet.legs.map { leg in
-                    ["espn_event_id": leg.gameId ?? "", "market": leg.market, "side": leg.side ?? "", "line": leg.line as Any? ?? NSNull(), "result": leg.result]
+                let status = ["tie": "tied", "void": "voided"][challenge.status] ?? challenge.status
+                let picks: [[String: Any]] = challenge.picks.map { pick in
+                    ["espn_event_id": pick.gameId ?? "", "market": pick.market, "side": pick.side ?? "", "line": pick.line as Any? ?? NSNull(), "result": pick.result]
                 }
-                let settled = try await rest("rpc/timeout_settle_bet", method: "POST", body: ["p_bet_id": sid, "p_status": status, "p_actual_payout": bet.payout, "p_leg_results": legs])
-                let synced = settled.bool != false
-                update(bet.id) { $0.supabaseSynced = synced }
+                let resolved = try await rest("rpc/timeout_resolve_challenge", method: "POST", body: ["p_challenge_id": sid, "p_status": status, "p_actual_reward": challenge.reward, "p_pick_results": picks])
+                let synced = resolved.bool != false
+                update(challenge.id) { $0.supabaseSynced = synced }
             }
             lastSaveAt = Date()
-        } catch let rejected as RejectedBet {
+        } catch let rejected as RejectedChallenge {
             pendingState = nil
-            refund(rejected.betId)
+            refund(rejected.challengeId)
             switch rejected.reason {
-            case "perkMigration": notify("perk", .loss, "Tier perks need Supabase setup", "This bet was not saved with its boost or insurance. Run the updated tier system migration, then reload the app.")
+            case "perkMigration": notify("perk", .loss, "Tier perks need Supabase setup", "This challenge was not saved with its boost or insurance. Run the updated tier system migration, then reload the app.")
             case "perkUsed": notify("perk", .warn, "Tier perk already used", "This boost or insurance was already used on another device.")
-            case "bonusMigration": notify("bonus", .loss, "Tier setup needed in Supabase", "This parlay was not saved. Run the tier system migration in Supabase SQL Editor, then reload the app.")
-            default: notify("minutes", .loss, "Out of betting minutes", "Betting reopens at midnight.")
+            case "bonusMigration": notify("bonus", .loss, "Tier setup needed in Supabase", "This combo was not saved. Run the tier system migration in Supabase SQL Editor, then reload the app.")
+            default: notify("minutes", .loss, "Out of challenge minutes", "Challenges reopen at midnight.")
             }
         } catch {
             pendingState = pendingState ?? data
@@ -445,65 +447,65 @@ final class API {
         }
     }
 
-    /// Saves one bet through the newest RPC the database has, falling back like the web demo.
-    private func placeRemote(_ bet: Bet, _ data: UserData) async throws -> String {
-        let payout = bet.payout > 0 ? bet.payout
-            : max(0, bet.stake + jsRoundInt(Double(jsRoundInt(Double(bet.stake) * bet.decimal) - bet.stake) * bet.multiplier))
+    /// Saves one challenge through the newest RPC the database has, falling back like the web demo.
+    private func placeRemote(_ challenge: Challenge, _ data: UserData) async throws -> String {
+        let reward = challenge.reward > 0 ? challenge.reward
+            : max(0, challenge.pledgeMinutes + jsRoundInt(Double(jsRoundInt(Double(challenge.pledgeMinutes) * challenge.decimal) - challenge.pledgeMinutes) * challenge.multiplier))
         let bonusToday = data.wallet.bonusDay == data.wallet.dayKey ? data.wallet.bonusGranted : 0
-        let legs: [[String: Any]] = bet.legs.map { leg in
-            ["espn_event_id": leg.gameId ?? "", "league": leg.league ?? "unknown", "matchup": leg.matchup, "market": leg.market,
-             "side": leg.side ?? "", "line": leg.line as Any? ?? NSNull(), "accepted_odds": leg.price]
+        let picks: [[String: Any]] = challenge.picks.map { pick in
+            ["espn_event_id": pick.gameId ?? "", "league": pick.league ?? "unknown", "matchup": pick.matchup, "market": pick.market,
+             "side": pick.side ?? "", "line": pick.line as Any? ?? NSNull(), "accepted_value": pick.price]
         }
-        let legacy: [String: Any] = ["p_stake_minutes": bet.stake, "p_combined_odds": bet.decimal, "p_potential_payout": payout,
-                                     "p_current_day": data.wallet.dayKey, "p_legs": legs]
+        let legacy: [String: Any] = ["p_pledge_minutes": challenge.pledgeMinutes, "p_combined_value": challenge.decimal, "p_potential_reward": reward,
+                                     "p_current_day": data.wallet.dayKey, "p_picks": picks]
         var args = legacy
-        args["p_use_boost"] = bet.boosted
-        args["p_use_insurance"] = bet.insured
-        args["p_multiplier"] = bet.multiplier
-        let perk = bet.boosted || bet.insured
+        args["p_use_boost"] = challenge.boosted
+        args["p_use_insurance"] = challenge.insured
+        args["p_multiplier"] = challenge.multiplier
+        let perk = challenge.boosted || challenge.insured
         func reject(_ message: String) -> Error {
             if Self.isOutOfMinutes(message) {
-                return RejectedBet(betId: bet.id, reason: supportsTierBonusColumns == false && bonusToday > 0 ? "bonusMigration" : "minutes")
+                return RejectedChallenge(challengeId: challenge.id, reason: supportsTierBonusColumns == false && bonusToday > 0 ? "bonusMigration" : "minutes")
             }
             return AppError(code: "supabase_error", message: message)
         }
         var saved: JSON
         do {
-            if perk && supportsTierPerkColumns == false { throw RejectedBet(betId: bet.id, reason: "perkMigration") }
-            saved = try await rest("rpc/timeout_place_bet_with_perks", method: "POST", body: args)
+            if perk && supportsTierPerkColumns == false { throw RejectedChallenge(challengeId: challenge.id, reason: "perkMigration") }
+            saved = try await rest("rpc/timeout_place_challenge_with_perks", method: "POST", body: args)
         } catch let e as AppError {
-            if Self.rpcMissing(e.message, "timeout_place_bet_with_perks") {
-                if perk { throw RejectedBet(betId: bet.id, reason: "perkMigration") }
+            if Self.rpcMissing(e.message, "timeout_place_challenge_with_perks") {
+                if perk { throw RejectedChallenge(challengeId: challenge.id, reason: "perkMigration") }
                 do {
-                    saved = try await rest("rpc/\(bonusToday > 0 ? "timeout_place_bet_with_tiers" : "timeout_place_bet")", method: "POST", body: legacy)
+                    saved = try await rest("rpc/\(bonusToday > 0 ? "timeout_place_challenge_with_tiers" : "timeout_place_challenge")", method: "POST", body: legacy)
                 } catch let e2 as AppError { throw reject(e2.message) }
-            } else if Self.rpcMissing(e.message, "timeout_place_bet_with_tiers") && !perk {
-                do { saved = try await rest("rpc/timeout_place_bet", method: "POST", body: legacy) } catch let e2 as AppError { throw reject(e2.message) }
+            } else if Self.rpcMissing(e.message, "timeout_place_challenge_with_tiers") && !perk {
+                do { saved = try await rest("rpc/timeout_place_challenge", method: "POST", body: legacy) } catch let e2 as AppError { throw reject(e2.message) }
             } else if Self.perkExhausted(e.message) {
-                throw RejectedBet(betId: bet.id, reason: "perkUsed")
+                throw RejectedChallenge(challengeId: challenge.id, reason: "perkUsed")
             } else {
                 throw reject(e.message)
             }
         }
-        guard let betId = saved.string ?? saved["id"].string else { throw AppError(code: "supabase_error", message: "Supabase did not return the saved bet ID.") }
-        update(bet.id) { $0.supabaseId = betId; $0.supabaseSynced = false }
-        return betId
+        guard let challengeId = saved.string ?? saved["id"].string else { throw AppError(code: "supabase_error", message: "Supabase did not return the saved challenge ID.") }
+        update(challenge.id) { $0.supabaseId = challengeId; $0.supabaseSynced = false }
+        return challengeId
     }
 
-    private func update(_ betId: String, _ fn: (inout Bet) -> Void) {
+    private func update(_ challengeId: String, _ fn: (inout Challenge) -> Void) {
         let store = Store.shared
-        guard var d = store.data, let i = d.bets.firstIndex(where: { $0.id == betId }) else { return }
-        fn(&d.bets[i])
+        guard var d = store.data, let i = d.challenges.firstIndex(where: { $0.id == challengeId }) else { return }
+        fn(&d.challenges[i])
         store.data = d
         store.saveQuiet()
     }
 
-    /// The server refused a bet: take it off and give the stake back.
-    private func refund(_ betId: String) {
+    /// The server refused a challenge: take it off and give the pledge back.
+    private func refund(_ challengeId: String) {
         let store = Store.shared
-        guard var d = store.data, let bet = d.bets.first(where: { $0.id == betId }) else { return }
-        d.bets.removeAll { $0.id == betId }
-        d.wallet.balance = max(0, d.wallet.balance + bet.stake)
+        guard var d = store.data, let challenge = d.challenges.first(where: { $0.id == challengeId }) else { return }
+        d.challenges.removeAll { $0.id == challengeId }
+        d.wallet.balance = max(0, d.wallet.balance + challenge.pledgeMinutes)
         d.wallet.lockedOut = d.wallet.balance <= 0
         store.data = d
         store.saveQuiet()

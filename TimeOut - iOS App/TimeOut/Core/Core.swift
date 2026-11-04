@@ -4,7 +4,7 @@ import Foundation
 /// simulated feed, seeded hashes and day math match the web demo exactly.
 typealias Ms = Double
 
-/// TimeOut core helpers: demo clock, day keys, seeded randomness, odds math and formatting.
+/// TimeOut core helpers: demo clock, day keys, seeded randomness, point value math and formatting.
 /// A port of the web demo's core.js; keep the two in step.
 enum TO {
     static func now() -> Ms { (Date().timeIntervalSince1970 * 1000).rounded(.down) }
@@ -133,7 +133,7 @@ enum TO {
         return 0.5 * (1 + (x >= 0 ? y : -y))
     }
 
-    /// Rounds down to the nearest hook (x.5) so lines never land on a whole number.
+    /// Rounds down to the nearest half point (x.5) so totals never land on a whole number.
     static func hook(_ x: Double) -> Double { x.rounded(.down) + 0.5 }
     static func clamp(_ v: Double, _ lo: Double, _ hi: Double) -> Double { min(max(v, lo), hi) }
     static func clamp(_ v: Int, _ lo: Int, _ hi: Int) -> Int { min(max(v, lo), hi) }
@@ -143,9 +143,9 @@ enum TO {
 @inline(__always) func jsRound(_ x: Double) -> Double { (x + 0.5).rounded(.down) }
 @inline(__always) func jsRoundInt(_ x: Double) -> Int { Int(jsRound(x)) }
 
-// MARK: - Odds
+// MARK: - Point value
 
-enum OddsMath {
+enum PointValueMath {
     static func decimal(_ american: Int) -> Double {
         american > 0 ? 1 + Double(american) / 100 : 1 + 100 / Double(abs(american))
     }
@@ -155,7 +155,7 @@ enum OddsMath {
         return dec >= 2 ? jsRoundInt((dec - 1) * 100) : jsRoundInt(-100 / (dec - 1))
     }
 
-    /// Fair (no house edge) American price, rounded to sportsbook-looking steps.
+    /// Fair (no built-in edge) American-format number, rounded to rounded steps.
     static func fromProb(_ raw: Double) -> Int {
         let p = TO.clamp(raw, 0.038, 0.962)
         let val = p >= 0.5 ? (-100 * p) / (1 - p) : (100 * (1 - p)) / p

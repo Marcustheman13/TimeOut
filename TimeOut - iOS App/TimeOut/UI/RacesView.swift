@@ -1,16 +1,16 @@
 import SwiftUI
 
-/// Virtual Racing: an animated 5-horse race. Tap a price to bet with the regular slip, or start a race to watch.
+/// Virtual Racing: an animated 5-horse race. Tap a price to challenge with the regular slip, or start a race to watch.
 struct RacesView: View {
+    var embedded = false
     private var races: Races { .shared }
 
     var body: some View {
         let _ = races.version
         let race = races.current
         let latest = races.latest
-        return ScrollView {
-            VStack(spacing: 14) {
-                PageHead(title: "Virtual Racing", text: "Pick a winner and stake screen-time minutes using your regular bet slip.")
+        let stack = VStack(spacing: 14) {
+                PageHead(title: "Virtual Racing", text: "Pick a winner and pledge screen-time minutes using your regular challenge slip.")
                     .padding(.bottom, -6)
                 TimelineView(.animation(paused: race.status != "running")) { ctx in
                     let now = TO.ms(ctx.date)
@@ -49,8 +49,8 @@ struct RacesView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
                         VStack(alignment: .leading, spacing: 3) {
-                            Text("Field odds").font(.barlow(17, 700))
-                            Text("Tap a price to open your standard screen-time bet slip.").font(.barlow(13)).foregroundStyle(Theme.text2)
+                            Text("Field point value").font(.barlow(17, 700))
+                            Text("Tap a price to open your standard screen-time challenge slip.").font(.barlow(13)).foregroundStyle(Theme.text2)
                         }
                         Spacer()
                         Tag("5 runners")
@@ -71,13 +71,13 @@ struct RacesView: View {
                                     }
                                 }
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                                OddsButton(sel: races.selection(race, runner), suspended: race.status != "open", big: true, label: runner.name)
+                                PointValueButton(sel: races.selection(race, runner), suspended: race.status != "open", big: true, label: runner.name)
                                     .frame(width: 106)
                             }
                             .padding(.vertical, 10)
                         }
                     }
-                    Note(.blue, icon: .info, "Place a bet to start the race with your pick, or start it now to watch without a bet. Bets use your regular screen-time balance.")
+                    Note(.blue, icon: .info, "Lock in a challenge to start the race with your pick, or start it now to watch without a challenge. Challenges use your regular screen-time balance.")
                 }
                 .card()
                 .gutter()
@@ -94,8 +94,13 @@ struct RacesView: View {
                 }
             }
             .padding(.bottom, 24)
+        return Group {
+            if embedded {
+                stack
+            } else {
+                ScrollView { stack }.scrollIndicators(.hidden)
+            }
         }
-        .scrollIndicators(.hidden)
     }
 
     private func commentary(_ race: Races.Race, _ now: Ms) -> String {
@@ -108,7 +113,7 @@ struct RacesView: View {
             let h = races.horse(leader)
             return "#\(h.number) \(h.name) is driving for the lead."
         default:
-            return races.latest == nil ? "Welcome to Silicon Downs. Select a horse to add it to your bet slip." : "The previous race is official. Place your next screen-time bet."
+            return races.latest == nil ? "Welcome to Silicon Downs. Select a horse to add it to your challenge slip." : "The previous race is official. Place your next screen-time challenge."
         }
     }
 }
@@ -162,8 +167,8 @@ struct RaceTrack: View {
         c.fill(Path(ellipseIn: CGRect(x: -3, y: -13, width: 6, height: 6)), with: .color(Color(hex: "#f2f5f9")))
         let swing = CGFloat(sin(elapsed / 90 + Double(runner.id))) * 7
         for (ax, dir) in [(-8.0, -1.0), (-3, 1), (6, -1), (10, 1)] as [(CGFloat, CGFloat)] {
-            var leg = Path(); leg.move(to: CGPoint(x: ax, y: 4)); leg.addLine(to: CGPoint(x: ax + swing * dir, y: 15))
-            c.stroke(leg, with: .color(color), style: StrokeStyle(lineWidth: 3, lineCap: .round))
+            var pick = Path(); pick.move(to: CGPoint(x: ax, y: 4)); pick.addLine(to: CGPoint(x: ax + swing * dir, y: 15))
+            c.stroke(pick, with: .color(color), style: StrokeStyle(lineWidth: 3, lineCap: .round))
         }
         c.fill(Path(roundedRect: CGRect(x: -5, y: -4, width: 10, height: 8), cornerRadius: 2), with: .color(Color(hex: "#080d14")))
         c.draw(Text("\(runner.number)").font(.system(size: 7, weight: .bold)).foregroundStyle(.white), at: CGPoint(x: 0, y: 0), anchor: .center)

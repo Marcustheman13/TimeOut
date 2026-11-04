@@ -11,15 +11,15 @@
   const DURATION = 12 * MIN;
   const STEP = 5000;
   const STEPS = DURATION / STEP; // 144
-  const ODDS_BUCKET_LIVE = 15000;
-  const ODDS_BUCKET_PRE = 2 * MIN;
+  const VALUE_BUCKET_LIVE = 15000;
+  const VALUE_BUCKET_PRE = 2 * MIN;
 
   const SPORTS = {
-    football: { periods: 4, periodMin: 15, marginSigma: 13.5, totalSigma: 10, perTeam: 21.6, homeEdge: 1.5, spread: 'dynamic', spreadLabel: 'Spread', discrete: false, unit: 'pts' },
-    basketball: { periods: 4, periodMin: 12, marginSigma: 12, totalSigma: 15, perTeam: 111, homeEdge: 2.5, spread: 'dynamic', spreadLabel: 'Spread', discrete: false, unit: 'pts' },
-    baseball: { periods: 9, marginSigma: 4.2, totalSigma: 3.2, perTeam: 4.3, homeEdge: 0.25, spread: 'fixed', spreadLabel: 'Run line', discrete: true, unit: 'runs' },
-    hockey: { periods: 3, periodMin: 20, marginSigma: 2.4, totalSigma: 2.2, perTeam: 3.0, homeEdge: 0.2, spread: 'fixed', spreadLabel: 'Puck line', discrete: true, unit: 'goals' },
-    soccer: { periods: 2, marginSigma: 1.6, totalSigma: 1.6, perTeam: 1.35, homeEdge: 0.3, spread: null, draw: true, discrete: true, unit: 'goals' },
+    football: { periods: 4, periodMin: 15, marginSigma: 13.5, totalSigma: 10, perTeam: 21.6, homeEdge: 1.5, margin: 'dynamic', marginLabel: 'Margin', discrete: false, unit: 'pts' },
+    basketball: { periods: 4, periodMin: 12, marginSigma: 12, totalSigma: 15, perTeam: 111, homeEdge: 2.5, margin: 'dynamic', marginLabel: 'Margin', discrete: false, unit: 'pts' },
+    baseball: { periods: 9, marginSigma: 4.2, totalSigma: 3.2, perTeam: 4.3, homeEdge: 0.25, margin: 'fixed', marginLabel: 'Run margin', discrete: true, unit: 'runs' },
+    hockey: { periods: 3, periodMin: 20, marginSigma: 2.4, totalSigma: 2.2, perTeam: 3.0, homeEdge: 0.2, margin: 'fixed', marginLabel: 'Goal margin', discrete: true, unit: 'goals' },
+    soccer: { periods: 2, marginSigma: 1.6, totalSigma: 1.6, perTeam: 1.35, homeEdge: 0.3, margin: null, draw: true, discrete: true, unit: 'goals' },
   };
 
   const t = (abbr, name, city, color) => ({ abbr, name, city, color });
@@ -360,17 +360,17 @@
   }
 
   // ---------- challenge targets ----------
-  const oddsCache = new Map();
+  const pointValueCache = new Map();
 
   function expectedMargin(g, now) {
     const S = SPORTS[g.sport];
     const d = strength(g.league, g.home) - strength(g.league, g.away);
     let mu = S.perTeam * 0.12 * d + S.homeEdge;
-    if (g.state === 'scheduled') mu += 0.05 * S.marginSigma * TO.unit(`drift-${g.id}-${Math.floor(now / ODDS_BUCKET_PRE)}`);
+    if (g.state === 'scheduled') mu += 0.05 * S.marginSigma * TO.unit(`drift-${g.id}-${Math.floor(now / VALUE_BUCKET_PRE)}`);
     return mu;
   }
 
-  function computeOdds(g, now) {
+  function computePointValue(g, now) {
     const S = SPORTS[g.sport];
     const rem = g.state === 'live' ? 1 - g.progress : 1;
     const suspended = !(g.state === 'scheduled' || g.state === 'live') || (g.state === 'live' && rem < 0.03);
@@ -381,23 +381,23 @@
       mu = (g.homeScore - g.awayScore) + mu0 * rem;
       sd = Math.max(S.marginSigma * Math.pow(rem, 0.4), minSD);
     } else { mu = mu0; sd = S.marginSigma; }
-    const sel = (market, side, line, p) => ({ id: `${g.id}|${market}|${side}`, kind: 'game', gameId: g.id, market, side, line, price: TO.odds.fromProb(p) });
+    const sel = (market, side, line, p) => ({ id: `${g.id}|${market}|${side}`, kind: 'game', gameId: g.id, market, side, line, price: TO.pointValue.fromProb(p) });
 
-    let moneyline;
+    let winner;
     if (S.draw) {
       const pHome = 1 - TO.phi((0.5 - mu) / sd);
       const pAway = TO.phi((-0.5 - mu) / sd);
       const pDraw = Math.max(1 - pHome - pAway, 0.02);
-      moneyline = [sel('ml', 'away', null, pAway), sel('ml', 'draw', null, pDraw), sel('ml', 'home', null, pHome)];
+      winner = [sel('winner', 'away', null, pAway), sel('winner', 'draw', null, pDraw), sel('winner', 'home', null, pHome)];
     } else {
       const pHome = TO.phi(mu / sd);
-      moneyline = [sel('ml', 'away', null, 1 - pHome), sel('ml', 'home', null, pHome)];
+      winner = [sel('winner', 'away', null, 1 - pHome), sel('winner', 'home', null, pHome)];
     }
-    let spread = [];
-    if (S.spread) {
-      const homeLine = S.spread === 'fixed' ? (mu >= 0 ? -1.5 : 1.5) : -TO.hook(mu);
+    let margin = [];
+    if (S.margin) {
+      const homeLine = S.margin === 'fixed' ? (mu >= 0 ? -1.5 : 1.5) : -TO.hook(mu);
       const pCover = 1 - TO.phi((-homeLine - mu) / sd);
-      spread = [sel('spread', 'away', -homeLine, 1 - pCover), sel('spread', 'home', homeLine, pCover)];
+      margin = [sel('margin', 'away', -homeLine, 1 - pCover), sel('margin', 'home', homeLine, pCover)];
     }
     const base = LEAGUES[g.league].id === 'sim' ? 222 : S.perTeam * 2;
     const baseTotal = base * (1 + 0.06 * TO.unit(`total-${g.id}`));
@@ -408,20 +408,20 @@
     } else { projected = baseTotal; sdT = S.totalSigma; }
     const line = TO.hook(projected);
     const pOver = 1 - TO.phi((line - projected) / sdT);
-    const total = [sel('total', 'over', line, pOver), sel('total', 'under', line, 1 - pOver)];
-    return { moneyline, spread, total, suspended, all: [...moneyline, ...spread, ...total] };
+    const total = [sel('total', 'higher', line, pOver), sel('total', 'lower', line, 1 - pOver)];
+    return { winner, margin, total, suspended, all: [...winner, ...margin, ...total] };
   }
 
   /** Current challenge targets for a game. Live prices refresh every 15 seconds; pre-game every 2 minutes. */
-  function odds(id, now = TO.now()) {
+  function pointValue(id, now = TO.now()) {
     const g = game(id, now);
     if (!g) return null;
-    const bucketLen = g.state === 'live' ? ODDS_BUCKET_LIVE : ODDS_BUCKET_PRE;
+    const bucketLen = g.state === 'live' ? VALUE_BUCKET_LIVE : VALUE_BUCKET_PRE;
     const bucket = Math.floor(now / bucketLen) * bucketLen;
     const key = `${id}|${bucket}|${g.state}`;
-    if (!oddsCache.has(key)) {
+    if (!pointValueCache.has(key)) {
       const gb = g.state === 'live' ? game(id, Math.max(bucket, g.start)) : g;
-      const o = computeOdds(gb.state === 'live' || gb.state === 'scheduled' ? gb : g, bucket);
+      const o = computePointValue(gb.state === 'live' || gb.state === 'scheduled' ? gb : g, bucket);
       if (g.state !== 'live' && g.state !== 'scheduled') o.suspended = true;
       if (g.state === 'live' && 1 - g.progress < 0.03) o.suspended = true;
       o.updatedAt = bucket;
@@ -429,17 +429,17 @@
       const prevT = bucket - bucketLen;
       const gp = game(id, prevT);
       if (gp && (gp.state === 'live' || gp.state === 'scheduled')) {
-        const prev = computeOdds(gp, prevT);
+        const prev = computePointValue(gp, prevT);
         o.move = {};
         for (const s of o.all) {
           const p = prev.all.find((x) => x.id === s.id);
           if (p && p.price !== s.price) o.move[s.id] = s.price > p.price ? 1 : -1;
         }
       } else o.move = {};
-      oddsCache.set(key, o);
-      if (oddsCache.size > 3000) oddsCache.clear();
+      pointValueCache.set(key, o);
+      if (pointValueCache.size > 3000) pointValueCache.clear();
     }
-    return oddsCache.get(key);
+    return pointValueCache.get(key);
   }
 
   // ---------- Prediction markets (Could-have) ----------
@@ -462,16 +462,16 @@
     const opens = cycle * PRED_CYCLE + i * 8 * MIN;
     const resolves = opens + PRED_CYCLE;
     const closes = resolves - 2 * MIN;
-    const drift = 0.12 * TO.unit(`${id}-${Math.floor(now / ODDS_BUCKET_PRE)}`);
+    const drift = 0.12 * TO.unit(`${id}-${Math.floor(now / VALUE_BUCKET_PRE)}`);
     const pYes = TO.clamp(def.p + drift, 0.08, 0.92);
     const outcome = TO.u01(`out-${id}`) < def.p ? 'yes' : 'no';
     const state = now >= resolves ? 'resolved' : now >= closes ? 'closed' : 'open';
-    const prevDrift = 0.12 * TO.unit(`${id}-${Math.floor(now / ODDS_BUCKET_PRE) - 1}`);
+    const prevDrift = 0.12 * TO.unit(`${id}-${Math.floor(now / VALUE_BUCKET_PRE) - 1}`);
     const prevYes = TO.clamp(def.p + prevDrift, 0.08, 0.92);
-    const yes = { id: `${id}|pred|yes`, kind: 'pred', predId: id, market: 'pred', side: 'yes', line: null, price: TO.odds.fromProb(pYes) };
-    const no = { id: `${id}|pred|no`, kind: 'pred', predId: id, market: 'pred', side: 'no', line: null, price: TO.odds.fromProb(1 - pYes) };
+    const yes = { id: `${id}|pred|yes`, kind: 'pred', predId: id, market: 'pred', side: 'yes', line: null, price: TO.pointValue.fromProb(pYes) };
+    const no = { id: `${id}|pred|no`, kind: 'pred', predId: id, market: 'pred', side: 'no', line: null, price: TO.pointValue.fromProb(1 - pYes) };
     const move = {};
-    const py = TO.odds.fromProb(prevYes), pn = TO.odds.fromProb(1 - prevYes);
+    const py = TO.pointValue.fromProb(prevYes), pn = TO.pointValue.fromProb(1 - prevYes);
     if (py !== yes.price) move[yes.id] = yes.price > py ? 1 : -1;
     if (pn !== no.price) move[no.id] = no.price > pn ? 1 : -1;
     return { id, q: def.q, cat: def.cat, opens, closes, resolves, state, outcome: state === 'resolved' ? outcome : null, pYes, yes, no, move, suspended: state !== 'open' };
@@ -494,7 +494,7 @@
       if (!p) return null;
       return { sel: side === 'yes' ? p.yes : p.no, open: p.state === 'open' };
     }
-    const o = odds(ref, now);
+    const o = pointValue(ref, now);
     if (!o) return null;
     const sel = o.all.find((s) => s.id === selId);
     return { sel, open: !!sel && !o.suspended };
@@ -508,9 +508,9 @@
     if (sel.market === 'pred') return sel.side === 'yes' ? 'Yes' : 'No';
     const team = g ? teamOf(g, sel.side) : null;
     switch (sel.market) {
-      case 'ml': return team ? `${team.name} to win` : 'Draw';
-      case 'spread': return `${team.name} ${TO.odds.fmtLine(sel.line)}`;
-      case 'total': return `${sel.side === 'over' ? 'Over' : 'Under'} ${TO.odds.fmtLine(sel.line, false)}`;
+      case 'winner': return team ? `${team.name} to win` : 'Draw';
+      case 'margin': return `${team.name} ${TO.pointValue.fmtLine(sel.line)}`;
+      case 'total': return `Combined score ${sel.side === 'higher' ? 'above' : 'below'} ${TO.pointValue.fmtLine(sel.line, false)}`;
     }
     return '';
   }
@@ -518,12 +518,12 @@
   function marketLabel(sel, g) {
     if (sel.market === 'race') return 'Race winner';
     if (sel.market === 'pred') return 'Prediction';
-    if (sel.market === 'ml') return 'Moneyline';
-    if (sel.market === 'spread') return g ? SPORTS[g.sport].spreadLabel : 'Spread';
+    if (sel.market === 'winner') return 'Winner';
+    if (sel.market === 'margin') return g ? SPORTS[g.sport].marginLabel : 'Margin';
     return 'Total';
   }
 
-  /** Grades a pick against a game or prediction. Returns pending | won | lost | push | void. */
+  /** Grades a pick against a game or prediction. Returns pending | won | lost | tie | void. */
   function grade(sel, now = TO.now()) {
     if (sel.market === 'race') return TO.races ? TO.races.grade(sel, now) : 'pending';
     if (sel.market === 'pred') {
@@ -540,18 +540,18 @@
 
   function gradeScore(sel, H, A) {
     switch (sel.market) {
-      case 'ml':
+      case 'winner':
         if (sel.side === 'draw') return H === A ? 'won' : 'lost';
         if (H === A) return 'lost';
         return (sel.side === 'home') === (H > A) ? 'won' : 'lost';
-      case 'spread': {
+      case 'margin': {
         const m = (sel.side === 'home' ? H - A : A - H) + sel.line;
-        return m > 0 ? 'won' : m < 0 ? 'lost' : 'push';
+        return m > 0 ? 'won' : m < 0 ? 'lost' : 'tie';
       }
       case 'total': {
         const tot = H + A;
-        if (tot === sel.line) return 'push';
-        return (sel.side === 'over') === (tot > sel.line) ? 'won' : 'lost';
+        if (tot === sel.line) return 'tie';
+        return (sel.side === 'higher') === (tot > sel.line) ? 'won' : 'lost';
       }
     }
     return 'pending';
@@ -568,20 +568,20 @@
     if (!g || g.state === 'scheduled') return 'upcoming';
     if (g.state === 'postponed') return 'void';
     if (sel.market === 'total') {
-      // Compare pace, not the raw score, so an over isn't "losing" in the first minute.
+      // Compare pace, not the raw score, so a high total isn't "losing" in the first minute.
       const pace = g.progress > 0.05 ? (g.homeScore + g.awayScore) / g.progress : sel.line;
       if (Math.abs(pace - sel.line) < 0.5) return 'even';
-      return (sel.side === 'over') === (pace > sel.line) ? 'winning' : 'losing';
+      return (sel.side === 'higher') === (pace > sel.line) ? 'winning' : 'losing';
     }
     const r = gradeScore(sel, g.homeScore, g.awayScore);
-    if (r === 'push') return 'even';
-    if (sel.market === 'ml' && g.homeScore === g.awayScore) return sel.side === 'draw' ? 'winning' : 'even';
+    if (r === 'tie') return 'even';
+    if (sel.market === 'winner' && g.homeScore === g.awayScore) return sel.side === 'draw' ? 'winning' : 'even';
     return r === 'won' ? 'winning' : 'losing';
   }
 
   TO.sim = {
     SLOT, DURATION, STEP, SPORTS, LEAGUES, REAL_LEAGUES, LEAGUE_ORDER, PREDICTIONS,
-    game, board, odds, stats, research, record, form, strength,
+    game, board, pointValue, stats, research, record, form, strength,
     prediction, predictions, currentSelection, selectionLabel, marketLabel, grade, gradeScore, liveStanding, teamOf,
   };
 })(window.TO);

@@ -8,13 +8,13 @@
 
   const SECTIONS = {
     screentime: { title: 'Screen time', icon: 'hourglass' },
-    races: { title: 'Virtual Racing', icon: 'target' },
-    status: { title: 'Tier & streak', icon: 'trophy' },
-    sports: { title: 'Sports on Home', icon: 'grid' },
-    notifications: { title: 'Notifications', icon: 'bell' },
-    privacy: { title: 'What friends can see', icon: 'eye' },
+    sports: { title: 'Sports & races', icon: 'grid' },
+    notifications: { title: 'Notifications & privacy', icon: 'bell' },
     account: { title: 'Account', icon: 'user' },
   };
+  // Older links still name the sections that now live inside a combined page.
+  const SECTION_GROUP = { status: 'screentime', races: 'sports', privacy: 'notifications' };
+  const canonicalSection = (section) => SECTION_GROUP[section] || section;
 
   // ---------- Drawer ----------
   function openDrawer() {
@@ -28,11 +28,8 @@
       <div class="drawer-head">${ui.avatar(TO.account.photo, 'lg')}<div class="grow" style="min-width:0"><b class="ellipsis" style="display:block;font-size:17px">@${esc(TO.account.username)}</b><div class="small muted ellipsis">${esc(TO.account.email)}</div>${TO.account.server ? `<div class="tiny faint ellipsis">Login #${TO.account.server.loginCount} · from the database</div>` : ''}<div style="margin-top:6px">${ui.tierBadge(wl.tier.id, true)}</div></div></div>
       <nav>
         ${item('screentime', `${wl.phoneLeft} min left`)}
-        ${item('races')}
-        ${item('status', wl.streak ? `${wl.streak}-day streak` : '')}
         ${item('sports')}
         ${item('notifications')}
-        ${item('privacy')}
         ${item('account')}
         <button class="dn" data-act="how">${icon('help', 20)}How TimeOut works</button>
         <a class="dn" href="support.html" target="_blank" rel="noopener">${icon('info', 20)}Help & support</a>
@@ -76,11 +73,11 @@
       <div class="card stack-s">
         <h2 style="margin:0;font-size:17px">Tomorrow, so far</h2>
         ${brow('Base limit', `${TO.RULES.daily} min`)}
-        ${brow("Today's settled bets", TO.signedMin(wl.todayNet), wl.todayNet > 0 ? 'green' : wl.todayNet < 0 ? 'red' : '')}
+        ${brow("Today's resolved challenges", TO.signedMin(wl.todayNet), wl.todayNet > 0 ? 'green' : wl.todayNet < 0 ? 'red' : '')}
         ${wl.penaltyTomorrow ? brow('Emergency unlock penalty', `−${wl.penaltyTomorrow} min`, 'red') : ''}
         <hr class="divider">
         ${brow("Tomorrow's phone time", `${wl.tomorrowLimit} min`, wl.tomorrowLimit > TO.RULES.daily ? 'green' : wl.tomorrowLimit < TO.RULES.daily ? 'red' : '')}
-        ${wl.atRisk ? `<div class="tiny faint">${wl.atRisk} min in open bets will change this when they settle.</div>` : ''}
+        ${wl.atRisk ? `<div class="tiny faint">${wl.atRisk} min in open challenges will change this when they resolve.</div>` : ''}
       </div>
 
       <div class="card stack-s" style="border-color:rgba(255,201,64,.35)">
@@ -136,7 +133,7 @@
     const n = TO.data.settings.notify;
     const row = (k, t, sub, ic) => listRow(ic, t, sub, ui.switchEl(`nt-${k}`, n[k], `data-change="set-notify" data-k="${k}"`), `for="nt-${k}"`);
     return `<div class="small muted">In the demo these show as banners at the top of the screen.</div><div class="list">
-      ${row('settled', 'Challenge results', 'When a matchup challenge is completed', 'target')}
+      ${row('resolved', 'Challenge results', 'When a matchup challenge is completed', 'target')}
       ${row('friends', 'Friend requests', 'When someone adds or accepts you', 'userPlus')}
       ${row('lowTime', 'Low phone time', 'Before your locked apps close', 'phone')}
     </div>`;
@@ -148,7 +145,7 @@
     return `<div class="small muted">Friends only see what you turn on here. Anything off shows as "Private" to them.</div><div class="list">
       ${row('record', 'My record', 'Wins and losses', 'chart')}
       ${row('minutes', 'Minutes won or lost', 'Your leaderboard number', 'hourglass')}
-      ${row('challenges', 'My open bets', 'Picks you currently have open', 'ticket')}
+      ${row('challenges', 'My open challenges', 'Picks you currently have open', 'ticket')}
     </div>`;
   }
 
@@ -203,14 +200,21 @@
   }
 
   function render(section) {
-    const map = { screentime, races: () => TO.views.races.render(), status, sports, notifications, privacy, account };
-    return { title: SECTIONS[section].title, body: map[section]() };
+    const key = canonicalSection(section);
+    const map = {
+      screentime: () => `${screentime()}<div class="eyebrow">Tier & streak</div>${status()}`,
+      sports: () => `${sports()}<div class="eyebrow">Virtual racing</div>${TO.views.races.render()}`,
+      notifications: () => `${notifications()}<div class="eyebrow">What friends can see</div>${privacy()}`,
+      account,
+    };
+    return { title: SECTIONS[key].title, body: map[key]() };
   }
 
   function openSection(section) {
+    const key = canonicalSection(section);
     closeDrawer();
     acctErr = {};
-    ui.openPage('settings', { render: () => render(section), after: section === 'races' ? (el) => TO.races.mount(el) : undefined });
+    ui.openPage('settings', { render: () => render(key), after: key === 'sports' ? (el) => TO.races.mount(el) : undefined });
   }
 
   // ---------- How it works ----------
@@ -297,7 +301,7 @@
   A['set-minlimit'] = async (el) => {
     const v = Number(el.dataset.v);
     if (v === TO.data.settings.minLimit) return;
-    const ok = await ui.confirm({ title: 'Change your minimum phone time?', body: v ? `No matter how many bets you lose, you'll always get at least <b>${v} minutes</b> of phone time a day.` : 'Losses will be able to take your phone time all the way to 0 minutes.', confirm: 'Change it' });
+    const ok = await ui.confirm({ title: 'Change your minimum phone time?', body: v ? `No matter how many challenges you lose, you'll always get at least <b>${v} minutes</b> of phone time a day.` : 'Losses will be able to take your phone time all the way to 0 minutes.', confirm: 'Change it' });
     if (!ok) return;
     St.setSetting('minLimit', v);
     refresh();
@@ -305,7 +309,7 @@
   A['set-lowwarn'] = (el) => { St.setSetting('lowWarn', Number(el.dataset.v)); refresh(); };
   A.logout = async () => {
     closeDrawer();
-    if (!(await ui.confirm({ title: 'Log out?', body: 'Your bets and settings stay saved on this device.', confirm: 'Log out' }))) return;
+    if (!(await ui.confirm({ title: 'Log out?', body: 'Your challenges and settings stay saved on this device.', confirm: 'Log out' }))) return;
     TO.comboGoalBuilder.clear();
     if (TO.api.online) await TO.api.logout();
     St.logout();
@@ -340,7 +344,7 @@
     refresh();
   };
   A['acct-delete'] = async () => {
-    if (!(await ui.confirm({ title: 'Delete your account?', body: 'This removes your account, bets and friends from this device. It can\'t be undone.', confirm: 'Delete account', danger: true }))) return;
+    if (!(await ui.confirm({ title: 'Delete your account?', body: 'This removes your account, challenges and friends from this device. It can\'t be undone.', confirm: 'Delete account', danger: true }))) return;
     St.deleteAccount();
     TO.comboGoalBuilder.clear();
     TO.app.boot();
@@ -387,5 +391,5 @@
     TO.app.render();
   }
 
-  TO.views.settings = { openSection, howItWorks, closeDrawer, refresh };
+  TO.views.settings = { openSection, howItWorks, closeDrawer, openDrawer, refresh };
 })(window.TO);

@@ -1,6 +1,6 @@
 # Turning on real Screen Time limits
 
-The app builds and runs without any of this. Accounts, bets, settlement and stats all work in the
+The app builds and runs without any of this. Accounts, challenges, resolution and stats all work in the
 Simulator, exactly like the web demo. These steps connect it to Apple's Screen Time so running out of
 phone time actually blocks your apps.
 
@@ -15,7 +15,7 @@ Screen Time APIs do nothing in the Simulator.
 |---|---|---|
 | `TimeOut` | `com.marcuswilliams.staketime` | The app |
 | `TimeOutMonitor` | `com.marcuswilliams.staketime.ScreenTimeMonitor` | Device Activity Monitor extension |
-| `TimeOutShield` | `com.marcuswilliams.staketime.StakeTimeShield` | Custom lock screen |
+| `TimeOutShield` | `com.marcuswilliams.staketime.PledgeTimeShield` | Custom lock screen |
 
 The bundle IDs keep their original names on purpose, so the Family Controls entitlement and App Group
 (`group.marcuswilliams.staketime`) stay valid. All three targets have the **Family Controls** and **App Groups**
@@ -34,7 +34,7 @@ From then on the apps you picked are blocked when today's phone time runs out. U
 
 ## 3. Test it
 
-Make today's limit small: lose a bet or two (or set **Minimum phone time** to None), then use one of the
+Make today's limit small: lose a challenge or two (or set **Minimum phone time** to None), then use one of the
 blocked apps until the limit is reached. It locks with TimeOut's custom lock screen. **Emergency unlock** in
 Screen time lifts the block for 15 minutes (costs 30 minutes tomorrow, 2 per day).
 
@@ -45,7 +45,7 @@ Screen time lifts the block for 15 minutes (costs 30 minutes tomorrow, 2 per day
 | `TimeOut/Services/ScreenTime.swift` (app) | Asks permission, stores the app picks, registers a daily schedule with usage checkpoints and one event at today's limit, applies emergency unlocks |
 | `TimeOutMonitor/DeviceActivityMonitorExtension.swift` | Records usage, blocks apps when the limit event fires, lifts the block at midnight and registers the new day's limit, re-blocks when an unlock window ends |
 | `TimeOutShield/ShieldConfigurationExtension.swift` | Draws the custom lock screen: tomorrow's limit and W-L record |
-| `AppModel.backgroundRefresh()` (app) | Asks iOS to wake the app, refreshes scores, settles bets and sends a notification |
+| `AppModel.backgroundRefresh()` (app) | Asks iOS to wake the app, refreshes scores, settles challenges and sends a notification |
 | App Group `UserDefaults` | Shared state: the app picks, today's and tomorrow's limits, usage, record, whether the limit was reached, unlock end time |
 
 The app writes both today's and tomorrow's limit on every refresh, so at midnight the extension can
@@ -54,7 +54,7 @@ switch to the new limit even if the app hasn't been opened.
 Removing apps from the block list waits until midnight while limits are running, so a limit can't be
 dodged halfway through the day. Adding apps blocks them right away.
 
-Background settlement is best-effort: iOS decides when to wake the app (usually within an hour or two,
+Background resolution is best-effort: iOS decides when to wake the app (usually within an hour or two,
 less often in Low Power Mode, and never if the user swipes TimeOut away in the app switcher or turns off
 Background App Refresh for it). Opening the app always settles immediately.
 

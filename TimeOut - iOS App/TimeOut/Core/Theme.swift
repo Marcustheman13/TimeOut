@@ -167,7 +167,7 @@ extension ButtonStyle where Self == BtnStyle {
     static func btn(_ kind: BtnKind = .normal, _ size: BtnSize = .md, full: Bool = false) -> BtnStyle { BtnStyle(kind: kind, size: size, full: full) }
 }
 
-/// Buttons that should only give press feedback (rows, cards, odds).
+/// Buttons that should only give press feedback (rows, cards, point value).
 struct PlainPress: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label

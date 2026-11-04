@@ -1,16 +1,16 @@
 # TimeOut — app frontend
 
 > **▶ Try the app:** <https://marcustheman13.github.io/TimeOut/> (resizes to fit phones, tablets and computers)
-> Live ESPN odds and real accounts, nothing to install. It updates by itself when the web demo changes on `main`.
+> Live ESPN point value and real accounts, nothing to install. It updates by itself when the web demo changes on `main`.
 
-A working HTML/CSS/JS mockup of TimeOut, the sportsbook where you bet screen time instead of money.
+A working HTML/CSS/JS mockup of TimeOut, the sports challenge app where you pledge screen time instead of money.
 It follows the group PRD and screen specs in `../docs/PRD - Prioritization & Design Sprint.pdf`.
 For the backend, database and team setup, see the [main README](../README.md).
 
 ## Open it
 
-- **Easiest: the live site.** <https://marcustheman13.github.io/TimeOut/>. It uses live ESPN odds and Supabase accounts, and updates after changes are pushed to `main`.
-- **With Supabase (normal):** serve the app over HTTP. Accounts use Supabase Auth; preferences, bets, and wallet transactions use the Supabase tables and RPCs.
+- **Easiest: the live site.** <https://marcustheman13.github.io/TimeOut/>. It uses live ESPN point value and Supabase accounts, and updates after changes are pushed to `main`.
+- **With Supabase (normal):** serve the app over HTTP. Accounts use Supabase Auth; preferences, challenges, and wallet transactions use the Supabase tables and RPCs.
 - **Offline demo:** use the app with Supabase config removed. Accounts and state are then saved only in that browser.
 - The interface fills the available viewport and can be wrapped in a native app shell.
 
@@ -20,8 +20,8 @@ For the backend, database and team setup, see the [main README](../README.md).
 
 | Width | Layout |
 | --- | --- |
-| 900 px and up | Sidebar, wide content grid, bet slip docked on the right |
-| 721–899 px | Icon sidebar, bet slip opens as a dialog |
+| 900 px and up | Sidebar, wide content grid, challenge slip docked on the right |
+| 721–899 px | Icon sidebar, challenge slip opens as a dialog |
 | 720 px and below | Menu button, single column, phone-sized controls |
 
 The layout lives in `css/web.css` and `js/web.js`, loaded after the shared `css/app.css` and `js/` files. To change how a
@@ -30,52 +30,52 @@ links (and invite links) forward to the main page. The iPhone app is the native 
 
 ## Logging in
 
-- **Try the demo account** on the welcome screen logs straight in. It comes with bet history, open bets, friends, a team and a pending friend request.
+- **Try the demo account** on the welcome screen logs straight in. It comes with challenge history, open challenges, friends, a team and a pending friend request.
 - Demo login: username `demo` (or `demo@timeout.app`), password `timeout123`.
 - **Create account** asks for a username, email, password and an optional photo. You can then log in with either the username or the email.
 - Supabase accounts use email and password. When email confirmation is enabled, confirm the signup email before logging in.
-- Supabase stores screen-time bets, bet legs, and wallet ledger entries. The browser also keeps a local cache so the sports feed and app remain responsive.
+- Supabase stores screen-time challenges, challenge picks, and wallet ledger entries. The browser also keeps a local cache so the sports feed and app remain responsive.
 - In offline mode, accounts are saved only in that browser. Two accounts made in the same browser can friend each other.
 
 ## What's in it
 
 | Spec item | Where to find it |
 | --- | --- |
-| Today's and tomorrow's games | Home: the **Today / Tomorrow** picker under the sport filters. Tomorrow's odds load when you open it. |
-| Home: balance + open bets at top, live feed by sport, 3-tap betting | Home tab. Tap any price, then **Place bet** (2 taps). A new price replaces the pick; closing the slip (✕) clears it. |
-| Parlays | In the slip, **Add another pick for a parlay** opens a page of open games. Pick up to 3, then **Review parlay**. |
-| Odds/scores refresh ≤ 30 s; odds change on an open slip needs re-confirm | Live odds refresh every 15 s. Slip shows old → new price and an **Accept new odds** button. |
-| 60 min daily balance, resets at midnight; bets use tomorrow's time | Wallet card on Home, Menu > Screen time. |
-| "Not enough screentime" + remaining balance | Bet slip. The stake can't go above today's balance; typing more snaps back to it and shows this message. |
-| No connection | A red banner appears, and betting and login are paused until the connection returns. |
-| Balance 0 → betting locked with midnight countdown | Home wallet card and bet slip. |
-| Auto settlement, voids for postponed games | Bets settle seconds after a game ends. Postponed games void and refund. |
-| Game detail: live score, stats, odds, your bets, research | Tap a team or **Stats & all odds** on any game. Tapping a price opens the slip; the floating **Make a bet** button jumps to the odds. |
-| My Bets: open bets with live score/stats, history, record and share | My Bets tab. |
-| Bet sharing image | **Share** on any bet. |
+| Today's and tomorrow's games | Home: the **Today / Tomorrow** picker under the sport filters. Tomorrow's point value load when you open it. |
+| Home: balance + open challenges at top, live feed by sport, 3-tap challenging | Home tab. Tap any price, then **Place challenge** (2 taps). A new price replaces the pick; closing the slip (✕) clears it. |
+| Combos | In the slip, **Add another pick for a combo** opens a page of open games. Pick up to 3, then **Review combo**. |
+| Point value/scores refresh ≤ 30 s; point value change on an open slip needs re-confirm | Live point values refresh every 15 s. Slip shows old → new price and an **Accept new point value** button. |
+| 60 min daily balance, resets at midnight; challenges use tomorrow's time | Wallet card on Home, Menu > Screen time. |
+| "Not enough screentime" + remaining balance | Challenge slip. The pledge can't go above today's balance; typing more snaps back to it and shows this message. |
+| No connection | A red banner appears, and challenging and login are paused until the connection returns. |
+| Balance 0 → challenging locked with midnight countdown | Home wallet card and challenge slip. |
+| Auto resolution, voids for postponed games | Challenges resolve seconds after a game ends. Postponed games void and refund. |
+| Game detail: live score, stats, point value, your challenges, research | Tap a team or **Stats & all point value** on any game. Tapping a price opens the slip; the floating **Make a challenge** button jumps to the point values. |
+| My Challenges: open challenges with live score/stats, history, record and share | My Challenges tab. |
+| Challenge sharing image | **Share** on any challenge. |
 | Social: stats vs friends, username search, invite link, requests, teams with dates and privacy | Social tab. What friends see is in Menu > What friends can see. Requests shows when each was sent or received; sent requests can be sent again once an hour. |
 | Screentime & settings: how it works, controls (confirmed), sports, account, notifications, emergency unlock | Menu (☰) at the top left. **Enforce app limits** can only be on while at least one app is locked. |
-| Record / performance | Top of My Bets. |
+| Record / performance | Top of My Challenges. |
 | Sports simulations for days without sports | Sim League. |
 | Emergency override with a penalty | Menu > Screen time > Emergency unlock: +15 min now, −30 min tomorrow, 2 per day, resets streak. |
 | Pick which sports to follow | Onboarding and Menu > Sports on Home. |
-| Prediction markets, to-do parlays | Home filter chips **Predictions** and **To-Do Parlays**. |
+| Prediction markets, to-do combos | Home filter chips **Predictions** and **To-Do Combos**. |
 | Tiers and clean-streak multiplier (from the iOS app) | Status strip on Home, Menu > Tier & streak. |
 
-Not included on purpose: monetization (per the team's call), real money, parlays over 3 picks.
+Not included on purpose: monetization (per the team's call), real money, combos over 3 picks.
 
 ## Notes
 
-- Games use simulated scores and odds with real team names. Each game runs for 12 minutes.
-- Odds are fair (no house cut), computed from the score and time left, the same model as the iOS prototype.
+- Games use simulated scores and point value with real team names. Each game runs for 12 minutes.
+- Point values are fair (no house cut), computed from the score and time left, the same model as the iOS prototype.
 - `python3 build.py` rebuilds `dist/TimeOut.html` after you edit anything in `css/` or `js/`.
 
-# Supabase accounts and saved bets
+# Supabase accounts and saved challenges
 
-The web demo uses Supabase Auth for email/password accounts, saves user preferences in `public.user_settings`, and stores sports bet tickets and legs in `public.bets` and `public.bet_legs`. Wallet balance changes go through Supabase RPC functions and the `wallets` / `wallet_transactions` tables.
+The web demo uses Supabase Auth for email/password accounts, saves user preferences in `public.user_settings`, and stores sports challenge tickets and picks in `public.challenges` and `public.challenge_picks`. Wallet balance changes go through Supabase RPC functions and the `wallets` / `wallet_transactions` tables.
 
-1. The main schema and bet RPCs have been applied. Run [`../server/db/supabase-settings-migration.sql`](../server/db/supabase-settings-migration.sql) in **SQL Editor** to add the JSON settings field used for locked apps and other app preferences.
-2. Run [`db/tier-system-migration.sql`](db/tier-system-migration.sql) in **SQL Editor** to persist locked-app settings, daily tier bonuses, odds boosts, and parlay insurance usage. It is safe to rerun after an earlier version.
+1. The main schema and challenge RPCs have been applied. Run [`../server/db/supabase-settings-migration.sql`](../server/db/supabase-settings-migration.sql) in **SQL Editor** to add the JSON settings field used for locked apps and other app preferences.
+2. Run [`db/tier-system-migration.sql`](db/tier-system-migration.sql) in **SQL Editor** to persist locked-app settings, daily tier bonuses, point-value boosts, and combo protection usage. It is safe to rerun after an earlier version.
 3. Confirm **Email provider** is enabled under **Authentication → Providers**. Email confirmation is enabled, so new users must confirm their email before logging in.
    After **Create account**, the app shows a *Verify your email* page. It logs the new user in by itself as soon as the email is confirmed, and the link in the email also logs them straight in. For the link to come back to the app, add these under **Authentication → URL Configuration → Redirect URLs** (plus your real site's address once it's hosted):
    - `https://marcustheman13.github.io/TimeOut/**` (the live site)
@@ -83,6 +83,6 @@ The web demo uses Supabase Auth for email/password accounts, saves user preferen
    - `http://localhost:8765/**` (only if you preview with the static server)
 4. Serve this app over HTTP (`cd server && npm start`, then open `http://localhost:3000`). Supabase sign-in does not work from the serverless `file://` mode.
 
-The frontend's publishable key is in `js/supabase-config.js`; publishable keys are intended to be public. The main schema enables row-level security, and the RPCs verify the signed-in owner before changing bets or wallet balances. Never put a Supabase secret/service-role key in this project or in browser code. The legacy local demo remains available only when Supabase is not configured.
+The frontend's publishable key is in `js/supabase-config.js`; publishable keys are intended to be public. The main schema enables row-level security, and the RPCs verify the signed-in owner before changing challenges or wallet balances. Never put a Supabase secret/service-role key in this project or in browser code. The legacy local demo remains available only when Supabase is not configured.
 
-Bet placement currently validates odds in the app and persists the resulting slip in the user's state. This is a screen-time betting demo; it does not move money or settle regulated wagers.
+Challenge placement currently validates point value in the app and persists the resulting slip in the user's state. This is a screen-time challenging demo; it does not move money or resolve regulated pledges.

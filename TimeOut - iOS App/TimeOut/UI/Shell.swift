@@ -34,7 +34,7 @@ struct ShellView: View {
             TopBar()
             ZStack {
                 switch ui.tab {
-                case "bets": MyBetsView()
+                case "challenges": MyChallengesView()
                 case "social": SocialView()
                 default: HomeView()
                 }
@@ -86,7 +86,7 @@ struct TopBar: View {
                 .background(locked ? Theme.raised : Theme.accent, in: Capsule())
             }
             .buttonStyle(.press)
-            .accessibilityLabel(locked ? "Betting locked until midnight" : "\(wl.balance) minutes available to bet")
+            .accessibilityLabel(locked ? "Challenging locked until midnight" : "\(wl.balance) minutes available to challenge")
         }
         .padding(.leading, 8).padding(.trailing, 14)
         .frame(height: 52)
@@ -110,12 +110,12 @@ struct TabBar: View {
 
     var body: some View {
         let d = store.data
-        let open = d?.bets.filter { $0.status == "open" && ($0.kind == "sports" || $0.kind == "race") && !$0.legs.isEmpty
-            && $0.legs.allSatisfy { $0.kind == "race" || $0.kind == "game" || ($0.kind == "sports" && $0.gameId != nil) } }.count ?? 0
+        let open = d?.challenges.filter { $0.status == "open" && ($0.kind == "sports" || $0.kind == "race") && !$0.picks.isEmpty
+            && $0.picks.allSatisfy { $0.kind == "race" || $0.kind == "game" || ($0.kind == "sports" && $0.gameId != nil) } }.count ?? 0
         let social = d?.requestsIn.count ?? 0
         HStack(spacing: 4) {
             tab("home", "Home", .home, badge: 0, green: false)
-            tab("bets", "My Bets", .ticket, badge: open, green: true)
+            tab("challenges", "My Challenges", .ticket, badge: open, green: true)
             tab("social", "Social", .users, badge: social, green: false)
         }
         .padding(6)
@@ -166,7 +166,7 @@ struct TabBar: View {
     }
 }
 
-/// The bar above the tab bar while picks are on a closed slip ("Bet Slip" / "Finalize Parlay").
+/// The bar above the tab bar while picks are on a closed slip ("Challenge Slip" / "Finalize Combo").
 struct SlipBar: View {
     private var slip: Slip { .shared }
     private var ui: UIState { .shared }
@@ -174,39 +174,39 @@ struct SlipBar: View {
 
     var body: some View {
         let _ = live.version
-        let showParlay = slip.parlayMode && slip.legs.count > 1 && !ui.sheetOpen(.slip)
-        let showSlip = !slip.legs.isEmpty && !slip.parlayMode && !ui.sheetOpen(.slip)
-        if showParlay || showSlip {
+        let showCombo = slip.comboMode && slip.picks.count > 1 && !ui.sheetOpen(.slip)
+        let showSlip = !slip.picks.isEmpty && !slip.comboMode && !ui.sheetOpen(.slip)
+        if showCombo || showSlip {
             let st = slip.status()
-            let price = OddsMath.fmt(OddsMath.fromDecimal(slip.decimal))
+            let price = PointValueMath.fmt(PointValueMath.fromDecimal(slip.decimal))
             Button { slip.open() } label: {
                 HStack(spacing: 10) {
-                    Text("\(slip.legs.count)").font(.barlow(13, 900))
+                    Text("\(slip.picks.count)").font(.barlow(13, 900))
                         .foregroundStyle(Theme.accentInk)
                         .frame(width: 26, height: 26)
-                        .background(showParlay ? Theme.accentInk.opacity(0.15) : Theme.accent, in: Circle())
-                    Text(showParlay ? "Finalize Parlay" : "Bet Slip").font(.barlow(15, 800))
+                        .background(showCombo ? Theme.accentInk.opacity(0.15) : Theme.accent, in: Circle())
+                    Text(showCombo ? "Finalize Combo" : "Challenge Slip").font(.barlow(15, 800))
                     Spacer(minLength: 0)
-                    if showParlay {
-                        Text(st.closed ? "Pick unavailable" : st.changed ? "Odds changed" : price).font(.display(19, 900))
+                    if showCombo {
+                        Text(st.closed ? "Pick unavailable" : st.changed ? "Point value changed" : price).font(.display(19, 900))
                     } else if st.changed || st.closed {
-                        HStack(spacing: 4) { Icon(.alert, 15); Text(st.closed ? "Pick unavailable" : "Odds changed") }
+                        HStack(spacing: 4) { Icon(.alert, 15); Text(st.closed ? "Pick unavailable" : "Point value changed") }
                             .font(.barlow(13, 800)).foregroundStyle(Theme.warn)
                     } else {
                         Text(price).font(.display(19, 900)).foregroundStyle(Theme.accent)
                     }
                 }
-                .foregroundStyle(showParlay ? Theme.accentInk : Theme.text)
+                .foregroundStyle(showCombo ? Theme.accentInk : Theme.text)
                 .padding(.leading, 12).padding(.trailing, 16)
                 .frame(height: 54)
-                .background(showParlay ? Theme.accent : Theme.raised2, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(showParlay ? .clear : Color(hex: "#3a4557"), lineWidth: 1))
+                .background(showCombo ? Theme.accent : Theme.raised2, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(showCombo ? .clear : Color(hex: "#3a4557"), lineWidth: 1))
                 .shadow(color: .black.opacity(0.5), radius: 15, y: 12)
             }
             .buttonStyle(.press)
             .padding(.horizontal, 12)
             .transition(.move(edge: .bottom).combined(with: .opacity))
-            .accessibilityLabel(showParlay ? "Finalize \(slip.legs.count) pick parlay" : "Open bet slip")
+            .accessibilityLabel(showCombo ? "Finalize \(slip.picks.count) pick combo" : "Open challenge slip")
         }
     }
 }
@@ -238,7 +238,7 @@ struct OverlayLayer: View {
     }
 }
 
-/// A full-screen page (game detail, parlay builder, a settings section).
+/// A full-screen page (game detail, combo builder, a settings section).
 struct PageHost: View {
     var kind: PageKind
     private var ui: UIState { .shared }
@@ -268,14 +268,18 @@ struct PageHost: View {
         )
     }
 
-    private func close() { ui.closePage(kind) }
+    private func close() {
+        ui.closePage(kind)
+        // Settings sections are opened from the menu. Back returns to that menu, not Home.
+        if case .settings = kind { ui.drawerOpen = true }
+    }
 
     private var title: String {
         switch kind {
         case .game(let id):
             guard let g = Feed.game(id) else { return "" }
             return "\(g.away.abbr) @ \(g.home.abbr)"
-        case .parlay: return "Build a parlay"
+        case .combo: return "Build a combo"
         case .settings(let s): return SettingsModel.sections[s]?.title ?? ""
         }
     }
@@ -283,7 +287,7 @@ struct PageHost: View {
     @ViewBuilder private var content: some View {
         switch kind {
         case .game(let id): GamePage(id: id)
-        case .parlay: ParlayPage()
+        case .combo: ComboPage()
         case .settings(let s): SettingsPage(section: s)
         }
     }
@@ -370,7 +374,7 @@ struct SheetHost: View {
     var body: some View {
         switch kind {
         case .slip: SlipSheet()
-        case .share(let id): ShareSheet(betId: id)
+        case .share(let id): ShareSheet(challengeId: id)
         case .how: HowItWorksSheet()
         case .locked: LockedAppsSheet()
         case .profile(let u): ProfileSheet(username: u)
@@ -458,13 +462,13 @@ struct ToastView: View {
     }
 }
 
-/// Red banner while offline; the slip refuses bets until the connection returns.
+/// Red banner while offline; the slip refuses challenges until the connection returns.
 struct NetBanner: View {
     var body: some View {
         VStack {
             HStack(spacing: 10) {
                 Icon(.wifiOff, 17)
-                Text(md("**No internet connection.** Betting is paused until you're back online.")).font(.barlow(13, 600))
+                Text(md("**No internet connection.** Challenging is paused until you're back online.")).font(.barlow(13, 600))
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .foregroundStyle(.white)

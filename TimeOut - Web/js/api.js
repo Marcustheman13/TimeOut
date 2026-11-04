@@ -16,23 +16,23 @@
   let lastTierPerkMigrationAlertAt = 0;
   const placing = new Set();
   const settling = new Set();
-  const isPersistableGameLeg = (leg) => leg?.kind === 'game' || (leg?.kind === 'sports' && !!leg.gameId);
+  const isPersistableGamePick = (pick) => pick?.kind === 'game' || (pick?.kind === 'sports' && !!pick.gameId);
 
-  function isOutOfBettingMinutes(error) {
-    return /insufficient|not enough|out of (betting )?(minutes|balance)|betting minutes/i.test(String(error?.message || ''));
+  function isOutOfPredictingMinutes(error) {
+    return /insufficient|not enough|out of (challenging )?(minutes|balance)|challenging minutes/i.test(String(error?.message || ''));
   }
   function isTierSystemRpcUnavailable(error) {
     const message = String(error?.message || '');
-    return /timeout_place_bet_with_tiers/i.test(message) && /schema cache|function.*(not found|does not exist|could not find)/i.test(message);
+    return /timeout_place_challenge_with_tiers/i.test(message) && /schema cache|function.*(not found|does not exist|could not find)/i.test(message);
   }
   function isTierPerkRpcUnavailable(error) {
     const message = String(error?.message || '');
-    return /timeout_place_bet_with_perks/i.test(message) && /schema cache|function.*(not found|does not exist|could not find)/i.test(message);
+    return /timeout_place_challenge_with_perks/i.test(message) && /schema cache|function.*(not found|does not exist|could not find)/i.test(message);
   }
   function isTierPerkLimitError(error) {
-    return /no odds boosts left|no Combo Goal insurance left/i.test(String(error?.message || ''));
+    return /no point-value boosts left|no combo protection left/i.test(String(error?.message || ''));
   }
-  function notifyOutOfBettingMinutes() {
+  function notifyOutOfPredictingMinutes() {
     if (Date.now() - lastOutOfMinutesAlertAt < 15000 || !TO.ui?.toast) return;
     lastOutOfMinutesAlertAt = Date.now();
     TO.ui.toast({ kind: 'loss', title: 'Out of pledge minutes', msg: 'Pledges reopen at midnight.' });
@@ -45,7 +45,7 @@
   function notifyTierPerkMigrationRequired() {
     if (Date.now() - lastTierPerkMigrationAlertAt < 15000 || !TO.ui?.toast) return;
     lastTierPerkMigrationAlertAt = Date.now();
-    TO.ui.toast({ kind: 'loss', title: 'Tier perks need Supabase setup', msg: 'This bet was not saved with its boost or insurance. Run the updated tier system migration, then reload the app.' });
+    TO.ui.toast({ kind: 'loss', title: 'Tier perks need Supabase setup', msg: 'This challenge was not saved with its boost or insurance. Run the updated tier system migration, then reload the app.' });
   }
   function notifyTierPerkAlreadyUsed() {
     if (Date.now() - lastTierPerkMigrationAlertAt < 15000 || !TO.ui?.toast) return;
@@ -208,8 +208,8 @@
         return rest(`wallets?select=${baseWalletFields}&user_id=eq.${safeId}&limit=1`);
       });
     });
-    const [betRows, walletRows] = await Promise.all([
-      rest(`bets?select=*,bet_legs(*)&user_id=eq.${safeId}&order=placed_at.desc`),
+    const [challengeRows, walletRows] = await Promise.all([
+      rest(`challenges?select=*,challenge_picks(*)&user_id=eq.${safeId}&order=placed_at.desc`),
       walletRequest,
     ]);
     supportsTierBonusColumns = hasTierBonusColumns;
@@ -223,20 +223,20 @@
       supportsAppPreferences = false;
       settingsRows = await rest(`user_settings?select=followed_sports,timezone,notifications_enabled&user_id=eq.${safeId}&limit=1`);
     }
-    const status = { pending: 'open', won: 'won', lost: 'lost', pushed: 'push', voided: 'void', cancelled: 'void' };
-    const result = { pending: 'pending', win: 'won', loss: 'lost', push: 'push', void: 'void' };
-    const bets = betRows.map((row) => {
-      const legs = (row.bet_legs || []).map((leg) => ({
-        selId: `${leg.espn_event_id}|${leg.market}|${leg.side}`, kind: 'game', gameId: leg.espn_event_id, league: leg.league, market: leg.market, side: leg.side,
-        line: leg.line == null ? null : Number(leg.line), price: Number(leg.accepted_odds), label: `${leg.market} · ${leg.side}${leg.line == null ? '' : ` ${leg.line}`}`,
-        marketLabel: leg.market, matchup: leg.matchup, result: result[leg.result] || 'pending', final: null,
+    const status = { pending: 'open', won: 'won', lost: 'lost', pushed: 'tie', voided: 'void', cancelled: 'void' };
+    const result = { pending: 'pending', win: 'won', loss: 'lost', push: 'tie', void: 'void' };
+    const challenges = challengeRows.map((row) => {
+      const picks = (row.challenge_picks || []).map((pick) => ({
+        selId: `${pick.espn_event_id}|${pick.market}|${pick.side}`, kind: 'game', gameId: pick.espn_event_id, league: pick.league, market: pick.market, side: pick.side,
+        line: pick.line == null ? null : Number(pick.line), price: Number(pick.accepted_value), label: `${pick.market} · ${pick.side}${pick.line == null ? '' : ` ${pick.line}`}`,
+        marketLabel: pick.market, matchup: pick.matchup, result: result[pick.result] || 'pending', final: null,
       }));
-      const decimal = Number(row.combined_odds);
+      const decimal = Number(row.combined_value);
       const placedAt = Date.parse(row.placed_at);
       return { id: `supabase-${row.id}`, supabaseId: row.id, kind: 'sports', placedAt, dayKey: TO.dayKey(placedAt),
-        stake: Number(row.stake_minutes), legs, decimal, american: TO.odds.fromDecimal(decimal), boosted: !!row.boosted, insured: !!row.insured,
-        multiplier: Number(row.multiplier || 1), status: status[row.status] || 'open', payout: Number(row.actual_payout_minutes || 0), potentialPayout: Number(row.potential_payout_minutes || 0),
-        settledAt: row.settled_at ? Date.parse(row.settled_at) : null, supabaseSynced: row.status !== 'pending' };
+        pledgeMinutes: Number(row.pledge_minutes), picks, decimal, american: TO.pointValue.fromDecimal(decimal), boosted: !!row.boosted, insured: !!row.insured,
+        multiplier: Number(row.multiplier || 1), status: status[row.status] || 'open', reward: Number(row.actual_reward_minutes || 0), potentialReward: Number(row.potential_reward_minutes || 0),
+        resolvedAt: row.resolved_at ? Date.parse(row.resolved_at) : null, supabaseSynced: row.status !== 'pending' };
     });
     const wallet = walletRows[0];
     const settings = settingsRows[0];
@@ -258,7 +258,7 @@
     const remotePreferences = { ...appPreferences };
     if (followedSports.length) remotePreferences.sports = followedSports;
     return {
-      bets,
+      challenges,
       ...(walletState ? { wallet: walletState } : {}),
       ...(settings ? { settings: remotePreferences, appPreferencesReady: supportsAppPreferences } : {}),
     };
@@ -269,8 +269,8 @@
     if (!saveTimer) saveTimer = setTimeout(() => {
       saveTimer = null;
       api.flushState().catch((e) => {
-        if (e.outOfBettingMinutes || isOutOfBettingMinutes(e)) {
-          notifyOutOfBettingMinutes();
+        if (e.outOfPredictingMinutes || isOutOfPredictingMinutes(e)) {
+          notifyOutOfPredictingMinutes();
           return;
         }
         console.warn('Could not sync TimeOut data to Supabase:', e.message);
@@ -296,109 +296,109 @@
         await rest(`user_settings?user_id=eq.${encodeURIComponent(id)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: settingsSnapshot });
         lastSettingsSnapshot = settingsSnapshot;
       }
-      for (const bet of data.bets || []) {
-        if (bet.kind !== 'sports' || !Number(bet.stake) || !bet.legs?.length || bet.legs.some((leg) => !isPersistableGameLeg(leg) || !leg.gameId)) continue;
-        if (!bet.supabaseId && !placing.has(bet.id)) {
-          placing.add(bet.id);
+      for (const challenge of data.challenges || []) {
+        if (challenge.kind !== 'sports' || !Number(challenge.pledgeMinutes) || !challenge.picks?.length || challenge.picks.some((pick) => !isPersistableGamePick(pick) || !pick.gameId)) continue;
+        if (!challenge.supabaseId && !placing.has(challenge.id)) {
+          placing.add(challenge.id);
           try {
-            const payout = Number(bet.payout) > 0 ? Number(bet.payout) : Math.min(TO.MAX_ALLOWED_MINUTES, Math.max(0,
-              Number(bet.stake) + Math.round((Math.round(Number(bet.stake) * Number(bet.decimal)) - Number(bet.stake)) * Number(bet.multiplier || 1))));
-            const bonusToday = data.wallet?.bonusDay === (data.wallet?.dayKey || bet.dayKey) ? Number(data.wallet?.bonusGranted || 0) : 0;
-            const betArgs = {
-              p_stake_minutes: Number(bet.stake), p_combined_odds: Number(bet.decimal), p_potential_payout: payout,
-              p_current_day: data.wallet?.dayKey || bet.dayKey,
-              p_use_boost: !!bet.boosted, p_use_insurance: !!bet.insured,
-              p_multiplier: Number(bet.multiplier || 1),
-              p_legs: bet.legs.map((leg) => ({ espn_event_id: String(leg.gameId), league: leg.league || 'unknown', matchup: leg.matchup || '', market: leg.market || 'moneyline', side: leg.side || '', line: leg.line, accepted_odds: Number(leg.price) })),
+            const reward = Number(challenge.reward) > 0 ? Number(challenge.reward) : Math.min(TO.MAX_ALLOWED_MINUTES, Math.max(0,
+              Number(challenge.pledgeMinutes) + Math.round((Math.round(Number(challenge.pledgeMinutes) * Number(challenge.decimal)) - Number(challenge.pledgeMinutes)) * Number(challenge.multiplier || 1))));
+            const bonusToday = data.wallet?.bonusDay === (data.wallet?.dayKey || challenge.dayKey) ? Number(data.wallet?.bonusGranted || 0) : 0;
+            const challengeArgs = {
+              p_pledge_minutes: Number(challenge.pledgeMinutes), p_combined_value: Number(challenge.decimal), p_potential_reward: reward,
+              p_current_day: data.wallet?.dayKey || challenge.dayKey,
+              p_use_boost: !!challenge.boosted, p_use_insurance: !!challenge.insured,
+              p_multiplier: Number(challenge.multiplier || 1),
+              p_picks: challenge.picks.map((pick) => ({ espn_event_id: String(pick.gameId), league: pick.league || 'unknown', matchup: pick.matchup || '', market: pick.market || 'winner', side: pick.side || '', line: pick.line, accepted_value: Number(pick.price) })),
             };
-            const legacyBetArgs = {
-              p_stake_minutes: betArgs.p_stake_minutes, p_combined_odds: betArgs.p_combined_odds,
-              p_potential_payout: betArgs.p_potential_payout, p_current_day: betArgs.p_current_day, p_legs: betArgs.p_legs,
+            const legacyChallengeArgs = {
+              p_pledge_minutes: challengeArgs.p_pledge_minutes, p_combined_value: challengeArgs.p_combined_value,
+              p_potential_reward: challengeArgs.p_potential_reward, p_current_day: challengeArgs.p_current_day, p_picks: challengeArgs.p_picks,
             };
             let saved;
             try {
-              if ((bet.boosted || bet.insured) && supportsTierPerkColumns === false) {
+              if ((challenge.boosted || challenge.insured) && supportsTierPerkColumns === false) {
                 const migrationError = new Error('The tier perk migration is not installed.');
                 migrationError.tierPerkMigrationMissing = true;
-                migrationError.failedBetId = bet.id;
+                migrationError.failedChallengeId = challenge.id;
                 throw migrationError;
               }
-              saved = await rest('rpc/timeout_place_bet_with_perks', { method: 'POST', body: JSON.stringify(betArgs) });
+              saved = await rest('rpc/timeout_place_challenge_with_perks', { method: 'POST', body: JSON.stringify(challengeArgs) });
             } catch (error) {
               if (error.tierPerkMigrationMissing) throw error;
               if (isTierPerkRpcUnavailable(error)) {
-                if (bet.boosted || bet.insured) {
+                if (challenge.boosted || challenge.insured) {
                   error.tierPerkMigrationMissing = true;
-                  error.failedBetId = bet.id;
+                  error.failedChallengeId = challenge.id;
                   throw error;
                 }
-                const fallbackRpc = bonusToday > 0 ? 'timeout_place_bet_with_tiers' : 'timeout_place_bet';
+                const fallbackRpc = bonusToday > 0 ? 'timeout_place_challenge_with_tiers' : 'timeout_place_challenge';
                 try {
-                  saved = await rest(`rpc/${fallbackRpc}`, { method: 'POST', body: JSON.stringify(legacyBetArgs) });
+                  saved = await rest(`rpc/${fallbackRpc}`, { method: 'POST', body: JSON.stringify(legacyChallengeArgs) });
                 } catch (fallbackError) {
-                  if (isOutOfBettingMinutes(fallbackError)) {
-                    fallbackError.outOfBettingMinutes = true;
+                  if (isOutOfPredictingMinutes(fallbackError)) {
+                    fallbackError.outOfPredictingMinutes = true;
                     if (supportsTierBonusColumns === false && bonusToday > 0) fallbackError.tierBonusMigrationMissing = true;
                   }
-                  fallbackError.failedBetId = bet.id;
+                  fallbackError.failedChallengeId = challenge.id;
                   throw fallbackError;
                 }
-              } else if (isTierSystemRpcUnavailable(error) && !(bet.boosted || bet.insured)) {
-                const fallbackRpc = 'timeout_place_bet';
+              } else if (isTierSystemRpcUnavailable(error) && !(challenge.boosted || challenge.insured)) {
+                const fallbackRpc = 'timeout_place_challenge';
                 try {
-                  saved = await rest(`rpc/${fallbackRpc}`, { method: 'POST', body: JSON.stringify(legacyBetArgs) });
+                  saved = await rest(`rpc/${fallbackRpc}`, { method: 'POST', body: JSON.stringify(legacyChallengeArgs) });
                 } catch (fallbackError) {
-                  if (isOutOfBettingMinutes(fallbackError)) fallbackError.outOfBettingMinutes = true;
-                  if (isOutOfBettingMinutes(fallbackError) && supportsTierBonusColumns === false && bonusToday > 0) fallbackError.tierBonusMigrationMissing = true;
-                  fallbackError.failedBetId = bet.id;
+                  if (isOutOfPredictingMinutes(fallbackError)) fallbackError.outOfPredictingMinutes = true;
+                  if (isOutOfPredictingMinutes(fallbackError) && supportsTierBonusColumns === false && bonusToday > 0) fallbackError.tierBonusMigrationMissing = true;
+                  fallbackError.failedChallengeId = challenge.id;
                   throw fallbackError;
                 }
               } else {
-                if (isOutOfBettingMinutes(error)) error.outOfBettingMinutes = true;
-                if (isOutOfBettingMinutes(error) && supportsTierBonusColumns === false && bonusToday > 0) error.tierBonusMigrationMissing = true;
+                if (isOutOfPredictingMinutes(error)) error.outOfPredictingMinutes = true;
+                if (isOutOfPredictingMinutes(error) && supportsTierBonusColumns === false && bonusToday > 0) error.tierBonusMigrationMissing = true;
                 if (isTierPerkLimitError(error)) error.tierPerkExhausted = true;
-                error.failedBetId = bet.id;
+                error.failedChallengeId = challenge.id;
                 throw error;
               }
             }
-            const betId = typeof saved === 'string' ? saved : saved.id;
-            if (!betId) throw new Error('Supabase did not return the saved bet ID.');
-            bet.supabaseId = betId;
-            bet.supabaseSynced = false;
-            const current = TO.data?.bets?.find((b) => b.id === bet.id);
-            if (current) { current.supabaseId = betId; current.supabaseSynced = false; TO.store.set(`timeout.data.${TO.account.id}`, TO.data); }
-          } finally { placing.delete(bet.id); }
+            const challengeId = typeof saved === 'string' ? saved : saved.id;
+            if (!challengeId) throw new Error('Supabase did not return the saved challenge ID.');
+            challenge.supabaseId = challengeId;
+            challenge.supabaseSynced = false;
+            const current = TO.data?.challenges?.find((b) => b.id === challenge.id);
+            if (current) { current.supabaseId = challengeId; current.supabaseSynced = false; TO.store.set(`timeout.data.${TO.account.id}`, TO.data); }
+          } finally { placing.delete(challenge.id); }
         }
-        if (bet.supabaseId && bet.status !== 'open' && !bet.supabaseSynced && !settling.has(bet.supabaseId)) {
-          settling.add(bet.supabaseId);
+        if (challenge.supabaseId && challenge.status !== 'open' && !challenge.supabaseSynced && !settling.has(challenge.supabaseId)) {
+          settling.add(challenge.supabaseId);
           try {
-            const settled = await rest('rpc/timeout_settle_bet', { method: 'POST', body: JSON.stringify({
-              p_bet_id: bet.supabaseId, p_status: ({ push: 'pushed', void: 'voided' })[bet.status] || bet.status,
-              p_actual_payout: Number(bet.payout || 0),
-              p_leg_results: bet.legs.map((leg) => ({ espn_event_id: String(leg.gameId), market: leg.market, side: leg.side, line: leg.line, result: leg.result })),
+            const resolved = await rest('rpc/timeout_resolve_challenge', { method: 'POST', body: JSON.stringify({
+              p_challenge_id: challenge.supabaseId, p_status: ({ tie: 'tied', void: 'voided' })[challenge.status] || challenge.status,
+              p_actual_reward: Number(challenge.reward || 0),
+              p_pick_results: challenge.picks.map((pick) => ({ espn_event_id: String(pick.gameId), market: pick.market, side: pick.side, line: pick.line, result: pick.result })),
             }) });
-            bet.supabaseSynced = settled !== false;
-            const current = TO.data?.bets?.find((b) => b.supabaseId === bet.supabaseId);
-            if (current) { current.supabaseSynced = bet.supabaseSynced; TO.store.set(`timeout.data.${TO.account.id}`, TO.data); }
-          } finally { settling.delete(bet.supabaseId); }
+            challenge.supabaseSynced = resolved !== false;
+            const current = TO.data?.challenges?.find((b) => b.supabaseId === challenge.supabaseId);
+            if (current) { current.supabaseSynced = challenge.supabaseSynced; TO.store.set(`timeout.data.${TO.account.id}`, TO.data); }
+          } finally { settling.delete(challenge.supabaseId); }
         }
       }
       lastSaveAt = Date.now();
       api.syncError = null;
     } catch (e) {
-      if (e.outOfBettingMinutes || e.tierBonusMigrationMissing || e.tierPerkMigrationMissing || e.tierPerkExhausted) {
-        const rejectedId = e.failedBetId;
-        const rejected = (data.bets || []).find((bet) => bet.id === rejectedId);
+      if (e.outOfPredictingMinutes || e.tierBonusMigrationMissing || e.tierPerkMigrationMissing || e.tierPerkExhausted) {
+        const rejectedId = e.failedChallengeId;
+        const rejected = (data.challenges || []).find((challenge) => challenge.id === rejectedId);
         pendingState = null;
-        data.bets = (data.bets || []).filter((bet) => bet.id !== rejectedId);
+        data.challenges = (data.challenges || []).filter((challenge) => challenge.id !== rejectedId);
         if (rejected && data.wallet) {
-          data.wallet.balance = Math.max(0, Number(data.wallet.balance || 0) + Number(rejected.stake || 0));
+          data.wallet.balance = Math.max(0, Number(data.wallet.balance || 0) + Number(rejected.pledgeMinutes || 0));
           data.wallet.lockedOut = data.wallet.balance <= 0;
         }
         if (TO.data) {
-          TO.data.bets = TO.data.bets.filter((bet) => bet.id !== rejectedId);
+          TO.data.challenges = TO.data.challenges.filter((challenge) => challenge.id !== rejectedId);
           if (rejected && TO.data.wallet) {
-            TO.data.wallet.balance = Math.max(0, Number(TO.data.wallet.balance || 0) + Number(rejected.stake || 0));
+            TO.data.wallet.balance = Math.max(0, Number(TO.data.wallet.balance || 0) + Number(rejected.pledgeMinutes || 0));
             TO.data.wallet.lockedOut = TO.data.wallet.balance <= 0;
           }
           if (TO.account) TO.store.set(`timeout.data.${TO.account.id}`, TO.data);
@@ -406,7 +406,7 @@
         if (e.tierPerkMigrationMissing) notifyTierPerkMigrationRequired();
         else if (e.tierPerkExhausted) notifyTierPerkAlreadyUsed();
         else if (e.tierBonusMigrationMissing) notifyTierBonusMigrationRequired();
-        else notifyOutOfBettingMinutes();
+        else notifyOutOfPredictingMinutes();
         TO.app?.render?.();
         return;
       }

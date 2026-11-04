@@ -2,7 +2,7 @@
 -- Run once in Supabase SQL Editor. Safe to rerun.
 --
 -- The iOS app's Account > Delete account calls this RPC. It deletes the signed-in user's
--- rows in every public table with a user_id column, their bet legs and wallet transactions,
+-- rows in every public table with a user_id column, their challenge picks and wallet transactions,
 -- their team memberships and profile, and finally their auth user.
 
 create or replace function public.timeout_delete_account()
@@ -24,11 +24,11 @@ begin
     select p.username into v_name from public.profiles p where p.id = v_uid;
   end if;
 
-  -- Child rows first: bet legs and wallet transactions point at the user's bets and wallets.
-  if to_regclass('public.bet_legs') is not null and to_regclass('public.bets') is not null
+  -- Child rows first: challenge picks and wallet transactions point at the user's challenges and wallets.
+  if to_regclass('public.challenge_picks') is not null and to_regclass('public.challenges') is not null
      and exists (select 1 from information_schema.columns
-                 where table_schema = 'public' and table_name = 'bet_legs' and column_name = 'bet_id') then
-    execute 'delete from public.bet_legs where bet_id in (select id from public.bets where user_id = $1)' using v_uid;
+                 where table_schema = 'public' and table_name = 'challenge_picks' and column_name = 'challenge_id') then
+    execute 'delete from public.challenge_picks where challenge_id in (select id from public.challenges where user_id = $1)' using v_uid;
   end if;
   if to_regclass('public.wallet_transactions') is not null and to_regclass('public.wallets') is not null
      and exists (select 1 from information_schema.columns
@@ -41,14 +41,14 @@ begin
     execute 'delete from public.team_members where lower(username) = lower($1)' using v_name;
   end if;
 
-  -- Every other table that stores a user_id (bets, wallets, user_settings, ...), children first.
+  -- Every other table that stores a user_id (challenges, wallets, user_settings, ...), children first.
   for r in
     select c.table_name
     from information_schema.columns c
     join information_schema.tables t on t.table_schema = c.table_schema and t.table_name = c.table_name
     where c.table_schema = 'public' and c.column_name = 'user_id' and t.table_type = 'BASE TABLE'
-    order by case when c.table_name in ('bet_legs', 'wallet_transactions') then 0
-                  when c.table_name in ('bets', 'wallets') then 2 else 1 end, c.table_name
+    order by case when c.table_name in ('challenge_picks', 'wallet_transactions') then 0
+                  when c.table_name in ('challenges', 'wallets') then 2 else 1 end, c.table_name
   loop
     execute format('delete from public.%I where user_id = $1', r.table_name) using v_uid;
   end loop;

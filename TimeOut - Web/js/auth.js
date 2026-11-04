@@ -104,7 +104,7 @@
       body = `<h1>Lock your time-wasters</h1><p class="sub">When today's phone time runs out, these apps lock. Lock more to reach a higher tier with bonus minutes and allowance boosts.</p>
         <div class="card tight margins"><span class="bold">${pts} lock points</span>${ui.tierBadge(t.id)}</div>
         <div class="list">${St.LOCKABLE.filter((x) => x.kind !== 'Website').map((x) => `<button class="list-row" data-act="ob-lock" data-id="${x.id}"><span class="lr-icon" style="background:${x.color}22;color:${x.color}">${icon(x.kind === 'Category' ? 'grid' : 'phone', 17)}</span><span class="lr-main"><div class="lr-title">${esc(x.name)}</div><div class="lr-sub">${x.kind} · ${x.pts} pt${x.pts === 1 ? '' : 's'}</div></span><span class="checkbox ${av.locks.includes(x.id) ? 'on' : ''}">${icon('check', 15)}</span></button>`).join('')}</div>`;
-      next = `<button class="btn primary full" data-act="ob-finish">Start betting</button><button class="btn quiet sm" data-act="ob-finish" data-skip="1">Skip for now</button>`;
+      next = `<button class="btn primary full" data-act="ob-finish">Start a challenge</button><button class="btn quiet sm" data-act="ob-finish" data-skip="1">Skip for now</button>`;
     }
     return `<div class="auth"><div class="auth-inner">${steps}${step > 1 ? `<button class="icon-btn" style="margin-left:-10px" data-act="ob-back" aria-label="Back">${icon('chevL', 22)}</button>` : ''}${body}<div class="stack-s" style="margin-top:auto">${next}</div></div></div>`;
   }
@@ -233,7 +233,7 @@
     ui.toast({
       kind: 'win',
       title: `Logged in as @${user.username}`,
-      msg: 'Your bets and settings are synced to Supabase.',
+      msg: 'Your challenges and settings are synced to Supabase.',
     });
   }
 

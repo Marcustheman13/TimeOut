@@ -59,7 +59,7 @@
         title: joining ? `Join ${esc(p.teamName)}` : 'Friend link',
         body: joining
           ? `<p class="sub" style="margin-top:0">${who} invited you to <b style="color:var(--text)">${esc(p.teamName)}</b>${p.start && p.end ? `, ${esc(TO.fmtDate(TO.dayStart(p.start)))} – ${esc(TO.fmtDate(TO.dayStart(p.end)))}` : ''}. Joining also adds them as a friend. It is still screen time, not money.</p>`
-          : `<p class="sub" style="margin-top:0">${who} sent you their TimeOut link. Add them as a friend to compare screen time instead of betting money.</p>`,
+          : `<p class="sub" style="margin-top:0">${who} sent you their TimeOut link. Add them as a friend to compare screen time without putting money on the games.</p>`,
         foot: `<button class="btn primary full" data-act="invite-accept">${joining ? 'Add friend and join' : 'Add friend'}</button><button class="btn quiet sm" data-act="invite-dismiss">Not now</button>`,
       }),
     });
@@ -136,7 +136,7 @@
       name: (hit && hit.name) || username,
       photo: (hit && hit.photo) || TO.initialsAvatar(username),
       w: 0, l: 0, net: 0, tier: 'rookie', streak: 0,
-      share: { record: false, minutes: false, bets: false },
+      share: { record: false, minutes: false, challenges: false },
       remote: true,
     };
   }
@@ -261,7 +261,7 @@
         if (!isMe && !p) return { title: 'Profile', body: '<div class="muted">This person could not be found.</div>' };
         const rel = isMe ? 'me' : St.relation(username);
         const st = isMe ? St.myStats() : null;
-        const share = isMe ? { record: true, minutes: true, bets: true } : p.share;
+        const share = isMe ? { record: true, minutes: true, challenges: true } : p.share;
         const showAll = isMe || rel === 'friend';
         const rec = isMe ? `${st.w}-${st.l}` : `${p.w}-${p.l}`;
         const net = isMe ? st.net : p.net;
@@ -277,7 +277,7 @@
           title: isMe ? 'Your profile' : `@${esc(username)}`,
           body: `<div class="row" style="gap:14px">${ui.avatar(isMe ? TO.account.photo : p.photo, 'xl')}<div><div style="font-size:20px;font-weight:800">${isMe ? `@${esc(username)}` : esc(p.name)}</div>${isMe ? '' : `<div class="muted small">@${esc(username)}</div>`}<div class="row-s" style="margin-top:8px">${ui.tierBadge(tierId, true)}${streak ? `<span class="tiny bold yellow row-s">${icon('flame', 12)}${streak}-day streak</span>` : ''}</div></div></div>
             ${showAll ? `<div class="record-big">${stat('Record', rec, share.record)}${stat('Minutes won/lost', `<span class="${net > 0 ? 'green' : net < 0 ? 'red' : ''}">${TO.signed(net)}</span>`, share.minutes)}${stat('Clean streak', `${streak}d`, true)}</div>` : `<div class="note">${icon('lock', 16)}<span>Add @${esc(username)} as a friend to see their stats.</span></div>`}
-            ${!isMe && showAll ? (share.bets ? `<div class="stack-s"><div class="eyebrow">Active challenges they're sharing</div>${picks.length ? picks.map((k) => `<div class="card tight row-layout"><div><b>${esc(k.label)}</b><div class="small muted">${esc(k.matchup)}</div></div><div style="text-align:right"><div class="display green" style="font-size:18px">${TO.multiplierText(k.price)}</div><div class="tiny faint">${k.stake} min</div></div></div>`).join('') : '<div class="small muted">No active challenges right now.</div>'}</div>` : `<div class="small muted">${esc(p.name)} keeps their active challenges private.</div>`) : ''}
+            ${!isMe && showAll ? (share.challenges ? `<div class="stack-s"><div class="eyebrow">Active challenges they're sharing</div>${picks.length ? picks.map((k) => `<div class="card tight row-layout"><div><b>${esc(k.label)}</b><div class="small muted">${esc(k.matchup)}</div></div><div style="text-align:right"><div class="display green" style="font-size:18px">${TO.multiplierText(k.price)}</div><div class="tiny faint">${k.pledgeMinutes} min</div></div></div>`).join('') : '<div class="small muted">No active challenges right now.</div>'}</div>` : `<div class="small muted">${esc(p.name)} keeps their active challenges private.</div>`) : ''}
             ${isMe ? `<button class="btn ghost sm" data-act="settings" data-section="privacy">${icon('eye', 16)} Choose what friends can see</button>` : ''}`,
           foot: isMe ? '' : actions,
         };
@@ -301,7 +301,7 @@
           body: `<div class="row-layout small muted"><span class="row-s">${icon('calendar', 14)} ${TO.fmtDate(TO.dayStart(t.start))} – ${TO.fmtDate(TO.dayStart(t.end))}</span><span>${status === 'active' ? `Ends in ${TO.fmtIn(TO.dayStart(t.end) + TO.DAY - TO.now())}` : status === 'upcoming' ? `Starts in ${TO.fmtIn(TO.dayStart(t.start) - TO.now())}` : 'Ended'}</span></div>
             <div class="small muted">${owner} · ${t.members.length} on the roster</div>
             <div class="list">${rows.map((r, i) => `<div class="lb-row ${r.me ? 'me' : ''}"><span class="rk">${r.hidden ? '–' : i + 1}</span>${ui.avatar(r.photo)}<span><span class="nm">${r.me ? 'You' : `@${esc(r.username)}`}</span><span class="sub">${r.w}-${r.l} during this team</span></span><span class="val">${r.hidden ? '<span class="faint" style="font-size:14px">Private</span>' : `<span class="${r.net > 0 ? 'green' : r.net < 0 ? 'red' : ''}">${TO.signed(r.net)}</span><small>min</small>`}</span></div>`).join('')}</div>
-            <div class="tiny faint">Standings count screen-time bets placed between the start and end dates. Friend bets don't count.</div>
+            <div class="tiny faint">Standings count screen-time challenges placed between the start and end dates. Friend challenges don't count.</div>
             ${invitable.length ? `<div class="field"><span class="label">Invite more friends</span><div class="pick-friends">${invitable.map((u) => { const p = personFor(u); return p ? `<button class="pick-friend" data-act="team-invite" data-id="${t.id}" data-u="${esc(u)}"><img src="${esc(p.photo)}" alt="">${icon('plus', 14)} ${esc(u)}</button>` : ''; }).join('')}</div></div>` : ''}`,
           foot: `<button class="btn ghost sm" data-act="copy-team" data-id="${t.id}">${icon('link', 16)} Copy team link</button><button class="btn quiet sm" data-act="team-leave" data-id="${t.id}">Leave team</button>`,
         };
@@ -313,7 +313,7 @@
     ui.sheet('team-how', {
       render: () => ({
         title: 'How teams work',
-        body: `<p class="sub" style="margin-top:0">Teams are how friends compete here without betting money. TimeOut puts screen time on the line instead of cash, and a team is the stretch of days you compare.</p>
+        body: `<p class="sub" style="margin-top:0">Teams are how friends compete here without putting money on games. TimeOut puts screen time on the number instead of cash, and a team is the stretch of days you compare.</p>
           <div class="how-card"><span class="n">1</span><div><h3>Pick a name and the dates</h3><p>Create a team for a week or a season. You can start it on your own and invite people later.</p></div></div>
           <div class="how-card"><span class="n">2</span><div><h3>Minutes decide the standings</h3><p>Between the start and end dates, screen-time challenges count. Whoever earns the most minutes leads.</p></div></div>
           <div class="how-card"><span class="n">3</span><div><h3>Invite friends onto the roster</h3><p>Open the team and add a friend, or copy the team link. When they open it, you become friends and they join the roster.</p></div></div>

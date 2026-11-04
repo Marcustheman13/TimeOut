@@ -22,13 +22,13 @@ struct GamePage: View {
         let _ = app.tick
         return Group {
             if let g = Feed.game(id) {
-                let o = Feed.odds(id)
+                let o = Feed.pointValue(id)
                 ScrollViewReader { proxy in
                     ScrollView {
                         VStack(spacing: 16) {
                             Scoreboard(g: g)
                             GameBanner(g: g, o: o)
-                            YourBetsOnGame(g: g)
+                            YourChallengesOnGame(g: g)
                             Markets(g: g, o: o, flash: flash).id("markets")
                             GameStats(g: g)
                             ResearchCard(g: g)
@@ -41,7 +41,7 @@ struct GamePage: View {
                         withAnimation(.easeInOut(duration: 0.4)) { proxy.scrollTo("markets", anchor: .top) }
                         flash = true
                         Task { try? await Task.sleep(for: .milliseconds(1100)); withAnimation { flash = false } }
-                        ui.toast(.info, "Pick a price", "Tap any odds and your bet slip opens with it.", ms: 2600)
+                        ui.toast(.info, "Pick a price", "Tap any point value and your challenge slip opens with it.", ms: 2600)
                     }
                 }
             } else {
@@ -110,31 +110,31 @@ struct Scoreboard: View {
 
 struct GameBanner: View {
     var g: Game
-    var o: OddsBoard
+    var o: PointValueBoard
     var body: some View {
         switch g.state {
         case .postponed:
-            Note(.warn, icon: .alert, markdown: "**This game was postponed.** All bets on it are void, and every stake has been returned in full. It no longer counts toward anyone's record.")
+            Note(.warn, icon: .alert, markdown: "**This game was postponed.** All challenges on it are void, and every pledge has been returned in full. It no longer counts toward anyone's record.")
         case .canceled:
-            Note(.warn, icon: .alert, "This game was canceled. Bets on it will be voided.")
+            Note(.warn, icon: .alert, "This game was canceled. Challenges on it will be voided.")
         case .final:
             let ot = g.ot.map { $0.label == "10" ? " (10 innings)" : " (OT)" } ?? ""
-            Note(.plain, icon: .lock, markdown: "**Final: \(g.away.abbr) \(g.awayScore), \(g.home.abbr) \(g.homeScore)\(ot).** Betting is closed on this game.")
+            Note(.plain, icon: .lock, markdown: "**Final: \(g.away.abbr) \(g.awayScore), \(g.home.abbr) \(g.homeScore)\(ot).** This pick is closed on this game.")
         default:
-            if o.suspended { Note(.plain, icon: .lock, "Betting is closed for the final moments of this game.") }
+            if o.suspended { Note(.plain, icon: .lock, "This pick is closed for the final moments of this game.") }
         }
     }
 }
 
-struct YourBetsOnGame: View {
+struct YourChallengesOnGame: View {
     var g: Game
     var body: some View {
-        let bets = (Store.shared.data?.bets ?? []).filter { $0.legs.contains { $0.gameId == g.id } }
+        let challenges = (Store.shared.data?.challenges ?? []).filter { $0.picks.contains { $0.gameId == g.id } }
             .sorted { ($0.status == "open" ? 0 : 1) < ($1.status == "open" ? 0 : 1) }
-        if !bets.isEmpty {
+        if !challenges.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
-                Text("Your bets on this game").eyebrow()
-                ForEach(bets) { BetCard(bet: $0, compact: true) }
+                Text("Your challenges on this game").eyebrow()
+                ForEach(challenges) { ChallengeCard(challenge: $0, compact: true) }
             }
         }
     }
@@ -142,31 +142,31 @@ struct YourBetsOnGame: View {
 
 struct Markets: View {
     var g: Game
-    var o: OddsBoard
+    var o: PointValueBoard
     var flash: Bool
 
     var body: some View {
         if g.state == .live || g.state == .scheduled {
             let Sp = Sim.sports[g.sport]!
             let name: (String) -> String = { side in side == "home" ? g.home.name : side == "away" ? g.away.name : "Draw" }
-            if o.moneyline.isEmpty && o.spread.isEmpty && o.total.isEmpty && false {
+            if o.winner.isEmpty && o.margin.isEmpty && o.total.isEmpty && false {
                 EmptyView()
             } else {
                 VStack(alignment: .leading, spacing: 14) {
                     HStack {
                         Text("Pick a side").font(.barlow(17, 800))
                         Spacer()
-                        Text("ESPN odds refresh every 25 seconds").font(.barlow(11.5, 700)).foregroundStyle(Theme.muted)
+                        Text("ESPN point values refresh every 25 seconds").font(.barlow(11.5, 700)).foregroundStyle(Theme.muted)
                     }
-                    if o.moneyline.isEmpty {
-                        market("Moneyline · who wins") { Tag("Moneyline N/A") }
+                    if o.winner.isEmpty {
+                        market("Winner · who wins") { Tag("Winner N/A") }
                     } else {
-                        block("Moneyline · who wins", o.moneyline) { name($0.side) }
-                        if g.sport == "soccer" && !o.moneyline.contains(where: { $0.side == "draw" }) { market("Draw") { Tag("N/A") } }
+                        block("Winner · who wins", o.winner) { name($0.side) }
+                        if g.sport == "soccer" && !o.winner.contains(where: { $0.side == "draw" }) { market("Draw") { Tag("N/A") } }
                     }
-                    if !o.spread.isEmpty { block("\(Sp.spreadLabel) · win by more than the line", o.spread) { name($0.side) } }
-                    if !o.total.isEmpty { block("Total \(Sp.unit) · both teams combined", o.total) { $0.side == "over" ? "Over" : "Under" } }
-                    Text("ESPN lines and prices. Tap a price to add it to your bet slip.").font(.barlow(11.5)).foregroundStyle(Theme.muted)
+                    if !o.margin.isEmpty { block("\(Sp.marginLabel) · win by more than the number", o.margin) { name($0.side) } }
+                    if !o.total.isEmpty { block("Total \(Sp.unit) · both teams combined", o.total) { $0.side == "higher" ? "Above" : "Below" } }
+                    Text("ESPN prices. Tap a price to add it to your challenge slip.").font(.barlow(11.5)).foregroundStyle(Theme.muted)
                 }
                 .padding(14)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -190,7 +190,7 @@ struct Markets: View {
             // `repeat(auto-fit, minmax(90px, 1fr))`: two or three options share the row equally.
             HStack(spacing: 8) {
                 ForEach(sels, id: \.id) { s in
-                    OddsButton(sel: s, suspended: o.suspended, move: o.move[s.id], big: true, label: label(s))
+                    PointValueButton(sel: s, suspended: o.suspended, move: o.move[s.id], big: true, label: label(s))
                 }
             }
         }
@@ -246,21 +246,21 @@ struct ResearchCard: View {
     }
 }
 
-/// Floating button: jumps to the odds, or back to the slip once there's a pick on it.
+/// Floating button: jumps to the point values, or back to the slip once there's a pick on it.
 struct GameFab: View {
     var g: Game
-    var o: OddsBoard
+    var o: PointValueBoard
     private var slip: Slip { .shared }
     var body: some View {
         if g.state == .live || g.state == .scheduled {
-            let n = slip.legs.count
+            let n = slip.picks.count
             Group {
                 if n > 0 {
-                    Button { slip.open() } label: { BtnLabel("Open bet slip · \(n) pick\(n == 1 ? "" : "s")", icon: .ticket) }
+                    Button { slip.open() } label: { BtnLabel("Open challenge slip · \(n) pick\(n == 1 ? "" : "s")", icon: .ticket) }
                         .buttonStyle(.btn(.primary, full: true))
                 } else {
                     Button { UIState.shared.flashMarkets() } label: {
-                        BtnLabel(o.suspended ? "Betting is closed on this game" : "Make a bet", icon: o.suspended ? .lock : .ticket)
+                        BtnLabel(o.suspended ? "This pick is closed on this game" : "Make a challenge", icon: o.suspended ? .lock : .ticket)
                     }
                     .buttonStyle(.btn(.primary, full: true))
                     .disabled(o.suspended)
@@ -271,7 +271,7 @@ struct GameFab: View {
     }
 }
 
-// MARK: - Bet slip (Screen 3)
+// MARK: - Challenge slip (Screen 3)
 
 struct SlipSheet: View {
     private var slip: Slip { .shared }
@@ -282,51 +282,51 @@ struct SlipSheet: View {
     var body: some View {
         let _ = live.version
         let _ = Races.shared.version
-        return SheetFrame(slip.legs.count > 1 ? "Parlay · \(slip.legs.count) picks" : "Bet Slip", close: { ui.closeSheet(.slip) }) {
+        return SheetFrame(slip.picks.count > 1 ? "Combo · \(slip.picks.count) picks" : "Challenge Slip", close: { ui.closeSheet(.slip) }) {
             SlipBody()
         } foot: {
             SlipFoot()
         }
-        .onAppear { slip.prepareStake() }
+        .onAppear { slip.preparePledge() }
     }
 }
 
 struct SlipBody: View {
     private var slip: Slip { .shared }
     private var store: Store { .shared }
-    @FocusState private var stakeFocused: Bool
+    @FocusState private var pledgeFocused: Bool
 
     var body: some View {
         let wl = store.wallet
-        VStack(alignment: .leading, spacing: 8) { SlipLegs() }
+        VStack(alignment: .leading, spacing: 8) { SlipPicks() }
         if wl.lockedOut || wl.balance <= 0 {
             VStack(alignment: .leading, spacing: 0) {
-                HStack(spacing: 6) { Icon(.lock, 14); Text("OUT OF BETTING MINUTES") }.font(.barlow(11.5, 700)).tracking(0.7).foregroundStyle(Theme.loss)
-                Text("New bets are blocked until midnight.").font(.barlow(15, 700)).padding(.top, 6)
+                HStack(spacing: 6) { Icon(.lock, 14); Text("OUT OF CHALLENGING MINUTES") }.font(.barlow(11.5, 700)).tracking(0.7).foregroundStyle(Theme.loss)
+                Text("New challenges are blocked until midnight.").font(.barlow(15, 700)).padding(.top, 6)
                 Countdown(target: TO.nextMidnight()).font(.display(36, 800)).padding(.top, 4)
-                Text("Your betting balance resets at midnight.").font(.barlow(13)).foregroundStyle(Theme.text2)
+                Text("Your pledge balance resets at midnight.").font(.barlow(13)).foregroundStyle(Theme.text2)
             }
             .card(border: Theme.loss.opacity(0.4))
         } else {
             VStack(alignment: .leading, spacing: 6) {
-                Text("Minutes to stake").font(.barlow(13, 700)).foregroundStyle(Theme.text2)
+                Text("Minutes to pledge").font(.barlow(13, 700)).foregroundStyle(Theme.text2)
                 HStack(spacing: 8) {
                     stepButton(.minus, -1).accessibilityLabel("One minute less")
                     ZStack(alignment: .trailing) {
-                        TextField("", text: Binding(get: { slip.stake ?? "" }, set: { _ = slip.typed($0) }))
-                            .focused($stakeFocused)
+                        TextField("", text: Binding(get: { slip.pledgeMinutes ?? "" }, set: { _ = slip.typed($0) }))
+                            .focused($pledgeFocused)
                             .keyboardType(.numberPad)
                             .multilineTextAlignment(.center)
                             .font(.display(30, 900)).monospacedDigit()
                             .padding(.horizontal, 36)
                             .frame(height: 52)
                             .background(Theme.raised, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(stakeFocused ? Theme.accent : Theme.stroke, lineWidth: 1))
-                            .accessibilityLabel("Minutes to stake")
+                            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(pledgeFocused ? Theme.accent : Theme.stroke, lineWidth: 1))
+                            .accessibilityLabel("Minutes to pledge")
                             .toolbar {
                                 ToolbarItemGroup(placement: .keyboard) {
                                     Spacer()
-                                    Button("Done") { stakeFocused = false }.font(.barlow(16, 700)).foregroundStyle(Theme.accent)
+                                    Button("Done") { pledgeFocused = false }.font(.barlow(16, 700)).foregroundStyle(Theme.accent)
                                 }
                             }
                         Text("min").font(.barlow(14, 700)).foregroundStyle(Theme.text2).padding(.trailing, 14).allowsHitTesting(false)
@@ -335,19 +335,19 @@ struct SlipBody: View {
                 }
                 HStack(spacing: 6) {
                     ForEach([5, 10, 15, 30], id: \.self) { v in
-                        quick("\(v)", on: slip.stake == "\(v)", disabled: v > wl.balance) { slip.quick(v) }
+                        quick("\(v)", on: slip.pledgeMinutes == "\(v)", disabled: v > wl.balance) { slip.quick(v) }
                     }
                     quick("Max", on: false, disabled: false) { slip.quick(wl.balance) }
                 }
             }
-            Note(.blue, icon: .info, markdown: "You're betting with **tomorrow's phone time**. Stakes come out of today's \(wl.balance) betting minutes; wins add to tomorrow's limit and losses take away from it.")
+            Note(.blue, icon: .info, markdown: "You're pledging **tomorrow's phone time**. Pledges come out of today's \(wl.balance) challenge minutes; wins add to tomorrow's limit and losses take away from it.")
             if wl.boostsLeft > 0 {
-                PerkRow(icon: .bolt, iconBg: Theme.blueSoft, iconFg: Theme.blue, title: "Use an odds boost",
+                PerkRow(icon: .bolt, iconBg: Theme.blueSoft, iconFg: Theme.blue, title: "Use a point-value boost",
                         sub: "+10% winnings · \(wl.boostsLeft) left today (\(wl.tier.title) perk)", on: slip.boost) { slip.boost.toggle() }
             }
-            if slip.legs.count > 1 && wl.insuranceLeft > 0 {
-                PerkRow(icon: .shield, iconBg: Theme.purple.opacity(0.14), iconFg: Theme.purple, title: "Parlay insurance",
-                        sub: "Miss by one pick and get your stake back · 1 per week", on: slip.insure) { slip.insure.toggle() }
+            if slip.picks.count > 1 && wl.insuranceLeft > 0 {
+                PerkRow(icon: .shield, iconBg: Theme.purple.opacity(0.14), iconFg: Theme.purple, title: "Combo protection",
+                        sub: "Miss by one pick and get your pledge back · 1 per week", on: slip.insure) { slip.insure.toggle() }
             }
         }
         VStack(alignment: .leading, spacing: 8) { SlipSummary() }
@@ -401,31 +401,31 @@ struct PerkRow: View {
     }
 }
 
-struct SlipLegs: View {
+struct SlipPicks: View {
     private var slip: Slip { .shared }
     var body: some View {
         let st = slip.status()
         if st.closed {
-            Note(.red, icon: .alert, "A pick is no longer available (the game ended, was postponed, or betting closed). Remove it to continue.")
+            Note(.red, icon: .alert, "A pick is no longer available (the game ended, was postponed, or the pick closed). Remove it to continue.")
         } else if st.changed {
-            Note(.warn, icon: .alert, markdown: "The odds changed while your slip was open. Check the new odds, then tap **Accept new odds** to continue.")
+            Note(.warn, icon: .alert, markdown: "The point values changed while your slip was open. Check the new point value, then tap **Accept new point value** to continue.")
         }
-        ForEach(Array(slip.legs.enumerated()), id: \.element.selId) { i, leg in
-            SlipLegRow(leg: leg, state: st.states.indices.contains(i) ? st.states[i] : Slip.LegState(sel: nil, closed: true, changed: false))
+        ForEach(Array(slip.picks.enumerated()), id: \.element.selId) { i, pick in
+            SlipPickRow(pick: pick, state: st.states.indices.contains(i) ? st.states[i] : Slip.PickState(sel: nil, closed: true, changed: false))
         }
-        if slip.legs.count > 1 && !st.closed {
+        if slip.picks.count > 1 && !st.closed {
             HStack {
-                Text("\(slip.legs.count)-pick parlay · every pick must win").font(.barlow(13, 700)).foregroundStyle(Theme.text2)
+                Text("\(slip.picks.count)-pick combo · every pick must win").font(.barlow(13, 700)).foregroundStyle(Theme.text2)
                 Spacer()
-                Text(OddsMath.fmt(OddsMath.fromDecimal(slip.decimal))).font(.display(19, 800)).foregroundStyle(Theme.accent)
+                Text(PointValueMath.fmt(PointValueMath.fromDecimal(slip.decimal))).font(.display(19, 800)).foregroundStyle(Theme.accent)
             }
         }
     }
 }
 
-struct SlipLegRow: View {
-    var leg: SlipLeg
-    var state: Slip.LegState
+struct SlipPickRow: View {
+    var pick: SlipPick
+    var state: Slip.PickState
 
     var body: some View {
         let sel = state.sel
@@ -441,15 +441,15 @@ struct SlipLegRow: View {
             } else if state.changed, let sel {
                 VStack(alignment: .trailing, spacing: 0) {
                     HStack(spacing: 4) {
-                        Text(OddsMath.fmt(leg.price)).font(.barlow(14)).strikethrough().foregroundStyle(Theme.muted)
-                        Text(OddsMath.fmt(sel.price)).font(.display(20, 900)).foregroundStyle(Theme.warn)
+                        Text(PointValueMath.fmt(pick.price)).font(.barlow(14)).strikethrough().foregroundStyle(Theme.muted)
+                        Text(PointValueMath.fmt(sel.price)).font(.display(20, 900)).foregroundStyle(Theme.warn)
                     }
-                    if sel.line != leg.line { Text("Line moved").font(.barlow(11.5, 700)).foregroundStyle(Theme.warn) }
+                    if sel.line != pick.line { Text("Line moved").font(.barlow(11.5, 700)).foregroundStyle(Theme.warn) }
                 }
             } else {
-                Text(OddsMath.fmt(leg.price)).font(.display(20, 900)).monospacedDigit().foregroundStyle(Theme.accent)
+                Text(PointValueMath.fmt(pick.price)).font(.display(20, 900)).monospacedDigit().foregroundStyle(Theme.accent)
             }
-            Button { Slip.shared.remove(leg.selId) } label: { Icon(.x, 16).foregroundStyle(Theme.text).frame(width: 30, height: 30) }
+            Button { Slip.shared.remove(pick.selId) } label: { Icon(.x, 16).foregroundStyle(Theme.text).frame(width: 30, height: 30) }
                 .buttonStyle(.press).padding(.top, -4).padding(.trailing, -6)
                 .accessibilityLabel("Remove pick")
         }
@@ -461,25 +461,24 @@ struct SlipLegRow: View {
     }
 
     private func title(_ sel: Selection?) -> String {
-        if leg.ref.hasPrefix("race-") { return sel.map { Races.shared.horse($0.horseId ?? Int($0.side)).name } ?? "Virtual race pick" }
+        if pick.ref.hasPrefix("race-") { return sel.map { Races.shared.horse($0.horseId ?? Int($0.side)).name } ?? "Virtual race pick" }
         guard var s = sel else { return "" }
-        if !state.changed { s.line = leg.line }
-        return Sim.selectionLabel(s, Feed.game(leg.ref))
+        if !state.changed { s.line = pick.line }
+        return Sim.selectionLabel(s, Feed.game(pick.ref))
     }
 
     private func sub(_ sel: Selection?) -> String {
-        if leg.ref.hasPrefix("race-") { return "Virtual Racing · Race #\(leg.ref.replacingOccurrences(of: "race-", with: ""))" }
-        let g = Feed.game(leg.ref)
-        let fallback = Selection(id: "", kind: "game", market: "ml", side: "", price: 0)
-        return "\(Sim.marketLabel(sel ?? fallback, g)) · \(g?.away.name ?? "") @ \(g?.home.name ?? "")"
+        if pick.ref.hasPrefix("race-") { return "Virtual Racing · Race #\(pick.ref.replacingOccurrences(of: "race-", with: ""))" }
+        let g = Feed.game(pick.ref)
+        return "\(g?.away.name ?? "") @ \(g?.home.name ?? "")"
     }
 
     @ViewBuilder private var liveLine: some View {
-        if leg.ref.hasPrefix("race-") {
-            let race = Races.shared.get(leg.ref)
+        if pick.ref.hasPrefix("race-") {
+            let race = Races.shared.get(pick.ref)
             if race?.status == "running" { HStack(spacing: 6) { LiveTag(); Text("Race in progress").font(.barlow(11.5, 700)).foregroundStyle(Theme.text2) } }
             else if race?.status == "final" { Text("Race finished").font(.barlow(11.5, 700)).foregroundStyle(Theme.text2) }
-        } else if let g = Feed.game(leg.ref) {
+        } else if let g = Feed.game(pick.ref) {
             switch g.state {
             case .live: HStack(spacing: 6) { LiveTag(); Text("\(g.away.abbr) \(g.awayScore) – \(g.home.abbr) \(g.homeScore) · \(g.clock)").font(.barlow(11.5, 700)).foregroundStyle(Theme.text2) }
             case .postponed: Text("Postponed").font(.barlow(11.5, 700)).foregroundStyle(Theme.warn)
@@ -496,22 +495,22 @@ struct SlipSummary: View {
         let n = slip.numbers()
         let wl = n.wl
         if !(wl.lockedOut || wl.balance <= 0) {
-            let stake = n.stake ?? 0
+            let pledgeMinutes = n.pledgeMinutes ?? 0
             if slip.capped {
-                Note(.red, icon: .alert, markdown: "**Not enough screentime.** You have \(wl.balance) min left to bet today, so that's the most you can stake.")
-            } else if let s = n.stake, s > wl.balance {
-                Note(.red, icon: .alert, markdown: "**Not enough screentime.** You have \(wl.balance) min left to bet today.")
-            } else if let s = slip.stake, !s.isEmpty, (n.stake == nil || n.stake! < 1) {
-                Note(.red, icon: .alert, "Enter a stake of at least 1 minute.")
+                Note(.red, icon: .alert, markdown: "**Not enough screentime.** You have \(wl.balance) min left to challenge today, so that's the most you can pledge.")
+            } else if let s = n.pledgeMinutes, s > wl.balance {
+                Note(.red, icon: .alert, markdown: "**Not enough screentime.** You have \(wl.balance) min left to challenge today.")
+            } else if let s = slip.pledgeMinutes, !s.isEmpty, (n.pledgeMinutes == nil || n.pledgeMinutes! < 1) {
+                Note(.red, icon: .alert, "Enter a pledge of at least 1 minute.")
             }
             HStack(spacing: 8) {
                 outcome("If you win", "+\(n.valid ? n.winnings : 0) min", "added to tomorrow's phone time", Theme.accent)
-                outcome("If you lose", "−\(n.valid ? stake : 0) min", "taken from tomorrow's phone time", Theme.loss)
+                outcome("If you lose", "−\(n.valid ? pledgeMinutes : 0) min", "taken from tomorrow's phone time", Theme.loss)
             }
             HStack {
-                Text("Betting balance after this bet").foregroundStyle(Theme.text2)
+                Text("Challenging balance after this challenge").foregroundStyle(Theme.text2)
                 Spacer()
-                Text("\(n.valid ? max(wl.balance - stake, 0) : wl.balance) of \(wl.balance) min").font(.barlow(13, 700)).monospacedDigit()
+                Text("\(n.valid ? max(wl.balance - pledgeMinutes, 0) : wl.balance) of \(wl.balance) min").font(.barlow(13, 700)).monospacedDigit()
             }
             .font(.barlow(13))
             if n.mult > 1 {
@@ -546,22 +545,22 @@ struct SlipFoot: View {
     var body: some View {
         let st = slip.status()
         if !net.online {
-            Note(.red, icon: .wifiOff, markdown: "**No internet connection.** Betting is paused until you're back online, because odds can't update.")
+            Note(.red, icon: .wifiOff, markdown: "**No internet connection.** Challenging is paused until you're back online, because point value can't update.")
             Button {} label: { BtnLabel("Waiting for connection", icon: .wifiOff) }.buttonStyle(.btn(full: true)).disabled(true)
         } else if st.closed {
             Button("Remove unavailable picks to continue") {}.buttonStyle(.btn(.primary, full: true)).disabled(true)
         } else if st.changed {
-            Button("Accept new odds") { slip.acceptNewOdds() }.buttonStyle(.btn(.warn, full: true))
+            Button("Accept new point value") { slip.acceptNewPointValue() }.buttonStyle(.btn(.warn, full: true))
         } else {
             let n = slip.numbers()
             if n.wl.lockedOut || n.wl.balance <= 0 {
-                Button {} label: { BtnLabel("Betting locked until midnight", icon: .lock) }.buttonStyle(.btn(full: true)).disabled(true)
+                Button {} label: { BtnLabel("Challenging locked until midnight", icon: .lock) }.buttonStyle(.btn(full: true)).disabled(true)
             } else {
-                Button(n.valid ? "Place bet · \(n.stake!) min" : "Place bet") { slip.place() }
+                Button(n.valid ? "Place challenge · \(n.pledgeMinutes!) min" : "Place challenge") { slip.place() }
                     .buttonStyle(.btn(.primary, full: true)).disabled(!n.valid)
-                if slip.legs.count < Rules.maxLegs {
+                if slip.picks.count < Rules.maxPicks {
                     Button { slip.addMore() } label: {
-                        BtnLabel(slip.parlayMode ? "Add another pick" : "Add another pick for a parlay", icon: .plus, iconSize: 16)
+                        BtnLabel(slip.comboMode ? "Add another pick" : "Add another pick for a combo", icon: .plus, iconSize: 16)
                     }
                     .buttonStyle(.btn(.quiet, .sm, full: true))
                 }
@@ -570,9 +569,9 @@ struct SlipFoot: View {
     }
 }
 
-// MARK: - Parlay builder
+// MARK: - Combo builder
 
-struct ParlayPage: View {
+struct ComboPage: View {
     private var slip: Slip { .shared }
     private var live: LiveFeed { .shared }
     private var home: HomeModel { .shared }
@@ -580,17 +579,17 @@ struct ParlayPage: View {
     var body: some View {
         let _ = live.version
         let games = home.boardGames().filter { $0.state == .live || $0.state == .scheduled }
-        let n = slip.legs.count
-        let full = n >= Rules.maxLegs
+        let n = slip.picks.count
+        let full = n >= Rules.maxPicks
         return ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                Note(.blue, icon: .info, markdown: "Pick up to \(Rules.maxLegs) sides from **different games**. Every pick has to win for the parlay to pay.\(n > 0 ? " Games already on your slip are highlighted." : "")")
+                Note(.blue, icon: .info, markdown: "Pick up to \(Rules.maxPicks) sides from **different games**. Every pick has to win for the combo to pay.\(n > 0 ? " Games already on your slip are highlighted." : "")")
                 DayBar(inset: false)
-                if full { Note(.warn, icon: .alert, "Your parlay is full. Remove a pick on the slip to add a different one.") }
+                if full { Note(.warn, icon: .alert, "Your combo is full. Remove a pick on the slip to add a different one.") }
                 VStack(spacing: 14) {
                     let leagues = Sim.leagueOrder.filter { l in games.contains { $0.league == l } }
                     if leagues.isEmpty {
-                        EmptyState(icon: .target, iconSize: 36, title: "No games open for betting", text: "Check back when the next games start.")
+                        EmptyState(icon: .target, iconSize: 36, title: "No games open for challenges", text: "Check back when the next games start.")
                     }
                     ForEach(leagues, id: \.self) { l in
                         let lg = games.filter { $0.league == l }
@@ -603,11 +602,11 @@ struct ParlayPage: View {
         }
         .scrollIndicators(.hidden)
         .overlay(alignment: .bottom) {
-            Button { UIState.shared.closePage(.parlay) } label: {
+            Button { UIState.shared.closePage(.combo) } label: {
                 HStack(spacing: 8) {
                     CountPill(n: n, bg: Theme.accentInk, fg: Theme.accent)
-                    Text(n > 1 ? "Review \(n)-pick parlay" : "Review bet slip")
-                    if n > 1 { Spacer(); Text(OddsMath.fmt(OddsMath.fromDecimal(slip.decimal))).font(.display(19, 800)) }
+                    Text(n > 1 ? "Review \(n)-pick combo" : "Review challenge slip")
+                    if n > 1 { Spacer(); Text(PointValueMath.fmt(PointValueMath.fromDecimal(slip.decimal))).font(.display(19, 800)) }
                 }
             }
             .buttonStyle(.btn(.primary, full: true))

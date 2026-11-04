@@ -76,7 +76,7 @@ final class AuthModel {
                 Store.shared.adoptServerUser(user, remote: try await API.shared.loadState())
                 reset()
                 AppModel.shared.boot()
-                UIState.shared.toast(.win, "Logged in as @\(user.username)", "Your bets and settings are synced to Supabase.")
+                UIState.shared.toast(.win, "Logged in as @\(user.username)", "Your challenges and settings are synced to Supabase.")
             } else {
                 try Store.shared.login(loginEmail, loginPassword)
                 reset()
@@ -214,7 +214,7 @@ final class AuthModel {
         Store.shared.completeOnboarding(sports: sports, locks: skip ? nil : locks)
         AppModel.shared.boot()
         UIState.shared.toast(.win, "Welcome to TimeOut, @\(Store.shared.account?.username ?? "")",
-                             "You have \(Store.shared.data?.wallet.balance ?? Rules.daily) betting minutes today. Tap any odds to start.")
+                             "You have \(Store.shared.data?.wallet.balance ?? Rules.daily) challenge minutes today. Tap any point value to start.")
     }
 }
 
@@ -222,7 +222,7 @@ enum Auth {
     static func logout() {
         UIState.shared.drawerOpen = false
         Task {
-            guard await UIState.shared.confirm("Log out?", "Your bets and settings stay saved on this device.", confirm: "Log out") else { return }
+            guard await UIState.shared.confirm("Log out?", "Your challenges and settings stay saved on this device.", confirm: "Log out") else { return }
             Slip.shared.clear()
             if API.shared.configured { await API.shared.logout() }
             Store.shared.logout()
@@ -293,10 +293,10 @@ struct WelcomeScreen: View {
                 Spacer(minLength: 0)
                 BrandIcon(size: 64).padding(.bottom, 4)
                 Wordmark(size: 64).lineLimit(1).minimumScaleFactor(0.6)
-                Text("Bet your screen time, not your money.").font(.display(26, 700)).foregroundStyle(Theme.text).frame(maxWidth: 230, alignment: .leading)
+                Text("Challenge your screen time, not your money.").font(.display(26, 700)).foregroundStyle(Theme.text).frame(maxWidth: 230, alignment: .leading)
                 VStack(alignment: .leading, spacing: 10) {
-                    point(.hourglass, "60 betting minutes a day. Win and you get more phone time tomorrow.")
-                    point(.radio, "Live scores and odds for NFL, NBA, MLB, NHL, college football and soccer.")
+                    point(.hourglass, "60 challenge minutes a day. Win and you get more phone time tomorrow.")
+                    point(.radio, "Live scores and point value for NFL, NBA, MLB, NHL, college football and soccer.")
                     point(.users, "Compare screen-time records and compete on teams.")
                 }
                 .padding(.top, 8)
@@ -440,7 +440,7 @@ struct SignupScreen: View {
             FieldView(label: "Confirm password", text: $model.signupConfirm, secure: true, err: model.errors["confirm"], content: .newPassword)
             Button(model.busy ? "Creating account…" : "Create account") { Task { await model.signup() } }
                 .buttonStyle(.btn(.primary, full: true)).disabled(model.busy)
-            Text(API.shared.configured ? "Accounts and bets are saved securely with Supabase." : "Offline mode: this account is saved on this device only.")
+            Text(API.shared.configured ? "Accounts and challenges are saved securely with Supabase." : "Offline mode: this account is saved on this device only.")
                 .font(.barlow(11.5)).foregroundStyle(Theme.muted).frame(maxWidth: .infinity)
             HStack(spacing: 4) {
                 Text("Already have an account?").foregroundStyle(Theme.text2)
@@ -537,7 +537,7 @@ struct OnboardScreen: View {
                     Button(model.sports.isEmpty ? "Pick at least one" : "Next") { model.step += 1 }
                         .buttonStyle(.btn(.primary, full: true)).disabled(model.sports.isEmpty)
                 default:
-                    Button("Start betting") { model.finishOnboarding(skip: false) }.buttonStyle(.btn(.primary, full: true))
+                    Button("Start a challenge") { model.finishOnboarding(skip: false) }.buttonStyle(.btn(.primary, full: true))
                     Button("Skip for now") { model.finishOnboarding(skip: true) }.buttonStyle(.btn(.quiet, .sm, full: true))
                 }
             }
@@ -548,9 +548,9 @@ struct OnboardScreen: View {
     private var stepOne: some View {
         VStack(alignment: .leading, spacing: 18) {
             Text("Here's the deal, @\(Store.shared.account?.username ?? "")").font(.display(36, 900))
-            HowCard(n: 1, title: "You get 60 betting minutes a day", text: "They reset every night at midnight.")
-            HowCard(n: 2, title: "You're betting tomorrow's phone time", text: "Win and tomorrow's limit goes up. Lose and it goes down.")
-            HowCard(n: 3, title: "No money, ever", text: "Not now, not later. Bet screen time and build a clean streak.")
+            HowCard(n: 1, title: "You get 60 challenge minutes a day", text: "They reset every night at midnight.")
+            HowCard(n: 2, title: "You pledge tomorrow's phone time", text: "Win and tomorrow's limit goes up. Lose and it goes down.")
+            HowCard(n: 3, title: "No money, ever", text: "Not now, not later. Challenge screen time and build a clean streak.")
         }
     }
 
@@ -576,7 +576,7 @@ struct OnboardScreen: View {
     private var stepThree: some View {
         let pts = Store.points(model.locks)
         return VStack(alignment: .leading, spacing: 18) {
-            AuthTitle(title: "Lock your time-wasters", sub: "When today's phone time runs out, these apps lock. Lock more to reach a higher tier with bonus minutes and odds boosts.")
+            AuthTitle(title: "Lock your time-wasters", sub: "When today's phone time runs out, these apps lock. Lock more to reach a higher tier with bonus minutes and point-value boosts.")
             HStack { Text("\(pts) lock points").font(.barlow(15, 700)); Spacer(); TierBadge(tierId: Store.tierForPoints(pts).id) }.card(12)
             ListBox {
                 ForEach(Store.lockable.filter { $0.kind != "Website" }, id: \.id) { x in

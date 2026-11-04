@@ -36,23 +36,23 @@
     return '';
   }
 
-  function myBets(g) {
-    const bets = TO.data.bets.filter((b) => b.legs.some((l) => l.gameId === g.id)).sort((a, b) => (a.status === 'open' ? -1 : 1) - (b.status === 'open' ? -1 : 1));
-    if (!bets.length) return '';
-    return `<div class="stack-s"><div class="eyebrow">Your pledges on this game</div>${bets.map((b) => TO.views.bets.betCard(b, { compact: true })).join('')}</div>`;
+  function myChallenges(g) {
+    const challenges = TO.data.challenges.filter((b) => b.picks.some((l) => l.gameId === g.id)).sort((a, b) => (a.status === 'open' ? -1 : 1) - (b.status === 'open' ? -1 : 1));
+    if (!challenges.length) return '';
+    return `<div class="stack-s"><div class="eyebrow">Your pledges on this game</div>${challenges.map((b) => TO.views.challenges.challengeCard(b, { compact: true })).join('')}</div>`;
   }
 
   function markets(g, o) {
     if (g.state !== 'live' && g.state !== 'scheduled') return '';
-    const tabs = [['ml','Match Winner',o.moneyline],['spread','Margin',o.spread],['total','Total Points',o.total]].filter(([, , sels]) => sels.filter((s) => s.side !== 'draw').length >= 2);
+    const tabs = [['winner','Match Winner',o.winner],['margin','Margin',o.margin],['total','Total Points',o.total]].filter(([, , sels]) => sels.filter((s) => s.side !== 'draw').length >= 2);
     const current = tabs.find(([key]) => key === activeMarket.get(g.id)) || tabs[0];
     if (!current) return `<div class="card small muted">Challenge targets are not available for this game yet.</div>`;
     const choices = current[2].filter((s) => s.side !== 'draw').slice(0, 2);
     const label = (s) => {
       const team = s.side === 'away' ? g.away.name : g.home.name;
-      if (s.market === 'ml') return `${team} · Outright Winner`;
-      if (s.market === 'spread') return s.line < 0 ? `${team} to win by ${Math.ceil(Math.abs(s.line))}+` : `${team} to stay within ${Math.floor(s.line)}`;
-      return `${s.side === 'over' ? 'Total Score Over' : 'Total Score Under'} ${s.line}`;
+      if (s.market === 'winner') return `${team} · Outright Winner`;
+      if (s.market === 'margin') return s.line < 0 ? `${team} to win by ${Math.ceil(Math.abs(s.line))}+` : `${team} to stay within ${Math.floor(s.line)}`;
+      return `${s.side === 'higher' ? 'Total Score Over' : 'Total Score Under'} ${s.line}`;
     };
     return `<div class="card stack" id="game-markets">
       <div class="row-layout"><h2 style="margin:0;font-size:17px">Matchup Challenge</h2><span class="tiny faint bold">Targets refresh every 25 seconds</span></div>
@@ -90,10 +90,10 @@
 
   function render() {
     const g = S.game(currentId);
-    const o = S.odds(currentId);
+    const o = S.pointValue(currentId);
     return {
       title: `${esc(g.away.abbr)} @ ${esc(g.home.abbr)}`,
-      body: `${scoreboard(g)}${banner(g, o)}${myBets(g)}${markets(g, o)}${statsCard(g)}${researchCard(g)}${fab(g, o)}`,
+      body: `${scoreboard(g)}${banner(g, o)}${myChallenges(g)}${markets(g, o)}${statsCard(g)}${researchCard(g)}${fab(g, o)}`,
     };
   }
 

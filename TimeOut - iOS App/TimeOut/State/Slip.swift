@@ -1,88 +1,88 @@
 import Foundation
 import Observation
 
-/// The bet slip (Screen 3). A port of the web demo's slip.js state and actions.
+/// The challenge slip (Screen 3). A port of the web demo's slip.js state and actions.
 @Observable
 final class Slip {
     static let shared = Slip()
 
-    var legs: [SlipLeg] = []
-    /// Picks stack up only in parlay mode; otherwise a new pick replaces the old one.
-    var parlayMode = false
-    var stake: String?
+    var picks: [SlipPick] = []
+    /// Picks stack up only in combo mode; otherwise a new pick replaces the old one.
+    var comboMode = false
+    var pledgeMinutes: String?
     var boost = false
     var insure = false
     var error: String?
     var capped = false
 
-    func has(_ id: String) -> Bool { legs.contains { $0.selId == id } }
+    func has(_ id: String) -> Bool { picks.contains { $0.selId == id } }
 
     func clear() {
-        legs = []; parlayMode = false; stake = nil; boost = false; insure = false; error = nil; capped = false
+        picks = []; comboMode = false; pledgeMinutes = nil; boost = false; insure = false; error = nil; capped = false
     }
 
     private static func refOf(_ sel: Selection) -> String { sel.gameId ?? sel.predId ?? sel.raceId ?? "" }
 
     private var ui: UIState { .shared }
 
-    /// Tap on an odds button. Outside parlay mode the pick replaces whatever is on the slip and opens it;
-    /// in parlay mode it's added, or swapped for a second pick on the same game.
+    /// Tap on a point-value button. Outside combo mode the pick replaces whatever is on the slip and opens it;
+    /// in combo mode it's added, or swapped for a second pick on the same game.
     func toggle(_ selId: String) {
         if has(selId) {
-            legs.removeAll { $0.selId == selId }
+            picks.removeAll { $0.selId == selId }
             afterChange()
             return
         }
         guard let cur = Feed.currentSelection(selId), let sel = cur.sel, cur.open else {
-            ui.toast(.warn, "Betting is closed on this pick")
+            ui.toast(.warn, "This pick is closed")
             return
         }
-        let hasRace = legs.contains { $0.ref.hasPrefix("race-") }
-        if parlayMode && (sel.kind == "race" || hasRace) {
-            ui.toast(.warn, "Virtual races are single picks", "Place a virtual race bet on its own, outside a parlay.")
+        let hasRace = picks.contains { $0.ref.hasPrefix("race-") }
+        if comboMode && (sel.kind == "race" || hasRace) {
+            ui.toast(.warn, "Virtual races are single picks", "Place a virtual race challenge on its own, outside a combo.")
             return
         }
-        let leg = SlipLeg(selId: sel.id, price: sel.price, line: sel.line, ref: Self.refOf(sel))
-        if !parlayMode {
-            legs = [leg]
+        let pick = SlipPick(selId: sel.id, price: sel.price, line: sel.line, ref: Self.refOf(sel))
+        if !comboMode {
+            picks = [pick]
             error = nil
             open()
             afterChange()
             return
         }
-        if let same = legs.firstIndex(where: { $0.ref == leg.ref }) {
-            legs[same] = leg
-            ui.toast(.info, "Pick swapped", "A parlay can only have one pick per game.", ms: 2600)
+        if let same = picks.firstIndex(where: { $0.ref == pick.ref }) {
+            picks[same] = pick
+            ui.toast(.info, "Pick swapped", "A combo can only have one pick per game.", ms: 2600)
         } else {
-            if legs.count >= Rules.maxLegs {
-                ui.toast(.warn, "Parlays are limited to \(Rules.maxLegs) picks", "Remove a pick to add another.")
+            if picks.count >= Rules.maxPicks {
+                ui.toast(.warn, "Combos are limited to \(Rules.maxPicks) picks", "Remove a pick to add another.")
                 return
             }
-            legs.append(leg)
+            picks.append(pick)
         }
         error = nil
         afterChange()
     }
 
-    func toggleParlayMode() {
-        parlayMode.toggle()
-        legs = []
+    func toggleComboMode() {
+        comboMode.toggle()
+        picks = []
         error = nil
-        ui.closeSheet(.slip, silent: true) // not discard(): that would also switch parlay mode back off
-        ui.closePage(.parlay, silent: true)
+        ui.closeSheet(.slip, silent: true) // not discard(): that would also switch combo mode back off
+        ui.closePage(.combo, silent: true)
     }
 
     private func afterChange() {
-        if legs.isEmpty {
+        if picks.isEmpty {
             ui.closeSheet(.slip)
-            ui.closePage(.parlay, silent: true)
+            ui.closePage(.combo, silent: true)
         }
     }
 
     /// Closing the slip (X or tapping outside) throws the picks away, so nothing lingers on Home.
     func discard() {
         clear()
-        ui.closePage(.parlay, silent: true)
+        ui.closePage(.combo, silent: true)
     }
 
     func open() {
@@ -90,85 +90,85 @@ final class Slip {
     }
 
     func remove(_ selId: String) {
-        legs.removeAll { $0.selId == selId }
+        picks.removeAll { $0.selId == selId }
         afterChange()
     }
 
-    struct LegState { var sel: Selection?; var closed: Bool; var changed: Bool }
+    struct PickState { var sel: Selection?; var closed: Bool; var changed: Bool }
 
-    func legState(_ leg: SlipLeg) -> LegState {
-        let cur = Feed.currentSelection(leg.selId)
+    func pickState(_ pick: SlipPick) -> PickState {
+        let cur = Feed.currentSelection(pick.selId)
         let closed = cur == nil || cur?.sel == nil || cur?.open != true
-        let changed = !closed && (cur!.sel!.price != leg.price || cur!.sel!.line != leg.line)
-        return LegState(sel: cur?.sel, closed: closed, changed: changed)
+        let changed = !closed && (cur!.sel!.price != pick.price || cur!.sel!.line != pick.line)
+        return PickState(sel: cur?.sel, closed: closed, changed: changed)
     }
 
-    func status() -> (states: [LegState], closed: Bool, changed: Bool) {
-        let states = legs.map(legState)
+    func status() -> (states: [PickState], closed: Bool, changed: Bool) {
+        let states = picks.map(pickState)
         return (states, states.contains { $0.closed }, states.contains { $0.changed })
     }
 
-    var decimal: Double { legs.reduce(1.0) { $0 * OddsMath.decimal($1.price) } }
+    var decimal: Double { picks.reduce(1.0) { $0 * PointValueMath.decimal($1.price) } }
 
-    struct Numbers { var wl: WalletView; var stake: Int?; var dec: Double; var american: Int; var mult: Double; var winnings: Int; var valid: Bool }
+    struct Numbers { var wl: WalletView; var pledgeMinutes: Int?; var dec: Double; var american: Int; var mult: Double; var winnings: Int; var valid: Bool }
 
     func numbers() -> Numbers {
         let wl = Store.shared.wallet
-        let stake = stake.flatMap { Int($0.trimmingCharacters(in: .whitespaces)) }
+        let pledgeMinutes = pledgeMinutes.flatMap { Int($0.trimmingCharacters(in: .whitespaces)) }
         let dec = decimal
         var mult = wl.multiplier
         if boost && wl.boostsLeft > 0 { mult *= 1 + Rules.boostPercent }
-        let s = stake ?? 0
+        let s = pledgeMinutes ?? 0
         let winnings = jsRoundInt(Double(jsRoundInt(Double(s) * dec) - s) * mult)
-        let valid = stake != nil && stake! >= 1 && stake! <= wl.balance && Net.shared.online
-        return Numbers(wl: wl, stake: stake, dec: dec, american: OddsMath.fromDecimal(dec), mult: mult, winnings: winnings, valid: valid)
+        let valid = pledgeMinutes != nil && pledgeMinutes! >= 1 && pledgeMinutes! <= wl.balance && Net.shared.online
+        return Numbers(wl: wl, pledgeMinutes: pledgeMinutes, dec: dec, american: PointValueMath.fromDecimal(dec), mult: mult, winnings: winnings, valid: valid)
     }
 
-    /// The stake shown when the slip opens: the last stake, capped to the balance.
-    func prepareStake() {
-        if stake == nil {
+    /// The pledge shown when the slip opens: the last pledge, capped to the balance.
+    func preparePledge() {
+        if pledgeMinutes == nil {
             let wl = Store.shared.wallet
-            stake = String(max(1, min(Store.shared.data?.lastStake ?? 5, max(wl.balance, 1))))
+            pledgeMinutes = String(max(1, min(Store.shared.data?.lastPledge ?? 5, max(wl.balance, 1))))
         }
     }
 
     // MARK: Actions
 
     func addMore() {
-        parlayMode = true
+        comboMode = true
         ui.closeSheet(.slip, silent: true) // hide it without discarding the picks
-        ui.openPage(.parlay)
+        ui.openPage(.combo)
     }
 
-    func quick(_ v: Int) { stake = String(v); error = nil; capped = false }
+    func quick(_ v: Int) { pledgeMinutes = String(v); error = nil; capped = false }
 
     func step(_ d: Int) {
-        let v = (Int(stake ?? "") ?? 0) + d
+        let v = (Int(pledgeMinutes ?? "") ?? 0) + d
         let max = Store.shared.wallet.balance
         capped = v > max
-        stake = String(Swift.max(1, Swift.min(v, max)))
+        pledgeMinutes = String(Swift.max(1, Swift.min(v, max)))
         error = nil
     }
 
-    /// The stake can't go above today's betting balance: a bigger number snaps back to it.
+    /// The pledge can't go above today's challenging balance: a bigger number snaps back to it.
     func typed(_ value: String) -> String {
         let max = Store.shared.wallet.balance
         let digits = value.filter(\.isNumber)
         // Closing the keyboard re-sends the same text; keep the "not enough screentime" note up.
-        if digits == stake { return digits }
+        if digits == pledgeMinutes { return digits }
         let n = Int(digits)
         capped = n != nil && n! > max
         let result = capped ? String(max) : digits
-        stake = result
+        pledgeMinutes = result
         error = nil
         return result
     }
 
-    func acceptNewOdds() {
-        for i in legs.indices {
-            if let cur = Feed.currentSelection(legs[i].selId), let sel = cur.sel {
-                legs[i].price = sel.price
-                legs[i].line = sel.line
+    func acceptNewPointValue() {
+        for i in picks.indices {
+            if let cur = Feed.currentSelection(picks[i].selId), let sel = cur.sel {
+                picks[i].price = sel.price
+                picks[i].line = sel.line
             }
         }
         error = nil
@@ -178,16 +178,16 @@ final class Slip {
         guard Net.shared.online else { return }
         let n = numbers()
         do {
-            let bet = try Store.shared.placeBet(picks: legs, stake: n.stake, boost: boost, insure: insure)
-            let label = bet.legs.count > 1 ? "\(bet.legs.count)-pick parlay" : bet.legs[0].label
-            let win = jsRoundInt(Double(jsRoundInt(Double(bet.stake) * bet.decimal) - bet.stake) * bet.multiplier)
-            ui.toast(.win, "Bet placed", "\(label) · \(bet.stake) min to win \(win) min. It's in My Bets.")
+            let challenge = try Store.shared.placeChallenge(picks: picks, pledgeMinutes: n.pledgeMinutes, boost: boost, insure: insure)
+            let label = challenge.picks.count > 1 ? "\(challenge.picks.count)-pick combo" : challenge.picks[0].label
+            let win = jsRoundInt(Double(jsRoundInt(Double(challenge.pledgeMinutes) * challenge.decimal) - challenge.pledgeMinutes) * challenge.multiplier)
+            ui.toast(.win, "Challenge placed", "\(label) · \(challenge.pledgeMinutes) min to earn \(win) min. It's in My Challenges.")
             clear()
             ui.closeSheet(.slip, silent: true)
-            ui.closePage(.parlay, silent: true)
+            ui.closePage(.combo, silent: true)
         } catch let e as AppError {
-            error = e.code == "odds_changed" ? nil : e.message
-            if e.code == "odds_changed" { ui.toast(.warn, "Odds changed", "Review the new odds and confirm again.") }
+            error = e.code == "value_changed" ? nil : e.message
+            if e.code == "value_changed" { ui.toast(.warn, "Point value changed", "Review the new point value and confirm again.") }
         } catch {}
     }
 }

@@ -1,10 +1,10 @@
 # TimeOut
 
-**The sportsbook where you bet screen time instead of money.**
+**The sports challenge app where you pledge screen time instead of money.**
 Group 9, Section 1: Owen Smith, Easton Putnam, Will Fairholm, Marcus Williams.
 
 > **▶ Try the app:** <https://marcustheman13.github.io/TimeOut/> (resizes to fit phones, tablets and computers)
-> Live ESPN odds and real accounts, nothing to install. It updates by itself when the web demo changes on `main`.
+> Live ESPN point value and real accounts, nothing to install. It updates by itself when the web demo changes on `main`.
 >
 > **🔑 Test login** (website and iPhone app): email `marcusdanielwill@gmail.com` · password `test_account_pass` (username `@time_out_account`).
 
@@ -12,12 +12,12 @@ Group 9, Section 1: Owen Smith, Easton Putnam, Will Fairholm, Marcus Williams.
 
 ## App Summary
 
-Sports betting has exploded, and the apps behind it are built to keep people chasing losses with real money.
-Our interviews showed that most bettors aren't in it for the cash. They bet because it makes watching the game more exciting and gives them something to talk about with friends.
-TimeOut keeps that excitement and removes the financial risk: instead of money, users bet with their phone's screen time.
-Everyone gets 60 betting minutes a day. Win a bet and tomorrow's phone time goes up; lose and it goes down, so the stakes are real but nobody loses money.
-The app has live scores and odds, automatic bet settlement, a running win/loss record, and bets with friends where the stake is something like "loser does the dishes."
-It's aimed at casual and at-risk sports bettors (the "Addicted Adam" persona from our research) who want the thrill of betting without the damage, and it can even cut down how much time they spend on their phones.
+Sports challenges has exploded, and the apps behind it are built to keep people chasing losses with real money.
+Our interviews showed that most players aren't in it for the cash. They challenge because it makes watching the game more exciting and gives them something to talk about with friends.
+TimeOut keeps that excitement and removes the financial risk: instead of money, users challenge with their phone's screen time.
+Everyone gets 60 challenge minutes a day. Win a challenge and tomorrow's phone time goes up; lose and it goes down, so the pledges are real but nobody loses money.
+The app has live scores and point value, automatic challenge resolution, a running win/loss record, and challenges with friends where the pledge is something like "loser does the dishes."
+It's aimed at casual and at-risk sports players (the "Addicted Adam" persona from our research) who want the thrill of challenging without the damage, and it can even cut down how much time they spend on their phones.
 
 Full requirements: [docs/PRD - Prioritization & Design Sprint.pdf](docs/PRD%20-%20Prioritization%20%26%20Design%20Sprint.pdf)
 
@@ -33,7 +33,7 @@ How data moves through the customer-facing app, the planned admin portal and the
 
 ORIGINAL ERD
 
-<img width="1706" height="1040" alt="Sports Betting ERD" src="https://github.com/user-attachments/assets/1183be55-ab84-49b5-9a56-1c6e293e26a4" />
+<img width="1706" height="1040" alt="Sports Challenging ERD" src="https://github.com/user-attachments/assets/1183be55-ab84-49b5-9a56-1c6e293e26a4" />
 
 DATABASE INTEGRATED ERD
 
@@ -57,21 +57,21 @@ The [architecture diagram](#system-architecture) shows how these pieces connect.
 | --- | --- | --- |
 | Web app | Plain HTML, CSS and JavaScript, no framework. Hosted on GitHub Pages and deployed by GitHub Actions from `main` | [`TimeOut - Web/`](TimeOut%20-%20Web), [`pages.yml`](.github/workflows/pages.yml) |
 | iOS app | Native SwiftUI app with the same screens and features as the web app, plus real Screen Time blocking (FamilyControls, DeviceActivity) through Monitor and Shield extensions | [`TimeOut - iOS App/`](TimeOut%20-%20iOS%20App) |
-| Database | Supabase Postgres with row-level security. Bets and wallet changes go through RPC functions such as `timeout_place_bet` and `timeout_settle_bet` | [`js/api.js`](TimeOut%20-%20Web/js/api.js), [`API.swift`](TimeOut%20-%20iOS%20App/TimeOut/Services/API.swift), `server/db/supabase-*.sql` |
+| Database | Supabase Postgres with row-level security. Challenges and wallet changes go through RPC functions such as `timeout_place_challenge` and `timeout_resolve_challenge` | [`js/api.js`](TimeOut%20-%20Web/js/api.js), [`API.swift`](TimeOut%20-%20iOS%20App/TimeOut/Services/API.swift), `server/db/supabase-*.sql` |
 | Auth | Supabase Auth: email + password accounts with an email-confirmation link. One login works on both apps | [`js/api.js`](TimeOut%20-%20Web/js/api.js), [`API.swift`](TimeOut%20-%20iOS%20App/TimeOut/Services/API.swift) |
 | Live sports data | ESPN's public API (no key needed), called directly by each app | [`js/live.js`](TimeOut%20-%20Web/js/live.js), [`LiveFeed.swift`](TimeOut%20-%20iOS%20App/TimeOut/Engine/LiveFeed.swift) |
 | Local dev server | Node.js + Express 5. Serves the web app at `localhost:3000` and handles teams and user search while it's running. Uses embedded PostgreSQL ([PGlite](https://pglite.dev)) unless `DATABASE_URL` is set. The live site doesn't use it | [`server/src/`](server/src) |
 
 **Why this fits our team.** Blocking apps uses Apple's Screen Time APIs, which only work in a real iOS app, so we need a native iPhone app next to the web app.
-Supabase gives both apps the same accounts, tables and RPC functions without us running a server, so a bet placed on the website shows up on the phone.
-Rules like "you can't stake more minutes than you have" live in those RPC functions, where users can't edit them.
+Supabase gives both apps the same accounts, tables and RPC functions without us running a server, so a challenge placed on the website shows up on the phone.
+Rules like "you can't pledge more minutes than you have" live in those RPC functions, where users can't edit them.
 The web app is static files, so GitHub Pages can host it, and row-level security is what makes it safe for the Supabase publishable key to sit in browser code.
 
 ---
 
 ## How to Get It Running
 
-**Just want to try it?** Open the live site, no setup needed: <https://marcustheman13.github.io/TimeOut/>. It resizes to fit any screen. It's the real app with live odds and Supabase accounts, and it redeploys whenever the web demo changes on `main`. The steps below are for running and changing the code yourself.
+**Just want to try it?** Open the live site, no setup needed: <https://marcustheman13.github.io/TimeOut/>. It resizes to fit any screen. It's the real app with live point values and Supabase accounts, and it redeploys whenever the web demo changes on `main`. The steps below are for running and changing the code yourself.
 
 **You need:** [Node.js](https://nodejs.org) 20 or newer (`node -v` to check) and Git. Nothing else, not even PostgreSQL.
 
@@ -195,6 +195,6 @@ All requests and responses are JSON. Errors look like `{ "error": { "code", "mes
 
 ## What's Still Stored Only in the Browser
 
-Accounts, game bets, the screen-time wallet, settings and teams are saved in Supabase. Friends, friend requests, clean-day history, and race, prediction and to-do bets are still saved only on the device (`localStorage` on the web, [`js/state.js`](TimeOut%20-%20Web/js/state.js)).
+Accounts, game challenges, the screen-time wallet, settings and teams are saved in Supabase. Friends, friend requests, clean-day history, and race, prediction and to-do challenges are still saved only on the device (`localStorage` on the web, [`js/state.js`](TimeOut%20-%20Web/js/state.js)).
 To move a feature over: add its tables and RPC functions in Supabase, add a function in `js/api.js` and `API.swift`, and call it from the screen.
 Good next slice: sending a friend request.
