@@ -107,17 +107,17 @@ window.TO = window.TO || {};
     const y = 1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-z * z);
     return 0.5 * (1 + (x >= 0 ? y : -y));
   };
-  /** Rounds down to the nearest hook (x.5) so lines never land on a whole number. */
+  /** Rounds down to the nearest half point (x.5) so totals never land on a whole number. */
   TO.hook = (x) => Math.floor(x) + 0.5;
   TO.clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
 
-  TO.odds = {
+  TO.pointValue = {
     decimal(american) { return american > 0 ? 1 + american / 100 : 1 + 100 / Math.abs(american); },
     fromDecimal(dec) {
       if (dec <= 1) return -10000;
       return dec >= 2 ? Math.round((dec - 1) * 100) : Math.round(-100 / (dec - 1));
     },
-    /** Fair (no house edge) American price, rounded to sportsbook-looking steps. */
+    /** Fair (no built-in edge) American-format number, rounded to rounded steps. */
     fromProb(raw) {
       const p = TO.clamp(raw, 0.038, 0.962);
       const val = p >= 0.5 ? (-100 * p) / (1 - p) : (100 * (1 - p)) / p;
@@ -133,13 +133,13 @@ window.TO = window.TO || {};
       return line > 0 ? `+${body}` : body;
     },
   };
-  TO.convertOddsToMultiplier = (americanOdds) => {
-    const value = Number(americanOdds);
+  TO.convertPointValueToMultiplier = (americanPointValue) => {
+    const value = Number(americanPointValue);
     if (!Number.isFinite(value) || value === 0) return 1;
     return value > 0 ? 1 + value / 100 : 1 + 100 / Math.abs(value);
   };
-  TO.multiplierText = (americanOdds) => {
-    const multiplier = TO.convertOddsToMultiplier(americanOdds);
+  TO.multiplierText = (americanPointValue) => {
+    const multiplier = TO.convertPointValueToMultiplier(americanPointValue);
     return `${multiplier.toFixed(2).replace(/0+$/, '').replace(/\.$/, '')}x ${multiplier > 2 ? 'Bonus' : 'Target'}`;
   };
 

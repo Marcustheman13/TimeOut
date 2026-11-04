@@ -4,11 +4,11 @@
   const { esc, icon } = TO;
 
   const horses = [
-    { id: 1, number: 1, name: 'Midnight Surge', americanOdds: 180, form: '2-1-2', jockey: 'R. Vance', color: '#4fb3ff', speed: 1.025, variance: 0.18 },
-    { id: 2, number: 2, name: 'Silicon Sprint', americanOdds: 220, form: '1-3-1', jockey: 'K. Chen', color: '#22d66e', speed: 1.018, variance: 0.19 },
-    { id: 3, number: 3, name: 'Digital Blitz', americanOdds: 260, form: '3-2-1', jockey: 'T. Hayes', color: '#ffc940', speed: 1.010, variance: 0.20 },
-    { id: 4, number: 4, name: 'Golden Hour', americanOdds: 310, form: '2-1-4', jockey: 'L. Moreno', color: '#ff718d', speed: 1.002, variance: 0.21 },
-    { id: 5, number: 5, name: 'Circuit Breaker', americanOdds: 380, form: '1-4-2', jockey: 'D. Sterling', color: '#c58cff', speed: 0.995, variance: 0.22 },
+    { id: 1, number: 1, name: 'Midnight Surge', americanPointValue: 180, form: '2-1-2', jockey: 'R. Vance', color: '#4fb3ff', speed: 1.025, variance: 0.18 },
+    { id: 2, number: 2, name: 'Silicon Sprint', americanPointValue: 220, form: '1-3-1', jockey: 'K. Chen', color: '#22d66e', speed: 1.018, variance: 0.19 },
+    { id: 3, number: 3, name: 'Digital Blitz', americanPointValue: 260, form: '3-2-1', jockey: 'T. Hayes', color: '#ffc940', speed: 1.010, variance: 0.20 },
+    { id: 4, number: 4, name: 'Golden Hour', americanPointValue: 310, form: '2-1-4', jockey: 'L. Moreno', color: '#ff718d', speed: 1.002, variance: 0.21 },
+    { id: 5, number: 5, name: 'Circuit Breaker', americanPointValue: 380, form: '1-4-2', jockey: 'D. Sterling', color: '#c58cff', speed: 0.995, variance: 0.22 },
   ];
   const KEY = 'timeout.virtualRaces';
   const saved = TO.store.get(KEY, null) || { next: 48, current: null, history: [] };
@@ -31,7 +31,7 @@
   const horse = (id) => horses.find((item) => item.id === Number(id)) || horses[0];
   const selectionId = (race, runner) => `race-${race.number}|race|${runner.id}`;
   function selection(race, runner) {
-    return { id: selectionId(race, runner), raceId: `race-${race.number}`, horseId: runner.id, kind: 'race', market: 'race', side: String(runner.id), line: null, price: runner.americanOdds };
+    return { id: selectionId(race, runner), raceId: `race-${race.number}`, horseId: runner.id, kind: 'race', market: 'race', side: String(runner.id), line: null, price: runner.americanPointValue };
   }
   function currentSelection(selId) {
     const [ref, market, side] = String(selId).split('|');
@@ -44,9 +44,9 @@
   function implied(american) { return american > 0 ? 100 / (american + 100) : Math.abs(american) / (Math.abs(american) + 100); }
   function weightedWinner(seed) {
     const rng = TO.rng(seed);
-    const total = horses.reduce((sum, h) => sum + implied(h.americanOdds), 0);
+    const total = horses.reduce((sum, h) => sum + implied(h.americanPointValue), 0);
     let roll = rng() * total;
-    for (const h of horses) { roll -= implied(h.americanOdds); if (roll <= 0) return h.id; }
+    for (const h of horses) { roll -= implied(h.americanPointValue); if (roll <= 0) return h.id; }
     return horses[0].id;
   }
   function beginRace(race, seed, now = TO.now(), pledgeId = null) {
@@ -64,10 +64,10 @@
     race.pledgeId = pledgeId;
     persist();
   }
-  function startForBet(pledge, now = TO.now()) {
+  function startForChallenge(pledge, now = TO.now()) {
     const race = current();
-    const leg = pledge.legs[0];
-      if (race.status !== 'open' || leg.raceId !== `race-${race.number}`) throw new TO.AppError('closed', 'That race challenge is closed.');
+    const pick = pledge.picks[0];
+      if (race.status !== 'open' || pick.raceId !== `race-${race.number}`) throw new TO.AppError('closed', 'That race challenge is closed.');
     beginRace(race, pledge.id, now, pledge.id);
   }
   function startForViewing() {
@@ -114,7 +114,7 @@
     const race = current();
     const latest = data.history[0];
     return `<div class="stack race-page" data-race-id="${race.number}" data-race-status="${race.status}">
-      <div class="page-head"><h1>Virtual Racing</h1><p>Pick a winner and stake screen-time minutes using your regular Daily Commitment.</p></div>
+      <div class="page-head"><h1>Virtual Racing</h1><p>Pick a winner and pledge screen-time minutes using your regular Daily Commitment.</p></div>
       <div class="card race-card">
         <div class="race-card-head"><div><span id="race-status" class="tag ${race.status === 'running' ? 'red' : 'green'}">${esc(statusText(race))}</span><span class="race-caption">· 1,200m Cyber Turf Classic #${race.number}</span></div><span class="race-clock" id="race-clock">12 sec</span></div>
         <div class="race-track-wrap"><canvas class="race-track" id="race-track" aria-label="Animated virtual horse race"></canvas><div class="race-finish-line" aria-hidden="true"></div></div>
@@ -237,7 +237,7 @@
     updateMounted();
   }
 
-  TO.races = { horses, current, get, horse, currentSelection, selectionLabel, startForBet, grade, mount };
+  TO.races = { horses, current, get, horse, currentSelection, selectionLabel, startForChallenge, grade, mount };
   TO.actions['race-start'] = startForViewing;
   TO.views.races = { render };
 })(window.TO);

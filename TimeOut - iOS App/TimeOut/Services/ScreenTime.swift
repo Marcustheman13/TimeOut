@@ -177,7 +177,7 @@ final class ScreenTime {
         let signature = "\(todayKey)|\(wl.todayLimit)|\(version)"
         guard defaults.string(forKey: ScreenTimeShared.registeredKey) != signature else { return }
 
-        // The limit changed (new day, a settled bet, an unlock, or new apps). Lift the block and re-measure:
+        // The limit changed (new day, a resolved challenge, an unlock, or new apps). Lift the block and re-measure:
         // `includesPastActivity` counts earlier usage, so events re-fire if the user is already over.
         if !isOverrideActive { store.clearAllSettings() }
         defaults.removeObject(forKey: ScreenTimeShared.limitReachedKey)

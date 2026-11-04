@@ -1,4 +1,4 @@
-/* TimeOut web demo — ESPN live scores and sportsbook lines. */
+/* TimeOut web demo — ESPN live scores and challenge app lines. */
 (function (TO) {
   'use strict';
 
@@ -16,7 +16,7 @@
     nhl: ['hockey/nhl', 'hockey', 'nhl'], epl: ['soccer/eng.1', 'soccer', 'eng.1'],
   };
   const cache = new Map();
-  const oddsCache = new Map();
+  const pointValueCache = new Map();
   let updatedAt = 0;
   let updatedDayKey = '';
   let loading = false;
@@ -97,13 +97,13 @@
 
   function hasPrice(value) { return american(value) != null; }
 
-  function marketPrice(teamOdds, market) {
+  function marketPrice(teamPointValue, market) {
     const value = (entry) => entry?.american ?? entry?.alternateDisplayValue
       ?? (typeof entry === 'number' || typeof entry === 'string' ? entry : null);
-    return value(teamOdds?.[market]) ?? value(teamOdds?.current?.[market]);
+    return value(teamPointValue?.[market]) ?? value(teamPointValue?.current?.[market]);
   }
 
-  function moneylinePrice(book, side) {
+  function winnerPrice(book, side) {
     if (side === 'draw') {
       return marketPrice(book?.drawOdds, 'moneyLine')
         ?? book?.drawOdds?.moneyLine
@@ -111,19 +111,19 @@
         ?? book?.moneyline?.draw?.close?.odds
         ?? book?.moneyline?.draw?.open?.odds;
     }
-    const teamOdds = side === 'home' ? book?.homeTeamOdds : book?.awayTeamOdds;
-    return marketPrice(teamOdds, 'moneyLine')
-      ?? teamOdds?.moneyline
+    const teamPointValue = side === 'home' ? book?.homeTeamOdds : book?.awayTeamOdds;
+    return marketPrice(teamPointValue, 'moneyLine')
+      ?? teamPointValue?.moneyline
       ?? book?.moneyline?.[side]?.current?.odds
       ?? book?.moneyline?.[side]?.close?.odds
       ?? book?.moneyline?.[side]?.open?.odds;
   }
 
-  function spreadPrice(book, side) {
-    const teamOdds = side === 'home' ? book?.homeTeamOdds : book?.awayTeamOdds;
+  function marginPrice(book, side) {
+    const teamPointValue = side === 'home' ? book?.homeTeamOdds : book?.awayTeamOdds;
     const market = book?.pointSpread?.[side];
-    return marketPrice(teamOdds, 'spread')
-      ?? teamOdds?.spreadOdds
+    return marketPrice(teamPointValue, 'spread')
+      ?? teamPointValue?.spreadOdds
       ?? market?.current?.odds
       ?? market?.close?.odds
       ?? market?.open?.odds
@@ -131,8 +131,9 @@
   }
 
   function totalPrice(book, side) {
-    const flat = side === 'over' ? (book?.overOdds ?? book?.overUnderOdds) : (book?.underOdds ?? book?.underUnderOdds);
-    const market = book?.total?.[side] || book?.overUnder?.[side];
+    const espnSide = side === 'higher' ? 'over' : side === 'lower' ? 'under' : side;
+    const flat = espnSide === 'over' ? (book?.overOdds ?? book?.overUnderOdds) : (book?.underOdds ?? book?.underUnderOdds);
+    const market = book?.total?.[espnSide] || book?.overUnder?.[espnSide];
     return flat ?? market?.current?.odds ?? market?.close?.odds ?? market?.open?.odds;
   }
 
@@ -141,54 +142,54 @@
     return Number.isFinite(raw) && raw > 0 ? raw : null;
   }
 
-  function isBookmaker(book) {
+  function isQuoteSource(book) {
     if (!book) return false;
     const name = String(book?.provider?.name || '').toLowerCase();
     if (/numberfire|predictor|win probability/.test(name)) return false;
     return true;
   }
 
-  function spreadFor(book, game, homeOdds, awayOdds) {
-    const homeMarketLine = homeOdds.current?.pointSpread?.alternateDisplayValue
-      ?? homeOdds.current?.pointSpread?.american
-      ?? homeOdds.pointSpread?.alternateDisplayValue
-      ?? homeOdds.pointSpread?.american
+  function marginFor(book, game, homePointValue, awayPointValue) {
+    const homeMarketLine = homePointValue.current?.pointSpread?.alternateDisplayValue
+      ?? homePointValue.current?.pointSpread?.american
+      ?? homePointValue.pointSpread?.alternateDisplayValue
+      ?? homePointValue.pointSpread?.american
       ?? book.pointSpread?.home?.current?.line
       ?? book.pointSpread?.home?.close?.line
       ?? book.pointSpread?.home?.open?.line;
-    const awayMarketLine = awayOdds.current?.pointSpread?.alternateDisplayValue
-      ?? awayOdds.current?.pointSpread?.american
-      ?? awayOdds.pointSpread?.alternateDisplayValue
-      ?? awayOdds.pointSpread?.american
+    const awayMarketLine = awayPointValue.current?.pointSpread?.alternateDisplayValue
+      ?? awayPointValue.current?.pointSpread?.american
+      ?? awayPointValue.pointSpread?.alternateDisplayValue
+      ?? awayPointValue.pointSpread?.american
       ?? book.pointSpread?.away?.current?.line
       ?? book.pointSpread?.away?.close?.line
       ?? book.pointSpread?.away?.open?.line;
-    const direct = Number(homeMarketLine ?? homeOdds.spread ?? book.homeSpread);
+    const direct = Number(homeMarketLine ?? homePointValue.spread ?? book.homeSpread);
     if (Number.isFinite(direct) && direct !== 0) return direct;
     const awayLine = Number(awayMarketLine);
     if (Number.isFinite(awayLine) && awayLine !== 0) return -awayLine;
-    // ESPN's MLB `details` is the outright winner favorite and price, not a run line.
+    // ESPN's MLB `details` is the outright winner favorite and price, not a run margin.
     if (game.sport === 'baseball') return null;
     const detail = String(book.details || '');
     const match = detail.match(/([+-]\s*\d+(?:\.\d+)?)/);
     const value = match ? Number(match[1].replace(/\s/g, '')) : Number(book.spread);
     if (!Number.isFinite(value) || value === 0 || Math.abs(value) > 50) return null;
-    if (homeOdds.favorite === true) return -Math.abs(value);
-    if (awayOdds.favorite === true) return Math.abs(value);
+    if (homePointValue.favorite === true) return -Math.abs(value);
+    if (awayPointValue.favorite === true) return Math.abs(value);
     const namedHome = [game.home.abbr, game.home.name, game.home.fullName].filter(Boolean).some((name) => detail.toLowerCase().includes(name.toLowerCase()));
     const namedAway = [game.away.abbr, game.away.name, game.away.fullName].filter(Boolean).some((name) => detail.toLowerCase().includes(name.toLowerCase()));
     if (namedHome) return value;
     if (namedAway) return -value;
-    const signedHomeSpread = Number(book.spread);
-    return Number.isFinite(signedHomeSpread) && signedHomeSpread !== 0 ? signedHomeSpread : null;
+    const signedHomeMargin = Number(book.spread);
+    return Number.isFinite(signedHomeMargin) && signedHomeMargin !== 0 ? signedHomeMargin : null;
   }
 
-  function makeOdds(game, now = TO.now()) {
+  function makePointValue(game, now = TO.now()) {
     const comp = game._competition || {};
-    const candidates = game._oddsBooks?.length
-      ? [...game._oddsBooks, ...(game.state === 'live' ? [] : (comp.odds || []))]
-      : [game._oddsBook || comp.odds?.[0]].filter(Boolean);
-    const books = candidates.filter(isBookmaker);
+    const candidates = game._pointValueBooks?.length
+      ? [...game._pointValueBooks, ...(game.state === 'live' ? [] : (comp.odds || []))]
+      : [game._pointValueBook || comp.odds?.[0]].filter(Boolean);
+    const books = candidates.filter(isQuoteSource);
     const liveBooks = books.filter((book) => /live odds/i.test(book.provider?.name || ''));
     const marketBooks = game.state === 'live' && liveBooks.length ? liveBooks : books;
     const add = (market, side, n, price, title) => {
@@ -198,37 +199,37 @@
         line: n, price: parsedPrice, source: title || '',
       };
     };
-    const moneyline = ['away', 'home', 'draw'].map((side) => {
-      const source = marketBooks.find((book) => hasPrice(moneylinePrice(book, side)));
+    const winner = ['away', 'home', 'draw'].map((side) => {
+      const source = marketBooks.find((book) => hasPrice(winnerPrice(book, side)));
       const team = side === 'home' ? source?.homeTeamOdds?.team : source?.awayTeamOdds?.team;
-      return source ? add('ml', side, null, moneylinePrice(source, side), side === 'draw' ? 'Draw' : team?.displayName) : null;
+      return source ? add('winner', side, null, winnerPrice(source, side), side === 'draw' ? 'Draw' : team?.displayName) : null;
     }).filter(Boolean);
-    const spreads = marketBooks.map((book) => ({ book, line: spreadFor(book, game, book.homeTeamOdds || {}, book.awayTeamOdds || {}) }))
-      .filter((entry) => entry.line != null && (hasPrice(spreadPrice(entry.book, 'home')) || hasPrice(spreadPrice(entry.book, 'away'))));
-    const spreadSource = spreads.find((entry) => hasPrice(spreadPrice(entry.book, 'home')) && hasPrice(spreadPrice(entry.book, 'away'))) || spreads[0];
-    const spreadLine = spreadSource?.line;
+    const margins = marketBooks.map((book) => ({ book, line: marginFor(book, game, book.homeTeamOdds || {}, book.awayTeamOdds || {}) }))
+      .filter((entry) => entry.line != null && (hasPrice(marginPrice(entry.book, 'home')) || hasPrice(marginPrice(entry.book, 'away'))));
+    const marginSource = margins.find((entry) => hasPrice(marginPrice(entry.book, 'home')) && hasPrice(marginPrice(entry.book, 'away'))) || margins[0];
+    const marginLine = marginSource?.line;
     const priceAtLine = (side) => {
-      const entry = spreads.find((candidate) => candidate.line === spreadLine && hasPrice(spreadPrice(candidate.book, side)));
-      return entry ? spreadPrice(entry.book, side) : null;
+      const entry = margins.find((candidate) => candidate.line === marginLine && hasPrice(marginPrice(candidate.book, side)));
+      return entry ? marginPrice(entry.book, side) : null;
     };
-    const spread = spreadLine != null ? [
-      add('spread', 'away', -spreadLine, priceAtLine('away'), 'Away'),
-      add('spread', 'home', spreadLine, priceAtLine('home'), 'Home'),
+    const margin = marginLine != null ? [
+      add('margin', 'away', -marginLine, priceAtLine('away'), 'Away'),
+      add('margin', 'home', marginLine, priceAtLine('home'), 'Home'),
     ].filter(Boolean) : [];
     const totals = marketBooks.map((book) => ({ book, line: totalLine(book) }))
-      .filter((entry) => entry.line != null && (hasPrice(totalPrice(entry.book, 'over')) || hasPrice(totalPrice(entry.book, 'under'))));
-    const totalSource = totals.find((entry) => hasPrice(totalPrice(entry.book, 'over')) && hasPrice(totalPrice(entry.book, 'under'))) || totals[0];
+      .filter((entry) => entry.line != null && (hasPrice(totalPrice(entry.book, 'higher')) || hasPrice(totalPrice(entry.book, 'lower'))));
+    const totalSource = totals.find((entry) => hasPrice(totalPrice(entry.book, 'higher')) && hasPrice(totalPrice(entry.book, 'lower'))) || totals[0];
     const selectedTotalLine = totalSource?.line;
     const totalAtLine = (side) => {
       const entry = totals.find((candidate) => candidate.line === selectedTotalLine && hasPrice(totalPrice(candidate.book, side)));
       return entry ? totalPrice(entry.book, side) : null;
     };
     const total = selectedTotalLine != null ? [
-      add('total', 'over', selectedTotalLine, totalAtLine('over'), 'Over'),
-      add('total', 'under', selectedTotalLine, totalAtLine('under'), 'Under'),
+      add('total', 'higher', selectedTotalLine, totalAtLine('higher'), 'Higher'),
+      add('total', 'lower', selectedTotalLine, totalAtLine('lower'), 'Lower'),
     ].filter(Boolean) : [];
     const suspended = !['scheduled', 'live'].includes(game.state) || (books.length > 0 && books.every((book) => book.isClosed === true));
-    return { moneyline, spread, total, suspended, all: [...moneyline, ...spread, ...total], move: {}, updatedAt };
+    return { winner, margin, total, suspended, all: [...winner, ...margin, ...total], move: {}, updatedAt };
   }
 
   function selectedGroup() { return cfbGroup; }
@@ -252,16 +253,16 @@
   }
 
   // Keep old unresolved tickets gradeable after their games fall out of the current scoreboard cache.
-  async function loadOldBetGames(now) {
+  async function loadOldChallengeGames(now) {
     const wantedByGroup = new Map();
-    for (const bet of TO.data?.bets || []) {
-      if (bet.status !== 'open') continue;
-      for (const leg of bet.legs || []) {
-        if (leg.result !== 'pending' || !leg.gameId || !LEAGUES[leg.league] || byId(leg.gameId)) continue;
-        const day = TO.dayKey(bet.placedAt);
-        const key = `${leg.league}|${day}`;
-        if (!wantedByGroup.has(key)) wantedByGroup.set(key, { league: leg.league, day, ids: new Set() });
-        wantedByGroup.get(key).ids.add(String(leg.gameId));
+    for (const challenge of TO.data?.challenges || []) {
+      if (challenge.status !== 'open') continue;
+      for (const pick of challenge.picks || []) {
+        if (pick.result !== 'pending' || !pick.gameId || !LEAGUES[pick.league] || byId(pick.gameId)) continue;
+        const day = TO.dayKey(challenge.placedAt);
+        const key = `${pick.league}|${day}`;
+        if (!wantedByGroup.has(key)) wantedByGroup.set(key, { league: pick.league, day, ids: new Set() });
+        wantedByGroup.get(key).ids.add(String(pick.gameId));
       }
     }
     const jobs = [...wantedByGroup.values()];
@@ -272,7 +273,7 @@
     results.forEach((result) => {
       if (result.status !== 'fulfilled') return;
       for (const game of result.value) {
-        game.odds = { moneyline: [], spread: [], total: [], all: [], suspended: true };
+        game.pointValue = { winner: [], margin: [], total: [], all: [], suspended: true };
         const games = cache.get(game.league) || [];
         if (!games.some((item) => item.id === game.id)) {
           cache.set(game.league, [...games, game]);
@@ -283,57 +284,57 @@
     return loaded;
   }
 
-  async function resolveOddsItem(item) {
+  async function resolvePointValueItem(item) {
     if (!item?.$ref) return item;
     const response = await fetch(item.$ref.replace(/^http:/, 'https:'), { cache: 'no-store' });
-    if (!response.ok) throw new Error(`ESPN odds returned ${response.status}`);
+    if (!response.ok) throw new Error(`ESPN point value returned ${response.status}`);
     return response.json();
   }
 
-  async function fetchEventOdds(game, now) {
-    const cached = oddsCache.get(game.id);
+  async function fetchEventPointValue(game, now) {
+    const cached = pointValueCache.get(game.id);
     if (cached && now - cached.at < 25000) return cached.books || (cached.book ? [cached.book] : []);
     const [,, coreLeague] = LEAGUES[game.league];
     const endpoint = `${ESPN_CORE}/${game.sport}/leagues/${coreLeague}/events/${game.eventID}/competitions/${game.competitionID}/odds?limit=10`;
     try {
       const response = await fetch(endpoint, { cache: 'no-store' });
-      if (!response.ok) throw new Error(`ESPN odds returned ${response.status}`);
+      if (!response.ok) throw new Error(`ESPN point value returned ${response.status}`);
       const payload = await response.json();
       const items = payload.items || (payload.provider || payload.homeTeamOdds ? [payload] : []);
-      const refs = items.filter((item) => isBookmaker(item)).slice(0, 8);
-      const books = await Promise.allSettled(refs.map(resolveOddsItem));
+      const refs = items.filter((item) => isQuoteSource(item)).slice(0, 8);
+      const books = await Promise.allSettled(refs.map(resolvePointValueItem));
       const availableBooks = books.filter((result) => result.status === 'fulfilled').map((result) => result.value)
-        .filter((book) => isBookmaker(book) && (book.overUnder != null || book.spread != null || book.homeTeamOdds?.spread != null
-          || hasPrice(moneylinePrice(book, 'home')) || hasPrice(moneylinePrice(book, 'away')) || hasPrice(moneylinePrice(book, 'draw')))
+        .filter((book) => isQuoteSource(book) && (book.overUnder != null || book.spread != null || book.homeTeamOdds?.spread != null
+          || hasPrice(winnerPrice(book, 'home')) || hasPrice(winnerPrice(book, 'away')) || hasPrice(winnerPrice(book, 'draw')))
           && (hasPrice(book.overOdds ?? book.overUnderOdds) || hasPrice(book.underOdds ?? book.underUnderOdds)
             || hasPrice(book.homeTeamOdds?.spreadOdds) || hasPrice(book.awayTeamOdds?.spreadOdds)
-            || hasPrice(moneylinePrice(book, 'home')) || hasPrice(moneylinePrice(book, 'away')) || hasPrice(moneylinePrice(book, 'draw'))));
+            || hasPrice(winnerPrice(book, 'home')) || hasPrice(winnerPrice(book, 'away')) || hasPrice(winnerPrice(book, 'draw'))));
       const preferred = game.state === 'live'
         ? availableBooks.sort((a, b) => Number(/live odds/i.test(b.provider?.name || '')) - Number(/live odds/i.test(a.provider?.name || '')))
         : availableBooks.sort((a, b) => Number(/live odds/i.test(a.provider?.name || '')) - Number(/live odds/i.test(b.provider?.name || '')));
-      oddsCache.set(game.id, { at: now, books: preferred });
+      pointValueCache.set(game.id, { at: now, books: preferred });
       return preferred;
     } catch (error) {
-      console.warn('ESPN odds unavailable:', error);
-      oddsCache.set(game.id, { at: now, books: [] });
+      console.warn('ESPN point value unavailable:', error);
+      pointValueCache.set(game.id, { at: now, books: [] });
       return [];
     }
   }
 
-  async function loadOdds(games, now) {
+  async function loadPointValue(games, now) {
     let cursor = 0;
     const worker = async () => {
       while (cursor < games.length) {
         const game = games[cursor++];
         const scoreboardBook = game._competition.odds?.[0];
-        const hasScoreboardLines = game.state !== 'live' && isBookmaker(scoreboardBook)
+        const hasScoreboardLines = game.state !== 'live' && isQuoteSource(scoreboardBook)
           && hasPrice(scoreboardBook.homeTeamOdds?.spreadOdds)
           && hasPrice(scoreboardBook.awayTeamOdds?.spreadOdds)
           && hasPrice(scoreboardBook.overOdds) && hasPrice(scoreboardBook.underOdds)
-          && hasPrice(moneylinePrice(scoreboardBook, 'home'))
-          && hasPrice(moneylinePrice(scoreboardBook, 'away'));
-        if (!hasScoreboardLines) game._oddsBooks = await fetchEventOdds(game, now);
-        game.odds = makeOdds(game, now);
+          && hasPrice(winnerPrice(scoreboardBook, 'home'))
+          && hasPrice(winnerPrice(scoreboardBook, 'away'));
+        if (!hasScoreboardLines) game._pointValueBooks = await fetchEventPointValue(game, now);
+        game.pointValue = makePointValue(game, now);
       }
     };
     await Promise.all(Array.from({ length: Math.min(6, games.length) }, worker));
@@ -421,7 +422,7 @@
       keepCurrentGames.forEach((game) => gamesById.set(game.id, game));
       fetched.forEach((game) => gamesById.set(game.id, game));
       const games = [...gamesById.values()];
-      games.forEach((game) => { game.odds = makeOdds(game, now); });
+      games.forEach((game) => { game.pointValue = makePointValue(game, now); });
       cache.set(league, games);
     });
     loadError = failed && !results.some((r) => r.status === 'fulfilled');
@@ -431,11 +432,11 @@
     loading = false;
     loadingDayKey = '';
     TO.emit('live:updated');
-    loadOldBetGames(completedAt).then((loaded) => {
+    loadOldChallengeGames(completedAt).then((loaded) => {
       if (loaded) TO.emit('live:updated');
-    }).catch((error) => console.warn('Could not load scores for an old open bet:', error));
+    }).catch((error) => console.warn('Could not load scores for an old open challenge:', error));
     const todaysGames = [...cache.values()].flat().filter((game) => game.start >= dayStart - TO.DAY);
-    loadOdds(todaysGames, completedAt);
+    loadPointValue(todaysGames, completedAt);
     if (refreshQueued) {
       refreshQueued = false;
       updatedAt = 0;
@@ -482,8 +483,8 @@
       const before = new Map((upcoming.get(league) || []).map((game) => [game.id, game]));
       games.forEach((game) => {
         const old = before.get(game.id);
-        if (old) { game._oddsBooks = old._oddsBooks; game._oddsRequested = old._oddsRequested; }
-        game.odds = makeOdds(game, now);
+        if (old) { game._pointValueBooks = old._pointValueBooks; game._pointValueRequested = old._pointValueRequested; }
+        game.pointValue = makePointValue(game, now);
       });
       upcoming.set(league, games);
     });
@@ -501,8 +502,8 @@
     return null;
   }
 
-  // Keep the existing selection, commitment and settlement code, but supply ESPN game data and prices.
-  const simGame = S.game, simBoard = S.board, simOdds = S.odds, simCurrent = S.currentSelection, simGrade = S.grade;
+  // Keep the existing selection, commitment and resolution code, but supply ESPN game data and prices.
+  const simGame = S.game, simBoard = S.board, simPointValue = S.pointValue, simCurrent = S.currentSelection, simGrade = S.grade;
   S.game = (id, now) => byId(id) || simGame(id, now);
   /** options.day: 0 = today (live and today's games), 1 = tomorrow (up to UPCOMING_DAYS).
    *  options.peek: just look (for counts), don't start loading challenge targets. */
@@ -517,8 +518,8 @@
       const games = leagues.flatMap((league) => upcoming.get(league) || [])
         .filter((game) => dayOffset(game.start, now) === day)
         .sort((a, b) => a.start - b.start);
-      const needOdds = options.peek ? [] : games.filter((game) => !game._oddsRequested);
-      if (needOdds.length) { needOdds.forEach((game) => { game._oddsRequested = true; }); loadOdds(needOdds, now); }
+      const needPointValue = options.peek ? [] : games.filter((game) => !game._pointValueRequested);
+      if (needPointValue.length) { needPointValue.forEach((game) => { game._pointValueRequested = true; }); loadPointValue(needPointValue, now); }
       return games;
     }
     const [start, end] = todayBounds(now);
@@ -529,13 +530,13 @@
       return (game.start >= start && game.start < end) || game.state === 'live';
     }).sort((a, b) => (a.state === 'live' ? 0 : 1) - (b.state === 'live' ? 0 : 1) || a.start - b.start);
   };
-  S.odds = (id, now) => byId(id)?.odds || simOdds(id, now);
+  S.pointValue = (id, now) => byId(id)?.pointValue || simPointValue(id, now);
   S.currentSelection = (id, now) => {
     const [ref] = id.split('|');
     const game = byId(ref);
     if (!game) return simCurrent(id, now);
-    const selection = game.odds.all.find((item) => item.id === id);
-    return { sel: selection || null, open: !!selection && !game.odds.suspended && game.state !== 'final' };
+    const selection = game.pointValue.all.find((item) => item.id === id);
+    return { sel: selection || null, open: !!selection && !game.pointValue.suspended && game.state !== 'final' };
   };
   S.grade = (selection, now) => {
     const game = byId(selection.gameId);

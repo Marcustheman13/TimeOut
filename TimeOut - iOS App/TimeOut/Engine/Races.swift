@@ -10,7 +10,7 @@ final class Races {
         var id: Int
         var number: Int
         var name: String
-        var americanOdds: Int
+        var americanPointValue: Int
         var form: String
         var jockey: String
         var color: String
@@ -26,7 +26,7 @@ final class Races {
         var finishedAt: Ms?
         var winnerId: Int?
         var order: [Int]?
-        var betId: String?
+        var challengeId: String?
     }
 
     private struct Saved: Codable {
@@ -36,11 +36,11 @@ final class Races {
     }
 
     static let horses: [Horse] = [
-        Horse(id: 1, number: 1, name: "Midnight Surge", americanOdds: 180, form: "2-1-2", jockey: "R. Vance", color: "#4fb3ff", speed: 1.025, variance: 0.18),
-        Horse(id: 2, number: 2, name: "Silicon Sprint", americanOdds: 220, form: "1-3-1", jockey: "K. Chen", color: "#22d66e", speed: 1.018, variance: 0.19),
-        Horse(id: 3, number: 3, name: "Digital Blitz", americanOdds: 260, form: "3-2-1", jockey: "T. Hayes", color: "#ffc940", speed: 1.010, variance: 0.20),
-        Horse(id: 4, number: 4, name: "Golden Hour", americanOdds: 310, form: "2-1-4", jockey: "L. Moreno", color: "#ff718d", speed: 1.002, variance: 0.21),
-        Horse(id: 5, number: 5, name: "Circuit Breaker", americanOdds: 380, form: "1-4-2", jockey: "D. Sterling", color: "#c58cff", speed: 0.995, variance: 0.22),
+        Horse(id: 1, number: 1, name: "Midnight Surge", americanPointValue: 180, form: "2-1-2", jockey: "R. Vance", color: "#4fb3ff", speed: 1.025, variance: 0.18),
+        Horse(id: 2, number: 2, name: "Silicon Sprint", americanPointValue: 220, form: "1-3-1", jockey: "K. Chen", color: "#22d66e", speed: 1.018, variance: 0.19),
+        Horse(id: 3, number: 3, name: "Digital Blitz", americanPointValue: 260, form: "3-2-1", jockey: "T. Hayes", color: "#ffc940", speed: 1.010, variance: 0.20),
+        Horse(id: 4, number: 4, name: "Golden Hour", americanPointValue: 310, form: "2-1-4", jockey: "L. Moreno", color: "#ff718d", speed: 1.002, variance: 0.21),
+        Horse(id: 5, number: 5, name: "Circuit Breaker", americanPointValue: 380, form: "1-4-2", jockey: "D. Sterling", color: "#c58cff", speed: 0.995, variance: 0.22),
     ]
 
     private static let key = "timeout.virtualRaces"
@@ -76,7 +76,7 @@ final class Races {
 
     func selection(_ race: Race, _ runner: Horse) -> Selection {
         Selection(id: "race-\(race.number)|race|\(runner.id)", kind: "race", raceId: "race-\(race.number)", horseId: runner.id,
-                  market: "race", side: String(runner.id), line: nil, price: runner.americanOdds)
+                  market: "race", side: String(runner.id), line: nil, price: runner.americanPointValue)
     }
 
     func currentSelection(_ selId: String) -> (sel: Selection?, open: Bool)? {
@@ -94,16 +94,16 @@ final class Races {
 
     private func weightedWinner(_ seed: String) -> Int {
         let rng = TO.RNG(seed)
-        let total = Self.horses.reduce(0) { $0 + Self.implied($1.americanOdds) }
+        let total = Self.horses.reduce(0) { $0 + Self.implied($1.americanPointValue) }
         var roll = rng() * total
         for h in Self.horses {
-            roll -= Self.implied(h.americanOdds)
+            roll -= Self.implied(h.americanPointValue)
             if roll <= 0 { return h.id }
         }
         return Self.horses[0].id
     }
 
-    private func begin(seed: String, now: Ms, betId: String?) {
+    private func begin(seed: String, now: Ms, challengeId: String?) {
         var race = current
         let winnerId = weightedWinner("\(race.number)-\(seed)-\(Int64(now))")
         let rest = Self.horses.filter { $0.id != winnerId }.sorted {
@@ -114,22 +114,22 @@ final class Races {
         race.finishAt = now + 12_000
         race.winnerId = winnerId
         race.order = [winnerId] + rest.map(\.id)
-        race.betId = betId
+        race.challengeId = challengeId
         data.current = race
         persist()
     }
 
-    func startForBet(_ bet: Bet, now: Ms = TO.now()) throws {
+    func startForChallenge(_ challenge: Challenge, now: Ms = TO.now()) throws {
         let race = current
-        guard race.status == "open", bet.legs.first?.raceId == "race-\(race.number)" else {
-            throw AppError(code: "closed", message: "That race is no longer taking bets.")
+        guard race.status == "open", challenge.picks.first?.raceId == "race-\(race.number)" else {
+            throw AppError(code: "closed", message: "That race is no longer taking challenges.")
         }
-        begin(seed: bet.id, now: now, betId: bet.id)
+        begin(seed: challenge.id, now: now, challengeId: challenge.id)
     }
 
     func startForViewing() {
         guard current.status == "open" else { return }
-        begin(seed: "watch-\(TO.uid("race"))", now: TO.now(), betId: nil)
+        begin(seed: "watch-\(TO.uid("race"))", now: TO.now(), challengeId: nil)
     }
 
     /// Moves a finished race into history and opens the next one.
@@ -147,15 +147,15 @@ final class Races {
         return true
     }
 
-    func grade(_ leg: Leg, _ now: Ms = TO.now()) -> String {
+    func grade(_ pick: Pick, _ now: Ms = TO.now()) -> String {
         finalizeIfDone(now)
-        guard let race = get(leg.raceId ?? leg.selId.split(separator: "|").first.map(String.init)) else { return "void" }
+        guard let race = get(pick.raceId ?? pick.selId.split(separator: "|").first.map(String.init)) else { return "void" }
         if race.status != "final" { return "pending" }
-        return race.winnerId == (leg.horseId ?? Int(leg.side ?? "")) ? "won" : "lost"
+        return race.winnerId == (pick.horseId ?? Int(pick.side ?? "")) ? "won" : "lost"
     }
 
     static func statusText(_ race: Race) -> String {
         if race.status == "running" { return "Race in progress" }
-        return race.status == "final" ? "Race #\(race.number) finished" : "Bets open"
+        return race.status == "final" ? "Race #\(race.number) finished" : "Challenges open"
     }
 }

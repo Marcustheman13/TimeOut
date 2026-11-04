@@ -18,7 +18,7 @@ Every target that has the Family Controls capability needs its own approval:
 |---|---|
 | App | `com.marcuswilliams.staketime` |
 | Lock monitor | `com.marcuswilliams.staketime.ScreenTimeMonitor` |
-| Custom lock screen | `com.marcuswilliams.staketime.StakeTimeShield` |
+| Custom lock screen | `com.marcuswilliams.staketime.PledgeTimeShield` |
 
 ## Suggested answers
 
@@ -30,11 +30,11 @@ Edit these to fit. The form asks what the app does and how it uses the Screen Ti
 parental-control app and it doesn't manage other people's devices.
 
 **What the app does:**
-> TimeOut is a free sports-prediction game that helps people who struggle with sports-betting addiction get
-> the excitement of betting without risking money. Instead of money, users stake minutes of their own daily
+> TimeOut is a free sports-prediction game that helps people who struggle with sports-challenging addiction get
+> the excitement of challenging without risking money. Instead of money, users pledge minutes of their own daily
 > screen time. Each user gets a 60-minute daily allowance. Winning picks add minutes to the next day's
 > screen-time limit, and losing picks remove minutes. No real money is ever involved, and the app has no
-> connection to any real sportsbook.
+> connection to any real challenge app.
 
 **How it uses Family Controls / Screen Time:**
 > After the user grants individual authorization, they choose which apps and categories count toward their
@@ -47,7 +47,7 @@ parental-control app and it doesn't manage other people's devices.
 
 **Why the capability is needed:**
 > Setting a real screen-time limit that the user commits to in advance is the core of the product. It's
-> what makes the stakes real without money. Without Family Controls the limit couldn't be enforced.
+> what makes the pledges real without money. Without Family Controls the limit couldn't be enforced.
 
 ## After approval
 

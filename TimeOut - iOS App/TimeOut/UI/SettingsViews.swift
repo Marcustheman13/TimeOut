@@ -5,19 +5,26 @@ import SwiftUI
 enum SettingsModel {
     static let sections: [String: (title: String, icon: IconName)] = [
         "screentime": ("Screen time", .hourglass),
-        "races": ("Virtual Racing", .target),
-        "status": ("Tier & streak", .trophy),
-        "sports": ("Sports on Home", .grid),
-        "notifications": ("Notifications", .bell),
-        "privacy": ("What friends can see", .eye),
+        "sports": ("Sports & races", .grid),
+        "notifications": ("Notifications & privacy", .bell),
         "account": ("Account", .user),
     ]
+
+    /// Older entry points still name sections that now live inside a combined page.
+    static func canonical(_ section: String) -> String {
+        switch section {
+        case "status": return "screentime"
+        case "races": return "sports"
+        case "privacy": return "notifications"
+        default: return section
+        }
+    }
 
     static func open(_ section: String) {
         let ui = UIState.shared
         ui.closeAllSheets()
         ui.drawerOpen = false
-        ui.openPage(.settings(section))
+        ui.openPage(.settings(canonical(section)))
     }
 }
 
@@ -57,11 +64,8 @@ struct DrawerView: View {
                     ScrollView {
                         VStack(spacing: 2) {
                             item("screentime", "\(wl.phoneLeft) min left")
-                            item("races", nil)
-                            item("status", wl.streak > 0 ? "\(wl.streak)-day streak" : nil)
                             item("sports", nil)
                             item("notifications", nil)
-                            item("privacy", nil)
                             item("account", nil)
                             row(.help, "How TimeOut works", nil) { HowItWorks.open() }
                             row(.info, "Help & support", nil) { openURL(API.supportURL) }
@@ -116,28 +120,29 @@ struct SettingsPage: View {
 
     var body: some View {
         let _ = app.tick
-        return Group {
-            if section == "races" {
-                RacesView()
-            } else {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 16) {
-                        switch section {
-                        case "screentime": ScreenTimeSection()
-                        case "status": StatusSection()
-                        case "sports": SportsSection()
-                        case "notifications": NotificationsSection()
-                        case "privacy": PrivacySection()
-                        case "account": AccountSection()
-                        default: EmptyView()
-                        }
-                    }
-                    .padding(.top, 4).padding(.horizontal, 16).padding(.bottom, 40)
+        return ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                switch section {
+                case "screentime":
+                    ScreenTimeSection()
+                    Text("Tier & streak").eyebrow()
+                    StatusSection()
+                case "sports":
+                    SportsSection()
+                    Text("Virtual racing").eyebrow()
+                    RacesView(embedded: true)
+                case "notifications":
+                    NotificationsSection()
+                    Text("What friends can see").eyebrow()
+                    PrivacySection()
+                case "account": AccountSection()
+                default: EmptyView()
                 }
-                .scrollIndicators(.hidden)
-                .scrollDismissesKeyboard(.interactively)
             }
+            .padding(.top, 4).padding(.horizontal, 16).padding(.bottom, 40)
         }
+        .scrollIndicators(.hidden)
+        .scrollDismissesKeyboard(.interactively)
     }
 }
 
@@ -168,9 +173,9 @@ struct ScreenTimeSection: View {
         let overridesLeft = Rules.maxOverrides - wl.overridesUsed
         VStack(alignment: .leading, spacing: 8) {
             H2("How your screen time works")
-            HowCard(n: 1, title: "\(Rules.daily) betting minutes a day", text: "Your betting balance starts at \(Rules.daily) minutes\(wl.tier.bonus > 0 ? " (plus \(wl.tier.bonus) from your \(wl.tier.title) tier)" : "") and resets at midnight, your local time.")
-            HowCard(n: 2, title: "You bet tomorrow's phone time", text: "Every minute you win is added to tomorrow's limit. Every minute you lose comes off it.")
-            HowCard(n: 3, title: "The math", text: "Tomorrow's limit = \(Rules.daily) min + today's bet results − emergency unlock penalties.")
+            HowCard(n: 1, title: "\(Rules.daily) challenge minutes a day", text: "Your pledge balance starts at \(Rules.daily) minutes\(wl.tier.bonus > 0 ? " (plus \(wl.tier.bonus) from your \(wl.tier.title) tier)" : "") and resets at midnight, your local time.")
+            HowCard(n: 2, title: "You challenge tomorrow's phone time", text: "Every minute you win is added to tomorrow's limit. Every minute you lose comes off it.")
+            HowCard(n: 3, title: "The math", text: "Tomorrow's limit = \(Rules.daily) min + today's challenge results − emergency unlock penalties.")
         }
         .card()
 
@@ -181,7 +186,7 @@ struct ScreenTimeSection: View {
                 HStack(spacing: 4) { Text("Resets in"); Countdown(target: TO.nextMidnight()) }.font(.barlow(11.5, 700)).foregroundStyle(Theme.muted)
             }
             BRow(label: "Base limit", value: "\(Rules.daily) min")
-            BRow(label: "Yesterday's bets", value: Fmt.signedMin(wl.yesterdayNet), color: wl.yesterdayNet > 0 ? Theme.accent : wl.yesterdayNet < 0 ? Theme.loss : Theme.text)
+            BRow(label: "Yesterday's challenges", value: Fmt.signedMin(wl.yesterdayNet), color: wl.yesterdayNet > 0 ? Theme.accent : wl.yesterdayNet < 0 ? Theme.loss : Theme.text)
             if wl.penaltyToday > 0 { BRow(label: "Emergency unlock penalty", value: "−\(wl.penaltyToday) min", color: Theme.loss) }
             if s.minLimit > 0 && Rules.daily + wl.yesterdayNet - wl.penaltyToday < s.minLimit { BRow(label: "Raised to your minimum", value: "\(s.minLimit) min") }
             if wl.emergencyToday > 0 { BRow(label: "Emergency unlocks used", value: "+\(wl.emergencyToday) min", color: Theme.warn) }
@@ -200,12 +205,12 @@ struct ScreenTimeSection: View {
         VStack(alignment: .leading, spacing: 8) {
             H2("Tomorrow, so far")
             BRow(label: "Base limit", value: "\(Rules.daily) min")
-            BRow(label: "Today's settled bets", value: Fmt.signedMin(wl.todayNet), color: wl.todayNet > 0 ? Theme.accent : wl.todayNet < 0 ? Theme.loss : Theme.text)
+            BRow(label: "Today's resolved challenges", value: Fmt.signedMin(wl.todayNet), color: wl.todayNet > 0 ? Theme.accent : wl.todayNet < 0 ? Theme.loss : Theme.text)
             if wl.penaltyTomorrow > 0 { BRow(label: "Emergency unlock penalty", value: "−\(wl.penaltyTomorrow) min", color: Theme.loss) }
             HRule()
             BRow(label: "Tomorrow's phone time", value: "\(wl.tomorrowLimit) min",
                  color: wl.tomorrowLimit > Rules.daily ? Theme.accent : wl.tomorrowLimit < Rules.daily ? Theme.loss : Theme.text)
-            if wl.atRisk > 0 { Text("\(wl.atRisk) min in open bets will change this when they settle.").font(.barlow(11.5)).foregroundStyle(Theme.muted) }
+            if wl.atRisk > 0 { Text("\(wl.atRisk) min in open challenges will change this when they resolve.").font(.barlow(11.5)).foregroundStyle(Theme.muted) }
         }
         .card()
 
@@ -324,7 +329,7 @@ struct ScreenTimeSection: View {
     private func setMinLimit(_ v: Int) {
         guard v != store.data?.settings.minLimit else { return }
         Task {
-            let body = v > 0 ? "No matter how many bets you lose, you'll always get at least **\(v) minutes** of phone time a day." : "Losses will be able to take your phone time all the way to 0 minutes."
+            let body = v > 0 ? "No matter how many challenges you lose, you'll always get at least **\(v) minutes** of phone time a day." : "Losses will be able to take your phone time all the way to 0 minutes."
             guard await ui.confirm("Change your minimum phone time?", body, confirm: "Change it") else { return }
             store.updateSettings { $0.minLimit = v }
             ScreenTime.shared.sync()
@@ -433,7 +438,7 @@ struct NotificationsSection: View {
         let n = store.data?.settings.notify ?? NotifySettings()
         Text("These show as banners at the top of the screen.").font(.barlow(13)).foregroundStyle(Theme.text2)
         ListBox {
-            row(.ticket, "Bet results", "When a bet wins, loses or is voided", n.settled) { v in store.updateSettings { $0.notify.settled = v } }
+            row(.ticket, "Challenge results", "When a challenge wins, loses or is voided", n.resolved) { v in store.updateSettings { $0.notify.resolved = v } }
             row(.userPlus, "Friend requests", "When someone adds or accepts you", n.friends) { v in store.updateSettings { $0.notify.friends = v } }
             row(.phone, "Low phone time", "Before your locked apps close", n.lowTime) { v in store.updateSettings { $0.notify.lowTime = v } }
         }
@@ -453,7 +458,7 @@ struct PrivacySection: View {
         ListBox {
             row(.chart, "My record", "Wins and losses", p.record) { v in store.updateSettings { $0.privacy.record = v } }
             row(.hourglass, "Minutes won or lost", "Your leaderboard number", p.minutes) { v in store.updateSettings { $0.privacy.minutes = v } }
-            row(.ticket, "My open bets", "Picks you currently have open", p.bets) { v in store.updateSettings { $0.privacy.bets = v } }
+            row(.ticket, "My open challenges", "Picks you currently have open", p.challenges) { v in store.updateSettings { $0.privacy.challenges = v } }
         }
     }
 
@@ -586,8 +591,8 @@ struct AccountSection: View {
         Task {
             let server = store.account?.server != nil
             let body = server
-                ? "This permanently deletes your TimeOut account, bets, wallet and settings from TimeOut's servers and this device, and takes you off your teams. It can't be undone."
-                : "This removes your account, bets and friends from this device. It can't be undone."
+                ? "This permanently deletes your TimeOut account, challenges, wallet and settings from TimeOut's servers and this device, and takes you off your teams. It can't be undone."
+                : "This removes your account, challenges and friends from this device. It can't be undone."
             guard await ui.confirm("Delete your account?", body, confirm: "Delete account", kind: .danger) else { return }
             if server {
                 deleting = true
@@ -609,10 +614,10 @@ struct AccountSection: View {
 struct HowItWorksSheet: View {
     var body: some View {
         SheetFrame("How TimeOut works", close: { UIState.shared.closeSheet(.how) }) {
-            HowCard(n: 1, title: "Bet screen time, not money", text: "You get \(Rules.daily) betting minutes every day. They reset at midnight.")
-            HowCard(n: 2, title: "Winning buys you phone time", text: "Win a bet and the minutes you win are added to tomorrow's phone time. Lose and they come off it.")
-            HowCard(n: 3, title: "Bets settle on their own", text: "When a game ends, your bet pays out within minutes. Postponed games are voided and you get your stake back.")
-            HowCard(n: 4, title: "Out of minutes? Wait for midnight", text: "At 0 minutes, betting locks until the reset. Emergency unlocks exist, but they cost you tomorrow.")
+            HowCard(n: 1, title: "Challenge screen time, not money", text: "You get \(Rules.daily) challenge minutes every day. They reset at midnight.")
+            HowCard(n: 2, title: "Winning buys you phone time", text: "Win a challenge and the minutes you win are added to tomorrow's phone time. Lose and they come off it.")
+            HowCard(n: 3, title: "Challenges resolve on their own", text: "When a game ends, your challenge pays out within minutes. Postponed games are voided and you get your pledge back.")
+            HowCard(n: 4, title: "Out of minutes? Wait for midnight", text: "At 0 minutes, new pledges pause until the reset. Emergency unlocks exist, but they cost you tomorrow.")
         } foot: {
             Button("Got it") { UIState.shared.closeSheet(.how) }.buttonStyle(.btn(.primary, full: true))
         }

@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-/// ESPN live scores and sportsbook lines. A port of the web demo's live.js.
+/// ESPN live scores and challenge app lines. A port of the web demo's live.js.
 @Observable
 final class LiveFeed {
     static let shared = LiveFeed()
@@ -23,7 +23,7 @@ final class LiveFeed {
     static let upcomingDays = 1
     private static let upcomingTTL: Ms = 10 * TO.MIN
 
-    /// Bumped whenever scores or odds change, so views that read it re-render.
+    /// Bumped whenever scores or point value change, so views that read it re-render.
     private(set) var version = 0
     /// Bumped when a game's ESPN summary (stats) arrives.
     private(set) var detailsVersion = 0
@@ -38,10 +38,10 @@ final class LiveFeed {
     @ObservationIgnored private var cache: [String: [Game]] = [:]
     @ObservationIgnored private var upcoming: [String: [Game]] = [:]
     @ObservationIgnored private var competitions: [String: JSON] = [:]
-    @ObservationIgnored private var oddsBooks: [String: [JSON]] = [:]
-    @ObservationIgnored private var boards: [String: OddsBoard] = [:]
-    @ObservationIgnored private var oddsRequested: Set<String> = []
-    @ObservationIgnored private var eventOddsCache: [String: (at: Ms, books: [JSON])] = [:]
+    @ObservationIgnored private var pointValueBooks: [String: [JSON]] = [:]
+    @ObservationIgnored private var boards: [String: PointValueBoard] = [:]
+    @ObservationIgnored private var pointValueRequested: Set<String> = []
+    @ObservationIgnored private var eventPointValueCache: [String: (at: Ms, books: [JSON])] = [:]
     @ObservationIgnored private var details: [String: JSON] = [:]
     @ObservationIgnored private var detailLoading: Set<String> = []
     @ObservationIgnored private var updatedAt: Ms = 0
@@ -169,7 +169,7 @@ final class LiveFeed {
         return (g, comp)
     }
 
-    // MARK: Odds parsing
+    // MARK: Point value parsing
 
     private static func american(_ value: JSON) -> Int? {
         guard let n = value.number, n.isFinite, n != 0 else { return nil }
@@ -177,36 +177,37 @@ final class LiveFeed {
     }
     private static func hasPrice(_ value: JSON) -> Bool { american(value) != nil }
 
-    private static func marketPrice(_ teamOdds: JSON, _ market: String) -> JSON {
+    private static func marketPrice(_ teamPointValue: JSON, _ market: String) -> JSON {
         func value(_ entry: JSON) -> JSON {
             let simple: JSON
             switch entry { case .number, .string: simple = entry; default: simple = .null }
             return entry["american"] ?? entry["alternateDisplayValue"] ?? simple
         }
-        return value(teamOdds[market]) ?? value(teamOdds["current"][market])
+        return value(teamPointValue[market]) ?? value(teamPointValue["current"][market])
     }
 
-    private static func moneylinePrice(_ book: JSON, _ side: String) -> JSON {
+    private static func winnerPrice(_ book: JSON, _ side: String) -> JSON {
         if side == "draw" {
             return marketPrice(book["drawOdds"], "moneyLine") ?? book["drawOdds"]["moneyLine"]
                 ?? book["moneyline"]["draw"]["current"]["odds"] ?? book["moneyline"]["draw"]["close"]["odds"] ?? book["moneyline"]["draw"]["open"]["odds"]
         }
-        let teamOdds = side == "home" ? book["homeTeamOdds"] : book["awayTeamOdds"]
-        return marketPrice(teamOdds, "moneyLine") ?? teamOdds["moneyline"]
+        let teamPointValue = side == "home" ? book["homeTeamOdds"] : book["awayTeamOdds"]
+        return marketPrice(teamPointValue, "moneyLine") ?? teamPointValue["moneyline"]
             ?? book["moneyline"][side]["current"]["odds"] ?? book["moneyline"][side]["close"]["odds"] ?? book["moneyline"][side]["open"]["odds"]
     }
 
-    private static func spreadPrice(_ book: JSON, _ side: String) -> JSON {
-        let teamOdds = side == "home" ? book["homeTeamOdds"] : book["awayTeamOdds"]
+    private static func marginPrice(_ book: JSON, _ side: String) -> JSON {
+        let teamPointValue = side == "home" ? book["homeTeamOdds"] : book["awayTeamOdds"]
         let market = book["pointSpread"][side]
-        return marketPrice(teamOdds, "spread") ?? teamOdds["spreadOdds"]
+        return marketPrice(teamPointValue, "spread") ?? teamPointValue["spreadOdds"]
             ?? market["current"]["odds"] ?? market["close"]["odds"] ?? market["open"]["odds"]
             ?? (side == "home" ? book["homeSpreadOdds"] : book["awaySpreadOdds"])
     }
 
     private static func totalPrice(_ book: JSON, _ side: String) -> JSON {
-        let flat = side == "over" ? (book["overOdds"] ?? book["overUnderOdds"]) : (book["underOdds"] ?? book["underUnderOdds"])
-        let market = book["total"][side].truthy ? book["total"][side] : book["overUnder"][side]
+        let espnSide = side == "higher" ? "over" : side == "lower" ? "under" : side
+        let flat = espnSide == "over" ? (book["overOdds"] ?? book["overUnderOdds"]) : (book["underOdds"] ?? book["underUnderOdds"])
+        let market = book["total"][espnSide].truthy ? book["total"][espnSide] : book["overUnder"][espnSide]
         return flat ?? market["current"]["odds"] ?? market["close"]["odds"] ?? market["open"]["odds"]
     }
 
@@ -215,7 +216,7 @@ final class LiveFeed {
         return raw
     }
 
-    private static func isBookmaker(_ book: JSON) -> Bool {
+    private static func isQuoteSource(_ book: JSON) -> Bool {
         guard book.truthy else { return false }
         let name = (book["provider"]["name"].string ?? "").lowercased()
         return !(name.contains("numberfire") || name.contains("predictor") || name.contains("win probability"))
@@ -225,16 +226,16 @@ final class LiveFeed {
         (book["provider"]["name"].string ?? "").range(of: "live odds", options: .caseInsensitive) != nil
     }
 
-    private static func spreadFor(_ book: JSON, _ game: Game, _ homeOdds: JSON, _ awayOdds: JSON) -> Double? {
-        let homeMarketLine = homeOdds["current"]["pointSpread"]["alternateDisplayValue"] ?? homeOdds["current"]["pointSpread"]["american"]
-            ?? homeOdds["pointSpread"]["alternateDisplayValue"] ?? homeOdds["pointSpread"]["american"]
+    private static func marginFor(_ book: JSON, _ game: Game, _ homePointValue: JSON, _ awayPointValue: JSON) -> Double? {
+        let homeMarketLine = homePointValue["current"]["pointSpread"]["alternateDisplayValue"] ?? homePointValue["current"]["pointSpread"]["american"]
+            ?? homePointValue["pointSpread"]["alternateDisplayValue"] ?? homePointValue["pointSpread"]["american"]
             ?? book["pointSpread"]["home"]["current"]["line"] ?? book["pointSpread"]["home"]["close"]["line"] ?? book["pointSpread"]["home"]["open"]["line"]
-        let awayMarketLine = awayOdds["current"]["pointSpread"]["alternateDisplayValue"] ?? awayOdds["current"]["pointSpread"]["american"]
-            ?? awayOdds["pointSpread"]["alternateDisplayValue"] ?? awayOdds["pointSpread"]["american"]
+        let awayMarketLine = awayPointValue["current"]["pointSpread"]["alternateDisplayValue"] ?? awayPointValue["current"]["pointSpread"]["american"]
+            ?? awayPointValue["pointSpread"]["alternateDisplayValue"] ?? awayPointValue["pointSpread"]["american"]
             ?? book["pointSpread"]["away"]["current"]["line"] ?? book["pointSpread"]["away"]["close"]["line"] ?? book["pointSpread"]["away"]["open"]["line"]
-        if let direct = (homeMarketLine ?? homeOdds["spread"] ?? book["homeSpread"]).number, direct.isFinite, direct != 0 { return direct }
+        if let direct = (homeMarketLine ?? homePointValue["spread"] ?? book["homeSpread"]).number, direct.isFinite, direct != 0 { return direct }
         if let awayLine = awayMarketLine.number, awayLine.isFinite, awayLine != 0 { return -awayLine }
-        // ESPN's MLB `details` is the moneyline favorite and price, not a run line.
+        // ESPN's MLB `details` is the winner favorite and price, not a run margin.
         if game.sport == "baseball" { return nil }
         let detail = book["details"].text ?? ""
         var value: Double?
@@ -244,8 +245,8 @@ final class LiveFeed {
             value = book["spread"].number
         }
         guard let v = value, v.isFinite, v != 0, abs(v) <= 50 else { return nil }
-        if homeOdds["favorite"].bool == true { return -abs(v) }
-        if awayOdds["favorite"].bool == true { return abs(v) }
+        if homePointValue["favorite"].bool == true { return -abs(v) }
+        if awayPointValue["favorite"].bool == true { return abs(v) }
         let lower = detail.lowercased()
         let named = { (t: Team) in [t.abbr, t.name, t.fullName ?? ""].filter { !$0.isEmpty }.contains { lower.contains($0.lowercased()) } }
         if named(game.home) { return v }
@@ -254,47 +255,47 @@ final class LiveFeed {
         return nil
     }
 
-    private func makeOdds(_ game: Game) -> OddsBoard {
+    private func makePointValue(_ game: Game) -> PointValueBoard {
         let comp = competitions[game.id] ?? .null
-        let fetched = oddsBooks[game.id] ?? []
+        let fetched = pointValueBooks[game.id] ?? []
         let candidates: [JSON] = fetched.isEmpty
             ? [comp["odds"][0]].filter { $0.truthy }
             : fetched + (game.state == .live ? [] : comp["odds"].array)
-        let books = candidates.filter { Self.isBookmaker($0) }
+        let books = candidates.filter { Self.isQuoteSource($0) }
         let liveBooks = books.filter { Self.isLiveBook($0) }
         let marketBooks = game.state == .live && !liveBooks.isEmpty ? liveBooks : books
         func add(_ market: String, _ side: String, _ line: Double?, _ price: JSON, _ title: String?) -> Selection? {
             guard let p = Self.american(price) else { return nil }
             return Selection(id: "\(game.id)|\(market)|\(side)", kind: "game", gameId: game.id, market: market, side: side, line: line, price: p, source: title ?? "")
         }
-        var board = OddsBoard()
-        board.moneyline = ["away", "home", "draw"].compactMap { side in
-            guard let source = marketBooks.first(where: { Self.hasPrice(Self.moneylinePrice($0, side)) }) else { return nil }
+        var board = PointValueBoard()
+        board.winner = ["away", "home", "draw"].compactMap { side in
+            guard let source = marketBooks.first(where: { Self.hasPrice(Self.winnerPrice($0, side)) }) else { return nil }
             let team = side == "home" ? source["homeTeamOdds"]["team"] : source["awayTeamOdds"]["team"]
-            return add("ml", side, nil, Self.moneylinePrice(source, side), side == "draw" ? "Draw" : team["displayName"].string)
+            return add("winner", side, nil, Self.winnerPrice(source, side), side == "draw" ? "Draw" : team["displayName"].string)
         }
-        let spreads = marketBooks.compactMap { book -> (JSON, Double)? in
-            guard let line = Self.spreadFor(book, game, book["homeTeamOdds"], book["awayTeamOdds"]),
-                  Self.hasPrice(Self.spreadPrice(book, "home")) || Self.hasPrice(Self.spreadPrice(book, "away")) else { return nil }
+        let margins = marketBooks.compactMap { book -> (JSON, Double)? in
+            guard let line = Self.marginFor(book, game, book["homeTeamOdds"], book["awayTeamOdds"]),
+                  Self.hasPrice(Self.marginPrice(book, "home")) || Self.hasPrice(Self.marginPrice(book, "away")) else { return nil }
             return (book, line)
         }
-        let spreadSource = spreads.first { Self.hasPrice(Self.spreadPrice($0.0, "home")) && Self.hasPrice(Self.spreadPrice($0.0, "away")) } ?? spreads.first
-        if let spreadLine = spreadSource?.1 {
+        let marginSource = margins.first { Self.hasPrice(Self.marginPrice($0.0, "home")) && Self.hasPrice(Self.marginPrice($0.0, "away")) } ?? margins.first
+        if let marginLine = marginSource?.1 {
             func priceAt(_ side: String) -> JSON {
-                spreads.first { $0.1 == spreadLine && Self.hasPrice(Self.spreadPrice($0.0, side)) }.map { Self.spreadPrice($0.0, side) } ?? .null
+                margins.first { $0.1 == marginLine && Self.hasPrice(Self.marginPrice($0.0, side)) }.map { Self.marginPrice($0.0, side) } ?? .null
             }
-            board.spread = [add("spread", "away", -spreadLine, priceAt("away"), "Away"), add("spread", "home", spreadLine, priceAt("home"), "Home")].compactMap { $0 }
+            board.margin = [add("margin", "away", -marginLine, priceAt("away"), "Away"), add("margin", "home", marginLine, priceAt("home"), "Home")].compactMap { $0 }
         }
         let totals = marketBooks.compactMap { book -> (JSON, Double)? in
-            guard let line = Self.totalLine(book), Self.hasPrice(Self.totalPrice(book, "over")) || Self.hasPrice(Self.totalPrice(book, "under")) else { return nil }
+            guard let line = Self.totalLine(book), Self.hasPrice(Self.totalPrice(book, "higher")) || Self.hasPrice(Self.totalPrice(book, "lower")) else { return nil }
             return (book, line)
         }
-        let totalSource = totals.first { Self.hasPrice(Self.totalPrice($0.0, "over")) && Self.hasPrice(Self.totalPrice($0.0, "under")) } ?? totals.first
+        let totalSource = totals.first { Self.hasPrice(Self.totalPrice($0.0, "higher")) && Self.hasPrice(Self.totalPrice($0.0, "lower")) } ?? totals.first
         if let line = totalSource?.1 {
             func priceAt(_ side: String) -> JSON {
                 totals.first { $0.1 == line && Self.hasPrice(Self.totalPrice($0.0, side)) }.map { Self.totalPrice($0.0, side) } ?? .null
             }
-            board.total = [add("total", "over", line, priceAt("over"), "Over"), add("total", "under", line, priceAt("under"), "Under")].compactMap { $0 }
+            board.total = [add("total", "higher", line, priceAt("higher"), "Higher"), add("total", "lower", line, priceAt("lower"), "Lower")].compactMap { $0 }
         }
         board.suspended = !(game.state == .scheduled || game.state == .live) || (!books.isEmpty && books.allSatisfy { $0["isClosed"].bool == true })
         board.updatedAt = updatedAt
@@ -346,34 +347,34 @@ final class LiveFeed {
         return order.compactMap { events[$0] }.compactMap { gameFrom($0, league: league, sport: sport) }
     }
 
-    private func resolveOddsItem(_ item: JSON) async throws -> JSON {
+    private func resolvePointValueItem(_ item: JSON) async throws -> JSON {
         guard let ref = item["$ref"].string else { return item }
         guard let url = URL(string: ref.replacingOccurrences(of: "http:", with: "https:", options: .anchored)) else { return .null }
         return try await getJSON(url)
     }
 
-    private func fetchEventOdds(_ game: Game, now: Ms) async -> [JSON] {
-        if let cached = eventOddsCache[game.id], now - cached.at < 25_000 { return cached.books }
+    private func fetchEventPointValue(_ game: Game, now: Ms) async -> [JSON] {
+        if let cached = eventPointValueCache[game.id], now - cached.at < 25_000 { return cached.books }
         guard let coreLeague = Self.leagues[game.league]?.2, let eventID = game.eventID,
               let url = URL(string: "\(Self.espnCore)/\(game.sport)/leagues/\(coreLeague)/events/\(eventID)/competitions/\(game.competitionID ?? eventID)/odds?limit=10")
         else { return [] }
         do {
             let payload = try await getJSON(url)
             let items = payload["items"].isArray ? payload["items"].array : (payload["provider"].truthy || payload["homeTeamOdds"].truthy ? [payload] : [])
-            let refs = Array(items.filter { Self.isBookmaker($0) }.prefix(8))
+            let refs = Array(items.filter { Self.isQuoteSource($0) }.prefix(8))
             var resolved: [(Int, JSON)] = []
             await withTaskGroup(of: (Int, JSON?).self) { group in
                 for (i, item) in refs.enumerated() {
-                    group.addTask { @MainActor in (i, try? await self.resolveOddsItem(item)) }
+                    group.addTask { @MainActor in (i, try? await self.resolvePointValueItem(item)) }
                 }
                 for await (i, book) in group { if let book { resolved.append((i, book)) } }
             }
             let available = resolved.sorted { $0.0 < $1.0 }.map(\.1).filter { book in
-                let ml = Self.hasPrice(Self.moneylinePrice(book, "home")) || Self.hasPrice(Self.moneylinePrice(book, "away")) || Self.hasPrice(Self.moneylinePrice(book, "draw"))
+                let ml = Self.hasPrice(Self.winnerPrice(book, "home")) || Self.hasPrice(Self.winnerPrice(book, "away")) || Self.hasPrice(Self.winnerPrice(book, "draw"))
                 let hasLines = !book["overUnder"].isNull || !book["spread"].isNull || !book["homeTeamOdds"]["spread"].isNull || ml
                 let hasPrices = Self.hasPrice(book["overOdds"] ?? book["overUnderOdds"]) || Self.hasPrice(book["underOdds"] ?? book["underUnderOdds"])
                     || Self.hasPrice(book["homeTeamOdds"]["spreadOdds"]) || Self.hasPrice(book["awayTeamOdds"]["spreadOdds"]) || ml
-                return Self.isBookmaker(book) && hasLines && hasPrices
+                return Self.isQuoteSource(book) && hasLines && hasPrices
             }
             // Stable sort: live books first while live, last otherwise.
             let preferred = available.enumerated().sorted { a, b in
@@ -381,27 +382,27 @@ final class LiveFeed {
                 if la != lb { return game.state == .live ? la > lb : la < lb }
                 return a.offset < b.offset
             }.map(\.element)
-            eventOddsCache[game.id] = (now, preferred)
+            eventPointValueCache[game.id] = (now, preferred)
             return preferred
         } catch {
-            eventOddsCache[game.id] = (now, [])
+            eventPointValueCache[game.id] = (now, [])
             return []
         }
     }
 
-    private func loadOdds(_ games: [Game], now: Ms) async {
+    private func loadPointValue(_ games: [Game], now: Ms) async {
         let queue = GameQueue(games)
         await withTaskGroup(of: Void.self) { group in
             for _ in 0..<min(6, games.count) {
                 group.addTask { @MainActor in
                     while let game = queue.next() {
                         let sb = self.competitions[game.id]?["odds"][0] ?? .null
-                        let hasScoreboardLines = game.state != .live && Self.isBookmaker(sb)
+                        let hasScoreboardLines = game.state != .live && Self.isQuoteSource(sb)
                             && Self.hasPrice(sb["homeTeamOdds"]["spreadOdds"]) && Self.hasPrice(sb["awayTeamOdds"]["spreadOdds"])
                             && Self.hasPrice(sb["overOdds"]) && Self.hasPrice(sb["underOdds"])
-                            && Self.hasPrice(Self.moneylinePrice(sb, "home")) && Self.hasPrice(Self.moneylinePrice(sb, "away"))
-                        if !hasScoreboardLines { self.oddsBooks[game.id] = await self.fetchEventOdds(game, now: now) }
-                        if let current = self.byId(game.id) { self.boards[game.id] = self.makeOdds(current) }
+                            && Self.hasPrice(Self.winnerPrice(sb, "home")) && Self.hasPrice(Self.winnerPrice(sb, "away"))
+                        if !hasScoreboardLines { self.pointValueBooks[game.id] = await self.fetchEventPointValue(game, now: now) }
+                        if let current = self.byId(game.id) { self.boards[game.id] = self.makePointValue(current) }
                     }
                 }
             }
@@ -495,7 +496,7 @@ final class LiveFeed {
                 fetched.forEach { put($0.0) }
                 let games = order.compactMap { byId[$0] }
                 cache[league] = games
-                for g in games { boards[g.id] = makeOdds(g) }
+                for g in games { boards[g.id] = makePointValue(g) }
             }
             failed = failures > 0 && results.isEmpty
             offline = failed
@@ -504,9 +505,9 @@ final class LiveFeed {
             loading = false
             loadingDayKey = ""
             emit()
-            Task { if await loadOldBetGames(completedAt) { emit() } }
+            Task { if await loadOldChallengeGames(completedAt) { emit() } }
             let todays = cache.values.flatMap { $0 }.filter { $0.start >= dayStart - TO.DAY }
-            Task { await loadOdds(todays, now: completedAt) }
+            Task { await loadPointValue(todays, now: completedAt) }
             if refreshQueued {
                 refreshQueued = false
                 updatedAt = 0
@@ -516,13 +517,13 @@ final class LiveFeed {
     }
 
     /// Keep old unresolved tickets gradeable after their games fall out of the current scoreboard cache.
-    private func loadOldBetGames(_ now: Ms) async -> Bool {
-        guard let bets = Store.shared.data?.bets else { return false }
+    private func loadOldChallengeGames(_ now: Ms) async -> Bool {
+        guard let challenges = Store.shared.data?.challenges else { return false }
         var wanted: [String: (league: String, day: String, ids: Set<String>)] = [:]
-        for bet in bets where bet.status == "open" {
-            for leg in bet.legs where leg.result == "pending" {
-                guard let gameId = leg.gameId, let league = leg.league, Self.leagues[league] != nil, byId(gameId) == nil else { continue }
-                let day = TO.dayKey(bet.placedAt)
+        for challenge in challenges where challenge.status == "open" {
+            for pick in challenge.picks where pick.result == "pending" {
+                guard let gameId = pick.gameId, let league = pick.league, Self.leagues[league] != nil, byId(gameId) == nil else { continue }
+                let day = TO.dayKey(challenge.placedAt)
                 let key = "\(league)|\(day)"
                 var entry = wanted[key] ?? (league, day, [])
                 entry.ids.insert(gameId)
@@ -536,7 +537,7 @@ final class LiveFeed {
                 var list = cache[game.league] ?? []
                 if !list.contains(where: { $0.id == game.id }) {
                     competitions[game.id] = comp
-                    var suspended = OddsBoard()
+                    var suspended = PointValueBoard()
                     suspended.suspended = true
                     boards[game.id] = suspended
                     list.append(game)
@@ -573,7 +574,7 @@ final class LiveFeed {
                     if league == "ncaaf" && group == "80" { games = games.filter { g, _ in g.home.rank != nil || g.away.rank != nil } }
                     for (g, comp) in games {
                         competitions[g.id] = comp
-                        boards[g.id] = makeOdds(g)
+                        boards[g.id] = makePointValue(g)
                     }
                     upcoming[league] = games.map(\.0)
                 }
@@ -582,24 +583,24 @@ final class LiveFeed {
             upcomingDayKey = TO.dayKey(now)
             upcomingLoading = false
             if any { emit() }
-            loadViewedDayOdds()
+            loadViewedDayPointValue()
         }
     }
 
     @ObservationIgnored private var viewingDay = 0
-    /// Home is showing a future day: load its odds once (they aren't fetched in the background).
+    /// Home is showing a future day: load its point value once (they aren't fetched in the background).
     func setViewingDay(_ day: Int) {
         viewingDay = day
-        loadViewedDayOdds()
+        loadViewedDayPointValue()
     }
 
-    private func loadViewedDayOdds() {
+    private func loadViewedDayPointValue() {
         guard viewingDay > 0 else { return }
         let now = TO.now()
-        let games = upcoming.values.flatMap { $0 }.filter { Self.dayOffset($0.start, now) == viewingDay && !oddsRequested.contains($0.id) }
+        let games = upcoming.values.flatMap { $0 }.filter { Self.dayOffset($0.start, now) == viewingDay && !pointValueRequested.contains($0.id) }
         guard !games.isEmpty else { return }
-        games.forEach { oddsRequested.insert($0.id) }
-        Task { await loadOdds(games, now: now) }
+        games.forEach { pointValueRequested.insert($0.id) }
+        Task { await loadPointValue(games, now: now) }
     }
 
     func setGroup(_ group: String) {
@@ -621,10 +622,10 @@ final class LiveFeed {
         return nil
     }
 
-    func odds(_ id: String) -> OddsBoard? {
+    func pointValue(_ id: String) -> PointValueBoard? {
         _ = version
         guard let g = byId(id) else { return nil }
-        return boards[g.id] ?? OddsBoard.empty
+        return boards[g.id] ?? PointValueBoard.empty
     }
 
     /// Board for Home. `day`: 0 = today (live and today's games), 1 = tomorrow.
@@ -642,20 +643,20 @@ final class LiveFeed {
     }
 }
 
-/// Hands out games to the odds workers one at a time.
+/// Hands out games to the point values workers one at a time.
 private final class GameQueue {
     private var items: ArraySlice<Game>
     init(_ games: [Game]) { items = games[...] }
     func next() -> Game? { items.popFirst() }
 }
 
-/// One way to read games, odds and picks: ESPN first, the simulated feed when a game isn't from ESPN.
+/// One way to read games, point value and picks: ESPN first, the simulated feed when a game isn't from ESPN.
 enum Feed {
     static var live: LiveFeed { LiveFeed.shared }
 
     static func game(_ id: String, _ now: Ms = TO.now()) -> Game? { live.byId(id) ?? Sim.game(id, now) }
 
-    static func odds(_ id: String, _ now: Ms = TO.now()) -> OddsBoard { live.odds(id) ?? Sim.odds(id, now) ?? .empty }
+    static func pointValue(_ id: String, _ now: Ms = TO.now()) -> PointValueBoard { live.pointValue(id) ?? Sim.pointValue(id, now) ?? .empty }
 
     /// Home's board. Without ESPN it falls back to the simulated games (today only).
     static func board(_ now: Ms = TO.now(), day: Int = 0, leagues: [String] = Sim.leagueOrder) -> [Game] {
@@ -669,23 +670,23 @@ enum Feed {
         if parts.count > 1 && parts[1] == "race" { return Races.shared.currentSelection(selId) }
         if parts.count > 1 && parts[1] == "pred" { return nil }
         guard let game = live.byId(ref) else { return Sim.currentSelection(selId, now) }
-        let sel = live.odds(game.id)?.all.first { $0.id == selId }
-        let suspended = live.odds(game.id)?.suspended ?? true
+        let sel = live.pointValue(game.id)?.all.first { $0.id == selId }
+        let suspended = live.pointValue(game.id)?.suspended ?? true
         return (sel, sel != nil && !suspended && game.state != .final)
     }
 
     /// Grades a pick: pending | won | lost | push | void.
-    static func grade(_ leg: Leg, _ now: Ms = TO.now()) -> String {
-        if leg.market == "race" { return Races.shared.grade(leg, now) }
-        if leg.market == "pred" { return "pending" }
-        guard let gameId = leg.gameId else { return "pending" }
-        guard let game = live.byId(gameId) else { return Sim.grade(leg, now) }
+    static func grade(_ pick: Pick, _ now: Ms = TO.now()) -> String {
+        if pick.market == "race" { return Races.shared.grade(pick, now) }
+        if pick.market == "pred" { return "pending" }
+        guard let gameId = pick.gameId else { return "pending" }
+        guard let game = live.byId(gameId) else { return Sim.grade(pick, now) }
         if game.state == .postponed || game.state == .canceled { return "void" }
         if game.state != .final { return "pending" }
-        return Sim.gradeScore(market: leg.market, side: leg.side ?? "", line: leg.line, H: game.homeScore, A: game.awayScore)
+        return Sim.gradeScore(market: pick.market, side: pick.side ?? "", line: pick.line, H: game.homeScore, A: game.awayScore)
     }
 
-    static func liveStanding(_ leg: Leg) -> String {
-        Sim.liveStanding(leg, leg.gameId.flatMap { game($0) })
+    static func liveStanding(_ pick: Pick) -> String {
+        Sim.liveStanding(pick, pick.gameId.flatMap { game($0) })
     }
 }

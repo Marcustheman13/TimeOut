@@ -53,7 +53,7 @@ final class SocialModel {
             || d.requestsIn.contains { ($0.from ?? "").lowercased() == key }
         guard listed else { return nil }
         return Person(username: hit?.username ?? username, name: hit?.name ?? username, photo: hit?.photo ?? TO.initialsAvatar(username),
-                      share: PrivacySettings(record: false, minutes: false, bets: false), remote: true)
+                      share: PrivacySettings(record: false, minutes: false, challenges: false), remote: true)
     }
 
     func copyInvite() {
@@ -473,11 +473,11 @@ struct ProfileSheet: View {
                     Note(.plain, icon: .lock, "Add @\(username) as a friend to see their stats.")
                 }
                 if !isMe && showAll {
-                    if share.bets {
+                    if share.challenges {
                         let picks = store.sharedPicks(p!)
                         VStack(alignment: .leading, spacing: 8) {
-                            Text("Open bets they're sharing").eyebrow()
-                            if picks.isEmpty { Text("No open bets right now.").font(.barlow(13)).foregroundStyle(Theme.text2) }
+                            Text("Open challenges they're sharing").eyebrow()
+                            if picks.isEmpty { Text("No open challenges right now.").font(.barlow(13)).foregroundStyle(Theme.text2) }
                             ForEach(picks, id: \.self) { k in
                                 HStack {
                                     VStack(alignment: .leading, spacing: 0) {
@@ -486,15 +486,15 @@ struct ProfileSheet: View {
                                     }
                                     Spacer()
                                     VStack(alignment: .trailing, spacing: 0) {
-                                        Text(OddsMath.fmt(k.price)).font(.display(18, 800)).foregroundStyle(Theme.accent)
-                                        Text("\(k.stake) min").font(.barlow(11.5)).foregroundStyle(Theme.muted)
+                                        Text(PointValueMath.fmt(k.price)).font(.display(18, 800)).foregroundStyle(Theme.accent)
+                                        Text("\(k.pledgeMinutes) min").font(.barlow(11.5)).foregroundStyle(Theme.muted)
                                     }
                                 }
                                 .card(12)
                             }
                         }
                     } else {
-                        Text("\(p!.name) keeps their open bets private.").font(.barlow(13)).foregroundStyle(Theme.text2)
+                        Text("\(p!.name) keeps their open challenges private.").font(.barlow(13)).foregroundStyle(Theme.text2)
                     }
                 }
                 if isMe {
@@ -561,7 +561,7 @@ struct TeamSheet: View {
                         }
                     }
                 }
-                Text("Standings count screen-time bets placed between the start and end dates. Friend bets don't count.").font(.barlow(11.5)).foregroundStyle(Theme.muted)
+                Text("Standings count screen-time challenges placed between the start and end dates. Friend challenges don't count.").font(.barlow(11.5)).foregroundStyle(Theme.muted)
                 if !invitable.isEmpty {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Invite more friends").font(.barlow(13, 700)).foregroundStyle(Theme.text2)
@@ -652,10 +652,10 @@ struct FlowLayout: Layout {
 struct TeamHowSheet: View {
     var body: some View {
         SheetFrame("How teams work", close: { UIState.shared.closeSheet(.teamHow) }) {
-            Text("Teams are how friends compete here without betting money. TimeOut puts screen time on the line instead of cash, and a team is the stretch of days you compare.")
+            Text("Teams are how friends compete here without putting money on games. TimeOut puts screen time on the number instead of cash, and a team is the stretch of days you compare.")
                 .font(.barlow(14.5)).foregroundStyle(Theme.text2)
             HowCard(n: 1, title: "Pick a name and the dates", text: "Create a team for a week or a season. You can start it on your own and invite people later.")
-            HowCard(n: 2, title: "Minutes decide the standings", text: "Between the start and end dates, screen-time bets count. Whoever comes out ahead on minutes leads. A side bet with a friend does not count.")
+            HowCard(n: 2, title: "Minutes decide the standings", text: "Between the start and end dates, screen-time challenges count. Whoever comes out ahead on minutes leads. A side challenge with a friend does not count.")
             HowCard(n: 3, title: "Invite friends onto the roster", text: "Open the team and add a friend, or copy the team link. When they open it, you become friends and they join the roster.")
             HowCard(n: 4, title: "Leave whenever you want", text: "Leaving takes you off the standings. The team stays for everyone else.")
             Text("The team is saved on this device. When you're signed in, the roster is saved with your TimeOut account too, one member at a time, so it's still here the next time you open the app.")
@@ -743,7 +743,7 @@ struct InviteSheet: View {
                 (Text("\(who) invited you to ") + Text(p!.teamName).bold().foregroundStyle(Theme.text) + Text("\(dates). Joining also adds them as a friend. It is still screen time, not money."))
                     .font(.barlow(14.5)).foregroundStyle(Theme.text2)
             } else {
-                Text("\(who) sent you their TimeOut link. Add them as a friend to compare screen time instead of betting money.")
+                Text("\(who) sent you their TimeOut link. Add them as a friend to compare screen time without putting money on the games.")
                     .font(.barlow(14.5)).foregroundStyle(Theme.text2)
             }
         } foot: {

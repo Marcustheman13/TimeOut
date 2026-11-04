@@ -50,7 +50,7 @@ struct Game: Identifiable {
     func team(_ side: String) -> Team? { side == "home" ? home : side == "away" ? away : nil }
 }
 
-/// One price on the board: a moneyline side, spread, total, or race runner.
+/// One price on the board: a winner side, margin, total, or race runner.
 struct Selection: Codable, Hashable {
     var id: String
     var kind: String
@@ -65,21 +65,21 @@ struct Selection: Codable, Hashable {
     var source: String?
 }
 
-struct OddsBoard {
-    var moneyline: [Selection] = []
-    var spread: [Selection] = []
+struct PointValueBoard {
+    var winner: [Selection] = []
+    var margin: [Selection] = []
     var total: [Selection] = []
     var suspended = true
     var move: [String: Int] = [:]
     var updatedAt: Ms = 0
-    var all: [Selection] { moneyline + spread + total }
+    var all: [Selection] { winner + margin + total }
 
-    static let empty = OddsBoard()
+    static let empty = PointValueBoard()
 }
 
-// MARK: - Bets
+// MARK: - Challenges
 
-struct Leg: Codable, Hashable {
+struct Pick: Codable, Hashable {
     var selId: String
     var kind: String
     var gameId: String?
@@ -118,7 +118,7 @@ struct Leg: Codable, Hashable {
         predId = try? c.decodeIfPresent(String.self, forKey: .predId)
         raceId = try? c.decodeIfPresent(String.self, forKey: .raceId)
         horseId = (try? c.decodeIfPresent(Int.self, forKey: .horseId)) ?? (try? c.decodeIfPresent(String.self, forKey: .horseId)).flatMap { $0.flatMap { Int($0) } }
-        market = (try? c.decode(String.self, forKey: .market)) ?? "ml"
+        market = (try? c.decode(String.self, forKey: .market)) ?? "winner"
         side = try? c.decodeIfPresent(String.self, forKey: .side)
         line = try? c.decodeIfPresent(Double.self, forKey: .line)
         price = (try? c.decode(Int.self, forKey: .price)) ?? (try? c.decode(Double.self, forKey: .price)).map { Int($0) } ?? 100
@@ -135,34 +135,34 @@ struct Leg: Codable, Hashable {
     }
 }
 
-struct Bet: Codable, Identifiable, Hashable {
+struct Challenge: Codable, Identifiable, Hashable {
     var id: String
     var kind: String
     var placedAt: Ms
     var dayKey: String
-    var stake: Int
-    var legs: [Leg]
+    var pledgeMinutes: Int
+    var picks: [Pick]
     var decimal: Double
     var american: Int
     var boosted = false
     var insured = false
     var multiplier: Double = 1
     var status = "open"
-    var payout = 0
-    var settledAt: Ms?
+    var reward = 0
+    var resolvedAt: Ms?
     var insurancePaid: Bool?
     var deadline: Ms?
     var supabaseId: String?
     var supabaseSynced: Bool?
-    var potentialPayout: Int?
+    var potentialReward: Int?
 
-    init(id: String, kind: String, placedAt: Ms, dayKey: String, stake: Int, legs: [Leg], decimal: Double, american: Int) {
+    init(id: String, kind: String, placedAt: Ms, dayKey: String, pledgeMinutes: Int, picks: [Pick], decimal: Double, american: Int) {
         self.id = id; self.kind = kind; self.placedAt = placedAt; self.dayKey = dayKey
-        self.stake = stake; self.legs = legs; self.decimal = decimal; self.american = american
+        self.pledgeMinutes = pledgeMinutes; self.picks = picks; self.decimal = decimal; self.american = american
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, kind, placedAt, dayKey, stake, legs, decimal, american, boosted, insured, multiplier, status, payout, settledAt, insurancePaid, deadline, supabaseId, supabaseSynced, potentialPayout
+        case id, kind, placedAt, dayKey, pledgeMinutes, picks, decimal, american, boosted, insured, multiplier, status, reward, resolvedAt, insurancePaid, deadline, supabaseId, supabaseSynced, potentialReward
     }
 
     init(from decoder: Decoder) throws {
@@ -171,21 +171,21 @@ struct Bet: Codable, Identifiable, Hashable {
         kind = (try? c.decode(String.self, forKey: .kind)) ?? "sports"
         placedAt = (try? c.decode(Double.self, forKey: .placedAt)) ?? 0
         dayKey = (try? c.decode(String.self, forKey: .dayKey)) ?? TO.dayKey(placedAt)
-        stake = (try? c.decode(Int.self, forKey: .stake)) ?? 0
-        legs = (try? c.decode([Leg].self, forKey: .legs)) ?? []
+        pledgeMinutes = (try? c.decode(Int.self, forKey: .pledgeMinutes)) ?? 0
+        picks = (try? c.decode([Pick].self, forKey: .picks)) ?? []
         decimal = (try? c.decode(Double.self, forKey: .decimal)) ?? 1
-        american = (try? c.decode(Int.self, forKey: .american)) ?? OddsMath.fromDecimal(decimal)
+        american = (try? c.decode(Int.self, forKey: .american)) ?? PointValueMath.fromDecimal(decimal)
         boosted = (try? c.decode(Bool.self, forKey: .boosted)) ?? false
         insured = (try? c.decode(Bool.self, forKey: .insured)) ?? false
         multiplier = (try? c.decode(Double.self, forKey: .multiplier)) ?? 1
         status = (try? c.decode(String.self, forKey: .status)) ?? "open"
-        payout = (try? c.decode(Int.self, forKey: .payout)) ?? 0
-        settledAt = try? c.decodeIfPresent(Double.self, forKey: .settledAt)
+        reward = (try? c.decode(Int.self, forKey: .reward)) ?? 0
+        resolvedAt = try? c.decodeIfPresent(Double.self, forKey: .resolvedAt)
         insurancePaid = try? c.decodeIfPresent(Bool.self, forKey: .insurancePaid)
         deadline = try? c.decodeIfPresent(Double.self, forKey: .deadline)
         supabaseId = try? c.decodeIfPresent(String.self, forKey: .supabaseId)
         supabaseSynced = try? c.decodeIfPresent(Bool.self, forKey: .supabaseSynced)
-        potentialPayout = try? c.decodeIfPresent(Int.self, forKey: .potentialPayout)
+        potentialReward = try? c.decodeIfPresent(Int.self, forKey: .potentialReward)
     }
 }
 
@@ -236,13 +236,13 @@ struct WalletData: Codable {
 }
 
 struct NotifySettings: Codable, Hashable {
-    var settled = true
+    var resolved = true
     var friends = true
     var lowTime = true
     init() {}
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        settled = (try? c.decode(Bool.self, forKey: .settled)) ?? true
+        resolved = (try? c.decode(Bool.self, forKey: .resolved)) ?? true
         friends = (try? c.decode(Bool.self, forKey: .friends)) ?? true
         lowTime = (try? c.decode(Bool.self, forKey: .lowTime)) ?? true
     }
@@ -251,14 +251,14 @@ struct NotifySettings: Codable, Hashable {
 struct PrivacySettings: Codable, Hashable {
     var record = true
     var minutes = true
-    var bets = true
+    var challenges = true
     init() {}
-    init(record: Bool, minutes: Bool, bets: Bool) { self.record = record; self.minutes = minutes; self.bets = bets }
+    init(record: Bool, minutes: Bool, challenges: Bool) { self.record = record; self.minutes = minutes; self.challenges = challenges }
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         record = (try? c.decode(Bool.self, forKey: .record)) ?? true
         minutes = (try? c.decode(Bool.self, forKey: .minutes)) ?? true
-        bets = (try? c.decode(Bool.self, forKey: .bets)) ?? true
+        challenges = (try? c.decode(Bool.self, forKey: .challenges)) ?? true
     }
 }
 
@@ -317,8 +317,8 @@ struct Squad: Codable, Hashable, Identifiable {
 struct UserData: Codable {
     var v = 1
     var wallet: WalletData
-    var bets: [Bet] = []
-    var lastStake = 5
+    var challenges: [Challenge] = []
+    var lastPledge = 5
     var settings = Settings()
     var onboarded = false
     var friends: [String] = []
@@ -329,14 +329,14 @@ struct UserData: Codable {
 
     init(wallet: WalletData) { self.wallet = wallet }
 
-    enum CodingKeys: String, CodingKey { case v, wallet, bets, lastStake, settings, onboarded, friends, requestsIn, requestsOut, teams, feedFilter }
+    enum CodingKeys: String, CodingKey { case v, wallet, challenges, lastPledge, settings, onboarded, friends, requestsIn, requestsOut, teams, feedFilter }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         v = (try? c.decode(Int.self, forKey: .v)) ?? 1
         wallet = (try? c.decode(WalletData.self, forKey: .wallet)) ?? WalletData(dayKey: TO.dayKey(), balance: Rules.daily)
-        bets = (try? c.decode([Bet].self, forKey: .bets)) ?? []
-        lastStake = (try? c.decode(Int.self, forKey: .lastStake)) ?? 5
+        challenges = (try? c.decode([Challenge].self, forKey: .challenges)) ?? []
+        lastPledge = (try? c.decode(Int.self, forKey: .lastPledge)) ?? 5
         settings = (try? c.decode(Settings.self, forKey: .settings)) ?? Settings()
         onboarded = (try? c.decode(Bool.self, forKey: .onboarded)) ?? false
         friends = (try? c.decode([String].self, forKey: .friends)) ?? []
@@ -406,7 +406,7 @@ struct Person: Hashable {
     var local = false
     var remote = false
     var accountId: String?
-    var openBets: [Bet] = []
+    var openChallenges: [Challenge] = []
 }
 
 /// The wallet as the screens show it, computed from WalletData.
@@ -450,10 +450,10 @@ struct Stats {
 
 enum Rules {
     static let daily = 60
-    static let maxLegs = 10
+    static let maxPicks = 10
     static let overrideMinutes = 15
     static let overridePenalty = 30
     static let maxOverrides = 2
-    static let todoMaxStake = 20
+    static let todoMaxPledge = 20
     static let boostPercent = 0.1
 }

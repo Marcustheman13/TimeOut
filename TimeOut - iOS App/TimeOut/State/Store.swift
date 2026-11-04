@@ -21,15 +21,15 @@ extension TO {
     }
 }
 
-/// A pick on the bet slip: the selection and the price/line the user accepted.
-struct SlipLeg: Hashable {
+/// A pick on the challenge slip: the selection and the price/line the user accepted.
+struct SlipPick: Hashable {
     var selId: String
     var price: Int
     var line: Double?
     var ref: String
 }
 
-struct SharedPick: Hashable { var label: String; var matchup: String; var price: Int; var stake: Int }
+struct SharedPick: Hashable { var label: String; var matchup: String; var price: Int; var pledgeMinutes: Int }
 
 struct Standing: Hashable { var username: String; var me: Bool; var net: Int; var w: Int; var l: Int; var hidden: Bool; var photo: String; var tier: String }
 
@@ -50,16 +50,16 @@ struct RemoteState {
         var boostsByDay: [String: Int]?
         var insuranceByWeek: [String: Int]?
     }
-    var bets: [Bet] = []
+    var challenges: [Challenge] = []
     var wallet: Wallet?
     /// Raw app_preferences (plus followed sports), merged key by key like the web demo.
     var settings: [String: Any]?
     var appPreferencesReady = false
 }
 
-/// Accounts, the screen-time wallet, bets, settlement, tiers/streaks, friends and teams.
+/// Accounts, the screen-time wallet, challenges, resolution, tiers/streaks, friends and teams.
 /// A port of the web demo's state.js. Everything is saved on this device; signed-in Supabase
-/// accounts also sync bets, wallet and settings through `API`.
+/// accounts also sync challenges, wallet and settings through `API`.
 @Observable
 final class Store {
     static let shared = Store()
@@ -76,9 +76,9 @@ final class Store {
 
     static func tierPerks(_ t: Tier) -> [String] {
         var list: [String] = []
-        if t.bonus > 0 { list.append("+\(t.bonus) betting min a day") }
-        if t.boosts > 0 { list.append("\(t.boosts) odds boost\(t.boosts == 1 ? "" : "s") a day (+10% winnings)") }
-        if t.insurance > 0 { list.append("Parlay insurance once a week") }
+        if t.bonus > 0 { list.append("+\(t.bonus) challenge min a day") }
+        if t.boosts > 0 { list.append("\(t.boosts) point-value boost\(t.boosts == 1 ? "" : "s") a day (+10% winnings)") }
+        if t.insurance > 0 { list.append("Combo protection once a week") }
         return list.isEmpty ? ["Lock apps to earn perks"] : list
     }
     static func tierById(_ id: String) -> Tier { tiers.first { $0.id == id } ?? tiers[0] }
@@ -107,7 +107,7 @@ final class Store {
     static let people: [Person] = {
         func p(_ u: String, _ name: String, _ color: String, _ w: Int, _ l: Int, _ net: Int, _ tier: String, _ streak: Int, _ r: Bool, _ m: Bool, _ b: Bool) -> Person {
             Person(username: u, name: name, photo: TO.initialsAvatar(name, color), w: w, l: l, net: net, tier: tier, streak: streak,
-                   share: PrivacySettings(record: r, minutes: m, bets: b), fake: true)
+                   share: PrivacySettings(record: r, minutes: m, challenges: b), fake: true)
         }
         return [
             p("mike_t", "Mike Torres", "#2F6FDE", 34, 27, 48, "allstar", 5, true, true, true),
@@ -125,7 +125,7 @@ final class Store {
         ]
     }()
 
-    static let todoOdds = ["easy": 50, "medium": 100, "hard": 200]
+    static let todoPointValue = ["easy": 50, "medium": 100, "hard": 200]
 
     // MARK: State
 
@@ -147,8 +147,36 @@ final class Store {
     // MARK: Persistence
 
     private func read<T: Decodable>(_ type: T.Type, _ name: String) -> T? {
-        guard let raw = try? Data(contentsOf: dir.appendingPathComponent(name)) else { return nil }
+        guard var raw = try? Data(contentsOf: dir.appendingPathComponent(name)) else { return nil }
+        if let obj = try? JSONSerialization.jsonObject(with: raw),
+           let migrated = Self.renameSavedTerms(obj),
+           let data = try? JSONSerialization.data(withJSONObject: migrated) {
+            raw = data
+        }
         return try? JSONDecoder().decode(T.self, from: raw)
+    }
+
+    /// Reads saves from before the gambling-language rename. The old key names stay here on purpose.
+    private static func renameSavedTerms(_ value: Any) -> Any {
+        let keys = [
+            "bets": "challenges", "lastStake": "lastPledge", "stake": "pledgeMinutes",
+            "payout": "reward", "potentialPayout": "potentialReward", "legs": "picks",
+            "settledAt": "resolvedAt", "settled": "resolved",
+        ]
+        let markets = ["ml": "winner", "moneyline": "winner", "spread": "margin"]
+        let sides = ["over": "higher", "under": "lower"]
+        if var dict = value as? [String: Any] {
+            for (old, new) in keys where dict[new] == nil {
+                if let kept = dict.removeValue(forKey: old) { dict[new] = kept }
+            }
+            if dict["status"] as? String == "push" { dict["status"] = "tie" }
+            if dict["result"] as? String == "push" { dict["result"] = "tie" }
+            if let market = dict["market"] as? String, let renamed = markets[market] { dict["market"] = renamed }
+            if let side = dict["side"] as? String, let renamed = sides[side] { dict["side"] = renamed }
+            return dict.mapValues { renameSavedTerms($0) }
+        }
+        if let list = value as? [Any] { return list.map { renameSavedTerms($0) } }
+        return value
     }
 
     private func write<T: Encodable>(_ value: T, _ name: String) {
@@ -240,7 +268,7 @@ final class Store {
         startSession(acc.id)
     }
 
-    /// Copies a Supabase user onto this device and merges the server's bets, wallet and settings with the local cache.
+    /// Copies a Supabase user onto this device and merges the server's challenges, wallet and settings with the local cache.
     func adoptServerUser(_ user: ServerUser, remote remoteIn: RemoteState?) {
         let id = "srv_\(user.id)"
         var acc = accountsById[id] ?? Account(id: id, username: user.username, email: user.email, photo: "", createdAt: TO.now())
@@ -257,12 +285,12 @@ final class Store {
             var merged: UserData
             if let cached = loadData(id) {
                 merged = cached
-                // Bets: server rows, with any newer local copy of the same bet laid over them.
+                // Challenges: server rows, with any newer local copy of the same challenge laid over them.
                 var order: [String] = []
-                var byKey: [String: Bet] = [:]
-                func key(_ b: Bet) -> String { b.supabaseId.map { "db:\($0)" } ?? "id:\(b.id)" }
-                for b in remote.bets { let k = key(b); if byKey[k] == nil { order.append(k) }; byKey[k] = b }
-                for b in cached.bets {
+                var byKey: [String: Challenge] = [:]
+                func key(_ b: Challenge) -> String { b.supabaseId.map { "db:\($0)" } ?? "id:\(b.id)" }
+                for b in remote.challenges { let k = key(b); if byKey[k] == nil { order.append(k) }; byKey[k] = b }
+                for b in cached.challenges {
                     let k = key(b)
                     if byKey[k] == nil { order.append(k) }
                     if let saved = byKey[k] {
@@ -271,8 +299,8 @@ final class Store {
                         byKey[k] = combined
                     } else { byKey[k] = b }
                 }
-                merged.bets = order.compactMap { byKey[$0] }
-                let hasUnsynced = cached.bets.contains { $0.kind == "sports" && $0.supabaseId == nil }
+                merged.challenges = order.compactMap { byKey[$0] }
+                let hasUnsynced = cached.challenges.contains { $0.kind == "sports" && $0.supabaseId == nil }
                 // Settings: whichever side has real preferences wins, key by key.
                 let cachedDict = Self.dictionary(cached.settings)
                 let remoteDict = remote.settings ?? [:]
@@ -304,7 +332,7 @@ final class Store {
                 }
             } else {
                 merged = freshData(TO.now())
-                merged.bets = remote.bets
+                merged.challenges = remote.challenges
                 if let prefs = remote.settings, let s = Self.settings(from: Self.dictionary(merged.settings).merging(prefs) { _, r in r }) {
                     merged.settings = s
                 }
@@ -429,12 +457,12 @@ final class Store {
     func migrate(_ input: UserData) -> UserData {
         var d = input
         if d.settings.sports.isEmpty { d.settings.sports = Sim.realLeagues }
-        // Rebuild the daily bet-result ledger from settled bets (server wallets don't store it).
-        var settledNet: [String: Int] = [:]
-        for bet in d.bets where bet.status != "open" {
-            settledNet[bet.dayKey, default: 0] += bet.payout - bet.stake
+        // Rebuild the daily challenge-result ledger from resolved challenges (server wallets don't store it).
+        var resolvedNet: [String: Int] = [:]
+        for challenge in d.challenges where challenge.status != "open" {
+            resolvedNet[challenge.dayKey, default: 0] += challenge.reward - challenge.pledgeMinutes
         }
-        for (k, v) in settledNet { d.wallet.netByDay[k] = v }
+        for (k, v) in resolvedNet { d.wallet.netByDay[k] = v }
         if d.settings.lockedApps.isEmpty { d.settings.enforce = false } // nothing to block, so limits can't be on
         return d
     }
@@ -457,7 +485,7 @@ final class Store {
         let w = d.wallet, day = w.dayKey, tomorrow = TO.addDays(day, 1)
         let used = w.usageByDay[day] ?? 0
         let todayLimit = limitFor(day, d)
-        let open = d.bets.filter { $0.status == "open" }
+        let open = d.challenges.filter { $0.status == "open" }
         let t = tier(d)
         return WalletView(
             day: day, balance: w.balance, lockedOut: w.lockedOut,
@@ -467,7 +495,7 @@ final class Store {
             emergencyToday: emergencyMinutes(day, d), overridesUsed: w.overridesByDay[day] ?? 0,
             used: used, phoneLeft: max(todayLimit - used, 0),
             appsLocked: d.settings.enforce && used >= todayLimit,
-            atRisk: open.reduce(0) { $0 + $1.stake }, openCount: open.count,
+            atRisk: open.reduce(0) { $0 + $1.pledgeMinutes }, openCount: open.count,
             tier: t, points: lockPoints(d), streak: w.streakDays, multiplier: Self.streakMultiplier(w.streakDays),
             boostsLeft: max(t.boosts - (w.boostsByDay[day] ?? 0), 0),
             insuranceLeft: max(t.insurance - (w.insuranceByWeek[TO.weekKey(TO.dayStart(day) + 12 * TO.HOUR)] ?? 0), 0),
@@ -495,7 +523,7 @@ final class Store {
         data = d
     }
 
-    /// Starts a new day at local midnight: closes out the old day, updates the streak, resets the betting balance.
+    /// Starts a new day at local midnight: closes out the old day, updates the streak, resets the challenge balance.
     @discardableResult
     func rollover(_ d: inout UserData, _ now: Ms) -> Bool {
         let target = TO.dayKey(now)
@@ -605,186 +633,186 @@ final class Store {
         save()
     }
 
-    // MARK: Bets
+    // MARK: Challenges
 
-    func legFromSelection(_ sel: Selection, _ now: Ms) -> Leg {
+    func pickFromSelection(_ sel: Selection, _ now: Ms) -> Pick {
         if sel.kind == "race" || sel.market == "race" {
             let race = Races.shared.get(sel.raceId)
             let horse = Races.shared.horse(sel.horseId ?? Int(sel.side))
-            var leg = Leg(selId: sel.id, kind: "race", market: "race", price: sel.price, label: horse.name, marketLabel: "Race winner",
+            var pick = Pick(selId: sel.id, kind: "race", market: "race", price: sel.price, label: horse.name, marketLabel: "Race winner",
                           matchup: "Virtual Race #\(race?.number ?? 0)")
-            leg.raceId = sel.raceId; leg.horseId = horse.id; leg.side = String(horse.id); leg.league = "race"
-            leg.start = race?.startedAt ?? now
-            return leg
+            pick.raceId = sel.raceId; pick.horseId = horse.id; pick.side = String(horse.id); pick.league = "race"
+            pick.start = race?.startedAt ?? now
+            return pick
         }
         let g = sel.gameId.flatMap { Feed.game($0, now) }
-        var leg = Leg(selId: sel.id, kind: "game", market: sel.market, price: sel.price, label: Sim.selectionLabel(sel, g),
+        var pick = Pick(selId: sel.id, kind: "game", market: sel.market, price: sel.price, label: Sim.selectionLabel(sel, g),
                       marketLabel: Sim.marketLabel(sel, g), matchup: g.map { "\($0.away.name) @ \($0.home.name)" } ?? "")
-        leg.gameId = sel.gameId; leg.side = sel.side; leg.line = sel.line
-        leg.short = g.map { "\($0.away.abbr) @ \($0.home.abbr)" }
-        leg.league = g?.league; leg.start = g?.start
-        return leg
+        pick.gameId = sel.gameId; pick.side = sel.side; pick.line = sel.line
+        pick.short = g.map { "\($0.away.abbr) @ \($0.home.abbr)" }
+        pick.league = g?.league; pick.start = g?.start
+        return pick
     }
 
-    static func combine(_ legs: [Leg]) -> (decimal: Double, american: Int) {
-        let dec = legs.reduce(1.0) { $0 * OddsMath.decimal($1.price) }
-        return (dec, OddsMath.fromDecimal(dec))
+    static func combine(_ picks: [Pick]) -> (decimal: Double, american: Int) {
+        let dec = picks.reduce(1.0) { $0 * PointValueMath.decimal($1.price) }
+        return (dec, PointValueMath.fromDecimal(dec))
     }
 
-    /// Places a bet from bet-slip picks. Each pick carries the price the user accepted.
+    /// Places a challenge from challenge-slip picks. Each pick carries the price the user accepted.
     @discardableResult
-    func placeBet(picks: [SlipLeg], stake: Int?, boost: Bool, insure: Bool, now: Ms = TO.now()) throws -> Bet {
+    func placeChallenge(picks: [SlipPick], pledgeMinutes: Int?, boost: Bool, insure: Bool, now: Ms = TO.now()) throws -> Challenge {
         guard var d = data else { throw AppError(code: "session", message: "Log in again.") }
         rollover(&d, now)
-        if picks.isEmpty { throw AppError(code: "empty", message: "Add a pick to your bet slip.") }
-        if picks.count > Rules.maxLegs { throw AppError(code: "too_many", message: "Parlays can have up to \(Rules.maxLegs) picks.") }
+        if picks.isEmpty { throw AppError(code: "empty", message: "Add a pick to your challenge slip.") }
+        if picks.count > Rules.maxPicks { throw AppError(code: "too_many", message: "Combos can have up to \(Rules.maxPicks) picks.") }
         var changed: [String] = []
-        var legs: [Leg] = []
+        var picks: [Pick] = []
         for p in picks {
             guard let cur = Feed.currentSelection(p.selId, now), let sel = cur.sel, cur.open else {
                 throw AppError(code: "closed", message: "One of your picks is no longer available. Remove it to continue.")
             }
             if sel.price != p.price || sel.line != p.line { changed.append(p.selId) }
-            legs.append(legFromSelection(sel, now))
+            picks.append(pickFromSelection(sel, now))
         }
-        if !changed.isEmpty { throw AppError(code: "odds_changed", message: "The odds changed. Review the new odds and confirm again.", changed: changed) }
-        if legs.contains(where: { $0.kind == "race" }) && legs.count != 1 {
-            throw AppError(code: "race_single", message: "Virtual race picks can only be placed as a single bet.")
+        if !changed.isEmpty { throw AppError(code: "value_changed", message: "The point values changed. Review the new point value and confirm again.", changed: changed) }
+        if picks.contains(where: { $0.kind == "race" }) && picks.count != 1 {
+            throw AppError(code: "race_single", message: "Virtual race picks can only be placed as a single challenge.")
         }
-        if d.wallet.lockedOut || d.wallet.balance <= 0 { throw AppError(code: "locked", message: "You're out of betting minutes for today. Betting reopens at midnight.") }
-        guard let stake, stake >= 1 else { throw AppError(code: "stake", message: "Enter a stake of at least 1 minute.") }
-        if stake > d.wallet.balance {
-            throw AppError(code: "not_enough", message: "Not enough screentime. You have \(d.wallet.balance) min left to bet today.")
+        if d.wallet.lockedOut || d.wallet.balance <= 0 { throw AppError(code: "locked", message: "You're out of challenge minutes for today. Challenges reopen at midnight.") }
+        guard let pledgeMinutes, pledgeMinutes >= 1 else { throw AppError(code: "pledge", message: "Enter a pledge of at least 1 minute.") }
+        if pledgeMinutes > d.wallet.balance {
+            throw AppError(code: "not_enough", message: "Not enough screentime. You have \(d.wallet.balance) min left to challenge today.")
         }
         let wl = walletView(d)
-        let combo = Self.combine(legs)
-        var bet = Bet(id: TO.uid("bet"), kind: legs[0].kind == "race" ? "race" : "sports", placedAt: now, dayKey: d.wallet.dayKey,
-                      stake: stake, legs: legs, decimal: combo.decimal, american: combo.american)
+        let combo = Self.combine(picks)
+        var challenge = Challenge(id: TO.uid("challenge"), kind: picks[0].kind == "race" ? "race" : "sports", placedAt: now, dayKey: d.wallet.dayKey,
+                      pledgeMinutes: pledgeMinutes, picks: picks, decimal: combo.decimal, american: combo.american)
         var mult = wl.multiplier
         if boost && wl.boostsLeft > 0 {
-            bet.boosted = true
+            challenge.boosted = true
             mult *= 1 + Rules.boostPercent
             d.wallet.boostsByDay[d.wallet.dayKey, default: 0] += 1
         }
-        if insure && legs.count > 1 && wl.insuranceLeft > 0 {
-            bet.insured = true
+        if insure && picks.count > 1 && wl.insuranceLeft > 0 {
+            challenge.insured = true
             d.wallet.insuranceByWeek[TO.weekKey(now), default: 0] += 1
         }
-        bet.multiplier = (mult * 10000).rounded() / 10000
-        if bet.kind == "race" { try Races.shared.startForBet(bet, now: now) }
-        d.wallet.balance -= stake
-        d.lastStake = stake
+        challenge.multiplier = (mult * 10000).rounded() / 10000
+        if challenge.kind == "race" { try Races.shared.startForChallenge(challenge, now: now) }
+        d.wallet.balance -= pledgeMinutes
+        d.lastPledge = pledgeMinutes
         if d.wallet.balance <= 0 { d.wallet.balance = 0; d.wallet.lockedOut = true }
-        d.bets.append(bet)
+        d.challenges.append(challenge)
         data = d
         save()
-        return bet
+        return challenge
     }
 
     private func closeTodos(_ d: inout UserData, _ day: String, _ now: Ms) {
-        for i in d.bets.indices where d.bets[i].kind == "todo" && d.bets[i].status == "open" && d.bets[i].dayKey == day {
-            for j in d.bets[i].legs.indices where d.bets[i].legs[j].result == "pending" {
-                d.bets[i].legs[j].result = "lost"
-                d.bets[i].legs[j].final = "Not done by midnight"
+        for i in d.challenges.indices where d.challenges[i].kind == "todo" && d.challenges[i].status == "open" && d.challenges[i].dayKey == day {
+            for j in d.challenges[i].picks.indices where d.challenges[i].picks[j].result == "pending" {
+                d.challenges[i].picks[j].result = "lost"
+                d.challenges[i].picks[j].final = "Not done by midnight"
             }
             _ = finishIfDone(&d, i, now)
         }
     }
 
-    static func outcome(_ bet: Bet) -> (status: String, payout: Int, insurancePaid: Bool) {
-        let lost = bet.legs.filter { $0.result == "lost" }.count
-        let pending = bet.legs.contains { $0.result == "pending" }
+    static func outcome(_ challenge: Challenge) -> (status: String, reward: Int, insurancePaid: Bool) {
+        let lost = challenge.picks.filter { $0.result == "lost" }.count
+        let pending = challenge.picks.contains { $0.result == "pending" }
         if lost > 0 {
-            if bet.insured {
+            if challenge.insured {
                 if pending { return ("open", 0, false) }
-                if lost == 1 { return ("push", bet.stake, true) }
+                if lost == 1 { return ("tie", challenge.pledgeMinutes, true) }
             }
             return ("lost", 0, false)
         }
         if pending { return ("open", 0, false) }
-        let won = bet.legs.filter { $0.result == "won" }
-        if won.isEmpty { return (bet.legs.allSatisfy { $0.result == "void" } ? "void" : "push", bet.stake, false) }
-        let dec = won.reduce(1.0) { $0 * OddsMath.decimal($1.price) }
-        var payout = jsRoundInt(Double(bet.stake) * dec)
-        payout = bet.stake + jsRoundInt(Double(payout - bet.stake) * bet.multiplier)
-        return ("won", payout, false)
+        let won = challenge.picks.filter { $0.result == "won" }
+        if won.isEmpty { return (challenge.picks.allSatisfy { $0.result == "void" } ? "void" : "tie", challenge.pledgeMinutes, false) }
+        let dec = won.reduce(1.0) { $0 * PointValueMath.decimal($1.price) }
+        var reward = jsRoundInt(Double(challenge.pledgeMinutes) * dec)
+        reward = challenge.pledgeMinutes + jsRoundInt(Double(reward - challenge.pledgeMinutes) * challenge.multiplier)
+        return ("won", reward, false)
     }
 
-    private func finishIfDone(_ d: inout UserData, _ i: Int, _ now: Ms) -> Bet? {
-        let res = Self.outcome(d.bets[i])
+    private func finishIfDone(_ d: inout UserData, _ i: Int, _ now: Ms) -> Challenge? {
+        let res = Self.outcome(d.challenges[i])
         if res.status == "open" { return nil }
-        d.bets[i].status = res.status
-        d.bets[i].payout = res.payout
-        d.bets[i].insurancePaid = res.insurancePaid
-        d.bets[i].settledAt = now
-        let bet = d.bets[i]
-        d.wallet.netByDay[bet.dayKey, default: 0] += bet.payout - bet.stake
-        // Voids and pushes return the stake; wins and losses only affect the next day's limit.
-        if bet.dayKey == d.wallet.dayKey && (bet.status == "void" || bet.status == "push") { d.wallet.balance += bet.payout }
-        return bet
+        d.challenges[i].status = res.status
+        d.challenges[i].reward = res.reward
+        d.challenges[i].insurancePaid = res.insurancePaid
+        d.challenges[i].resolvedAt = now
+        let challenge = d.challenges[i]
+        d.wallet.netByDay[challenge.dayKey, default: 0] += challenge.reward - challenge.pledgeMinutes
+        // Voids and pushes return the pledge; wins and losses only affect the next day's limit.
+        if challenge.dayKey == d.wallet.dayKey && (challenge.status == "void" || challenge.status == "tie") { d.wallet.balance += challenge.reward }
+        return challenge
     }
 
-    /// Grades every open bet against the latest scores. Runs on every tick, so bets settle seconds after a game ends.
-    func settle(_ now: Ms = TO.now()) -> [Bet] {
+    /// Grades every open challenge against the latest scores. Runs on every tick, so challenges resolve seconds after a game ends.
+    func resolve(_ now: Ms = TO.now()) -> [Challenge] {
         guard var d = data else { return [] }
-        var settled: [Bet] = []
+        var resolved: [Challenge] = []
         var any = false
-        for i in d.bets.indices where d.bets[i].status == "open" && d.bets[i].kind != "todo" {
+        for i in d.challenges.indices where d.challenges[i].status == "open" && d.challenges[i].kind != "todo" {
             var changed = false
-            for j in d.bets[i].legs.indices where d.bets[i].legs[j].result == "pending" {
-                let leg = d.bets[i].legs[j]
-                let r = Feed.grade(leg, now)
+            for j in d.challenges[i].picks.indices where d.challenges[i].picks[j].result == "pending" {
+                let pick = d.challenges[i].picks[j]
+                let r = Feed.grade(pick, now)
                 if r == "pending" { continue }
-                d.bets[i].legs[j].result = r
+                d.challenges[i].picks[j].result = r
                 changed = true
-                if leg.kind == "race" {
-                    let race = Races.shared.get(leg.raceId)
-                    d.bets[i].legs[j].final = race?.winnerId.map { "Winner: \(Races.shared.horse($0).name)" } ?? "Race finished"
-                } else if let gameId = leg.gameId, let g = Feed.game(gameId, now) {
+                if pick.kind == "race" {
+                    let race = Races.shared.get(pick.raceId)
+                    d.challenges[i].picks[j].final = race?.winnerId.map { "Winner: \(Races.shared.horse($0).name)" } ?? "Race finished"
+                } else if let gameId = pick.gameId, let g = Feed.game(gameId, now) {
                     let ot = g.ot.map { $0.label == "10" ? " (10 inn)" : " (OT)" } ?? ""
-                    d.bets[i].legs[j].final = g.state == .postponed ? "Postponed" : "\(g.away.abbr) \(g.awayScore) – \(g.home.abbr) \(g.homeScore)\(ot)"
+                    d.challenges[i].picks[j].final = g.state == .postponed ? "Postponed" : "\(g.away.abbr) \(g.awayScore) – \(g.home.abbr) \(g.homeScore)\(ot)"
                 }
             }
             if changed {
                 any = true
-                if let bet = finishIfDone(&d, i, now) { settled.append(bet) }
+                if let challenge = finishIfDone(&d, i, now) { resolved.append(challenge) }
             }
         }
         if any {
             data = d
-            if !settled.isEmpty { save() }
+            if !resolved.isEmpty { save() }
         }
-        return settled
+        return resolved
     }
 
     // MARK: Record / stats
 
-    static func statsFor(_ bets: [Bet]) -> Stats {
-        let settled = bets.filter { $0.status != "open" }
-        let won = settled.filter { $0.status == "won" }
-        let lost = settled.filter { $0.status == "lost" }
-        let voids = settled.filter { $0.status == "void" || $0.status == "push" }
-        let net = settled.reduce(0) { $0 + $1.payout - $1.stake }
+    static func statsFor(_ challenges: [Challenge]) -> Stats {
+        let resolved = challenges.filter { $0.status != "open" }
+        let won = resolved.filter { $0.status == "won" }
+        let lost = resolved.filter { $0.status == "lost" }
+        let voids = resolved.filter { $0.status == "void" || $0.status == "tie" }
+        let net = resolved.reduce(0) { $0 + $1.reward - $1.pledgeMinutes }
         var bySport: [String: Stats.Line] = [:]
-        for b in settled {
-            let key = b.kind == "todo" ? "todo" : b.kind == "race" ? "race" : b.legs.count > 1 ? "parlay" : (b.legs.first?.league ?? "other")
+        for b in resolved {
+            let key = b.kind == "todo" ? "todo" : b.kind == "race" ? "race" : b.picks.count > 1 ? "combo" : (b.picks.first?.league ?? "other")
             var line = bySport[key] ?? Stats.Line()
             if b.status == "won" { line.w += 1 }
             if b.status == "lost" { line.l += 1 }
-            line.net += b.payout - b.stake
+            line.net += b.reward - b.pledgeMinutes
             bySport[key] = line
         }
-        let decided = settled.filter { $0.status == "won" || $0.status == "lost" }.sorted { ($0.settledAt ?? 0) > ($1.settledAt ?? 0) }
+        let decided = resolved.filter { $0.status == "won" || $0.status == "lost" }.sorted { ($0.resolvedAt ?? 0) > ($1.resolvedAt ?? 0) }
         return Stats(
             w: won.count, l: lost.count, v: voids.count, net: net,
             pct: won.count + lost.count > 0 ? jsRoundInt(100 * Double(won.count) / Double(won.count + lost.count)) : nil,
-            best: won.reduce(0) { max($0, $1.payout - $1.stake) },
+            best: won.reduce(0) { max($0, $1.reward - $1.pledgeMinutes) },
             bySport: bySport,
             recent: decided.prefix(5).map { $0.status == "won" ? "W" : "L" }
         )
     }
 
-    var myStats: Stats { Self.statsFor(data?.bets ?? []) }
+    var myStats: Stats { Self.statsFor(data?.challenges ?? []) }
 
     // MARK: People & friends
 
@@ -794,19 +822,19 @@ final class Store {
         if let fake = Self.people.first(where: { $0.username.lowercased() == username.lowercased() }) { return fake }
         guard let acc = findAccountByUsername(username) else { return nil }
         let d = acc.id == account?.id ? (data ?? freshData(TO.now())) : migrate(loadData(acc.id) ?? freshData(TO.now()))
-        let st = Self.statsFor(d.bets)
+        let st = Self.statsFor(d.challenges)
         return Person(username: acc.username, name: acc.username, photo: acc.photo, w: st.w, l: st.l, net: st.net, tier: tier(d).id,
                       streak: d.wallet.streakDays, share: d.settings.privacy, local: true, accountId: acc.id,
-                      openBets: d.bets.filter { $0.status == "open" })
+                      openChallenges: d.challenges.filter { $0.status == "open" })
     }
 
     /// Open picks a friend has shared (demo friends pick from the live board).
     func sharedPicks(_ p: Person, _ now: Ms = TO.now()) -> [SharedPick] {
-        guard p.share.bets else { return [] }
+        guard p.share.challenges else { return [] }
         if p.local {
-            return p.openBets.prefix(3).map { b in
-                SharedPick(label: b.legs.map(\.label).joined(separator: " + "), matchup: b.legs.count > 1 ? "\(b.legs.count)-pick parlay" : (b.legs.first?.matchup ?? ""),
-                           price: b.american, stake: b.stake)
+            return p.openChallenges.prefix(3).map { b in
+                SharedPick(label: b.picks.map(\.label).joined(separator: " + "), matchup: b.picks.count > 1 ? "\(b.picks.count)-pick combo" : (b.picks.first?.matchup ?? ""),
+                           price: b.american, pledgeMinutes: b.pledgeMinutes)
             }
         }
         let games = Feed.board(now).filter { ($0.state == .live || $0.state == .scheduled) && !$0.simulated }
@@ -815,11 +843,11 @@ final class Store {
         let count = 1 + Int((rand() * 2).rounded(.down))
         for _ in 0..<count where !games.isEmpty {
             let g = games[Int((rand() * Double(games.count)).rounded(.down))]
-            let all = Feed.odds(g.id, now).all
+            let all = Feed.pointValue(g.id, now).all
             guard !all.isEmpty else { _ = rand(); _ = rand(); continue }
             let sel = all[Int((rand() * Double(all.count)).rounded(.down))]
             picks.append(SharedPick(label: Sim.selectionLabel(sel, g), matchup: "\(g.away.name) @ \(g.home.name)", price: sel.price,
-                                    stake: 5 + Int((rand() * 4).rounded(.down)) * 5))
+                                    pledgeMinutes: 5 + Int((rand() * 4).rounded(.down)) * 5))
         }
         return picks
     }
@@ -982,9 +1010,9 @@ final class Store {
             }
             var net = 0, w = 0, l = 0, hidden = false
             if p == nil || p!.local {
-                let bets = p.flatMap { $0.accountId }.map { migrate(loadData($0) ?? freshData(now)).bets } ?? myData.bets
-                for b in bets where b.status != "open" && b.placedAt >= start && b.placedAt < end {
-                    net += b.payout - b.stake
+                let challenges = p.flatMap { $0.accountId }.map { migrate(loadData($0) ?? freshData(now)).challenges } ?? myData.challenges
+                for b in challenges where b.status != "open" && b.placedAt >= start && b.placedAt < end {
+                    net += b.reward - b.pledgeMinutes
                     if b.status == "won" { w += 1 }
                     if b.status == "lost" { l += 1 }
                 }

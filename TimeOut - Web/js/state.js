@@ -1,4 +1,4 @@
-/* TimeOut web demo — accounts, screen-time wallet, pledges, settlement, tiers/streaks and friends.
+/* TimeOut web demo — accounts, screen-time wallet, pledges, resolution, tiers/streaks and friends.
  * All data lives in this browser's localStorage. Passwords are hashed only to keep them out of plain sight;
  * this is a mockup, not real security.
  */
@@ -9,13 +9,13 @@
 
   const RULES = {
     daily: 60,
-    maxLegs: 10,
+    maxPicks: 10,
     maxMatchupPicks: 4,
     maxAllowedMinutes: 120,
     overrideMinutes: 15,
     overridePenalty: 30,
     maxOverrides: 2,
-    todoMaxStake: 20,
+    todoMaxPledge: 20,
     boostPercent: 0.1,
   };
   TO.RULES = RULES;
@@ -32,8 +32,8 @@
   ];
   const tierPerks = (t) => {
     const list = [];
-    if (t.bonus) list.push(`+${t.bonus} betting min a day`);
-    if (t.boosts) list.push(`${t.boosts} odds boost${t.boosts === 1 ? '' : 's'} a day (+10% winnings)`);
+    if (t.bonus) list.push(`+${t.bonus} challenge min a day`);
+    if (t.boosts) list.push(`${t.boosts} point-value boost${t.boosts === 1 ? '' : 's'} a day (+10% winnings)`);
     if (t.insurance) list.push('Combo Goal insurance once a week');
     return list.length ? list : ['Lock apps to earn perks'];
   };
@@ -61,18 +61,18 @@
 
   // ---------- Other people (fake users for the Social demo) ----------
   const PEOPLE = [
-    { username: 'mike_t', name: 'Mike Torres', color: '#2F6FDE', w: 34, l: 27, net: 48, tier: 'allstar', streak: 5, share: { record: true, minutes: true, bets: true } },
-    { username: 'jess.plays', name: 'Jess Park', color: '#D0467A', w: 41, l: 30, net: 73, tier: 'mvp', streak: 9, share: { record: true, minutes: false, bets: true } },
-    { username: 'coach_dan', name: 'Dan Reeves', color: '#E08A1E', w: 22, l: 29, net: -36, tier: 'starter', streak: 0, share: { record: true, minutes: true, bets: true } },
-    { username: 'lily_k', name: 'Lily Kim', color: '#7B5CE0', w: 18, l: 12, net: 25, tier: 'allstar', streak: 3, share: { record: true, minutes: true, bets: false } },
-    { username: 'tbone22', name: 'Tyler Bonner', color: '#1E9E7A', w: 51, l: 55, net: -12, tier: 'rookie', streak: 1, share: { record: false, minutes: false, bets: false } },
-    { username: 'priya_p', name: 'Priya Patel', color: '#C2410C', w: 12, l: 9, net: 19, tier: 'starter', streak: 2, share: { record: true, minutes: true, bets: true } },
-    { username: 'sam_the_fan', name: 'Sam Ortiz', color: '#0E7490', w: 60, l: 58, net: 4, tier: 'mvp', streak: 6, share: { record: true, minutes: true, bets: false } },
-    { username: 'ava.r', name: 'Ava Russo', color: '#BE185D', w: 9, l: 4, net: 22, tier: 'allstar', streak: 4, share: { record: true, minutes: true, bets: true } },
-    { username: 'big_ben', name: 'Ben Hall', color: '#4D7C0F', w: 27, l: 33, net: -41, tier: 'rookie', streak: 0, share: { record: true, minutes: false, bets: false } },
-    { username: 'nate_w', name: 'Nate Walker', color: '#6D28D9', w: 15, l: 15, net: 0, tier: 'starter', streak: 1, share: { record: true, minutes: true, bets: true } },
-    { username: 'coop_24', name: 'Cooper James', color: '#B45309', w: 38, l: 22, net: 91, tier: 'hof', streak: 12, share: { record: true, minutes: true, bets: true } },
-    { username: 'maria.g', name: 'Maria Garcia', color: '#DB2777', w: 20, l: 21, net: -3, tier: 'starter', streak: 2, share: { record: true, minutes: true, bets: false } },
+    { username: 'mike_t', name: 'Mike Torres', color: '#2F6FDE', w: 34, l: 27, net: 48, tier: 'allstar', streak: 5, share: { record: true, minutes: true, challenges: true } },
+    { username: 'jess.plays', name: 'Jess Park', color: '#D0467A', w: 41, l: 30, net: 73, tier: 'mvp', streak: 9, share: { record: true, minutes: false, challenges: true } },
+    { username: 'coach_dan', name: 'Dan Reeves', color: '#E08A1E', w: 22, l: 29, net: -36, tier: 'starter', streak: 0, share: { record: true, minutes: true, challenges: true } },
+    { username: 'lily_k', name: 'Lily Kim', color: '#7B5CE0', w: 18, l: 12, net: 25, tier: 'allstar', streak: 3, share: { record: true, minutes: true, challenges: false } },
+    { username: 'tbone22', name: 'Tyler Bonner', color: '#1E9E7A', w: 51, l: 55, net: -12, tier: 'rookie', streak: 1, share: { record: false, minutes: false, challenges: false } },
+    { username: 'priya_p', name: 'Priya Patel', color: '#C2410C', w: 12, l: 9, net: 19, tier: 'starter', streak: 2, share: { record: true, minutes: true, challenges: true } },
+    { username: 'sam_the_fan', name: 'Sam Ortiz', color: '#0E7490', w: 60, l: 58, net: 4, tier: 'mvp', streak: 6, share: { record: true, minutes: true, challenges: false } },
+    { username: 'ava.r', name: 'Ava Russo', color: '#BE185D', w: 9, l: 4, net: 22, tier: 'allstar', streak: 4, share: { record: true, minutes: true, challenges: true } },
+    { username: 'big_ben', name: 'Ben Hall', color: '#4D7C0F', w: 27, l: 33, net: -41, tier: 'rookie', streak: 0, share: { record: true, minutes: false, challenges: false } },
+    { username: 'nate_w', name: 'Nate Walker', color: '#6D28D9', w: 15, l: 15, net: 0, tier: 'starter', streak: 1, share: { record: true, minutes: true, challenges: true } },
+    { username: 'coop_24', name: 'Cooper James', color: '#B45309', w: 38, l: 22, net: 91, tier: 'hof', streak: 12, share: { record: true, minutes: true, challenges: true } },
+    { username: 'maria.g', name: 'Maria Garcia', color: '#DB2777', w: 20, l: 21, net: -3, tier: 'starter', streak: 2, share: { record: true, minutes: true, challenges: false } },
   ];
   PEOPLE.forEach((p) => { p.photo = TO.initialsAvatar(p.name, p.color); p.fake = true; });
 
@@ -149,14 +149,14 @@
     if (remoteState) {
       const cached = TO.store.get(dataKey(id), null);
       if (cached) {
-        const remoteBets = remoteState.bets || [];
-        const mergedBets = new Map(remoteBets.map((bet) => [bet.supabaseId ? `db:${bet.supabaseId}` : `id:${bet.id}`, bet]));
-        for (const bet of cached.bets || []) {
-          const key = bet.supabaseId ? `db:${bet.supabaseId}` : `id:${bet.id}`;
-          const saved = mergedBets.get(key);
-          mergedBets.set(key, saved ? Object.assign({}, saved, bet) : bet);
+        const remoteChallenges = remoteState.challenges || [];
+        const mergedChallenges = new Map(remoteChallenges.map((challenge) => [challenge.supabaseId ? `db:${challenge.supabaseId}` : `id:${challenge.id}`, challenge]));
+        for (const challenge of cached.challenges || []) {
+          const key = challenge.supabaseId ? `db:${challenge.supabaseId}` : `id:${challenge.id}`;
+          const saved = mergedChallenges.get(key);
+          mergedChallenges.set(key, saved ? Object.assign({}, saved, challenge) : challenge);
         }
-        const hasUnsyncedBets = (cached.bets || []).some((bet) => bet.kind === 'sports' && !bet.supabaseId);
+        const hasUnsyncedChallenges = (cached.challenges || []).some((challenge) => challenge.kind === 'sports' && !challenge.supabaseId);
         const remoteHasPreferences = remoteState.appPreferencesReady && Object.keys(remoteState.settings || {}).length > 1;
         const preferences = remoteHasPreferences
           ? Object.assign({}, cached.settings || {}, remoteState.settings || {})
@@ -166,8 +166,8 @@
           ...(Array.isArray(remoteState.settings?.sports) ? remoteState.settings.sports : []),
         ].filter((league) => S.REAL_LEAGUES.includes(league));
         if (savedSports.length) preferences.sports = [...new Set(savedSports)];
-        remoteState = Object.assign({}, cached, remoteState, { bets: [...mergedBets.values()], settings: preferences });
-        if (hasUnsyncedBets || !remoteState.wallet) remoteState.wallet = cached.wallet;
+        remoteState = Object.assign({}, cached, remoteState, { challenges: [...mergedChallenges.values()], settings: preferences });
+        if (hasUnsyncedChallenges || !remoteState.wallet) remoteState.wallet = cached.wallet;
         else if (cached.wallet) {
           // Supabase currently owns the balance fields, while clean-day history is local-only.
           // Keep those local streak and usage ledgers when refreshing the server wallet.
@@ -185,7 +185,7 @@
           }
           // The server may not have credited today's local tier bonus yet. Keep
           // that uncredited portion in the visible balance; the pledges RPC applies
-          // the same amount atomically before it checks the stake.
+          // the same amount atomically before it checks the pledge.
           const serverDay = serverWallet.dayKey;
           const localBonus = localWallet.bonusDay === serverDay ? Number(localWallet.bonusGranted || 0) : 0;
           const serverBonus = serverWallet.bonusDay === serverDay ? Number(serverWallet.bonusGranted || 0) : 0;
@@ -290,8 +290,8 @@
         netByDay: {}, penaltyByDay: {}, overridesByDay: {}, usageByDay: {}, boostsByDay: {}, insuranceByWeek: {},
         bonusDay: null, bonusGranted: 0, streakDays: 0, warned: {},
       },
-      bets: [],
-      lastStake: 5,
+      challenges: [],
+      lastPledge: 5,
       settings: {
         sports: S.REAL_LEAGUES.slice(),
         showPredictions: true,
@@ -300,8 +300,8 @@
         lockedApps: [],
         minLimit: 0,
         lowWarn: 10,
-        notify: { settled: true, friends: true, lowTime: true },
-        privacy: { record: true, minutes: true, bets: true },
+        notify: { resolved: true, friends: true, lowTime: true },
+        privacy: { record: true, minutes: true, challenges: true },
       },
       onboarded: false,
       friends: [],
@@ -311,7 +311,44 @@
     };
   }
 
+  // Reads saves from before the gambling-language rename. The old key names stay here on purpose.
+  function renameSavedTerms(d) {
+    if (!d || typeof d !== 'object') return d;
+    if (d.bets && !d.challenges) d.challenges = d.bets;
+    delete d.bets;
+    if (d.lastStake != null && d.lastPledge == null) d.lastPledge = d.lastStake;
+    delete d.lastStake;
+    const market = { ml: 'winner', moneyline: 'winner', spread: 'margin' };
+    const side = { over: 'higher', under: 'lower' };
+    for (const challenge of d.challenges || []) {
+      if (challenge.stake != null && challenge.pledgeMinutes == null) challenge.pledgeMinutes = challenge.stake;
+      delete challenge.stake;
+      if (challenge.payout != null && challenge.reward == null) challenge.reward = challenge.payout;
+      delete challenge.payout;
+      if (challenge.potentialPayout != null && challenge.potentialReward == null) challenge.potentialReward = challenge.potentialPayout;
+      delete challenge.potentialPayout;
+      if (challenge.legs && !challenge.picks) challenge.picks = challenge.legs;
+      delete challenge.legs;
+      if (challenge.settledAt != null && challenge.resolvedAt == null) challenge.resolvedAt = challenge.settledAt;
+      delete challenge.settledAt;
+      if (challenge.status === 'push') challenge.status = 'tie';
+      for (const pick of challenge.picks || []) {
+        if (market[pick.market]) pick.market = market[pick.market];
+        if (side[pick.side]) pick.side = side[pick.side];
+        if (pick.result === 'push') pick.result = 'tie';
+      }
+    }
+    const privacy = d.settings && d.settings.privacy;
+    if (privacy && privacy.bets != null && privacy.challenges == null) privacy.challenges = privacy.bets;
+    if (privacy) delete privacy.bets;
+    const notify = d.settings && d.settings.notify;
+    if (notify && notify.settled != null && notify.resolved == null) notify.resolved = notify.settled;
+    if (notify) delete notify.settled;
+    return d;
+  }
+
   function migrate(d) {
+    renameSavedTerms(d);
     const f = freshData(TO.now());
     for (const k of Object.keys(f)) if (d[k] === undefined) d[k] = f[k];
     for (const k of Object.keys(f.wallet)) if (d.wallet[k] === undefined) d.wallet[k] = f.wallet[k];
@@ -321,17 +358,17 @@
     d.wallet.balance = Math.max(0, Number(d.wallet.balance) || 0);
     d.wallet.lockedOut = d.wallet.balance <= 0;
     if (!Array.isArray(d.settings.sports) || d.settings.sports.length === 0) d.settings.sports = S.REAL_LEAGUES.slice();
-    d.bets = (d.bets || []).filter((bet) => !bet.friend);
-    // Server wallets don't store the daily pledges-result ledger. Rebuild it from settled pledges
+    d.challenges = (d.challenges || []).filter((challenge) => !challenge.friend);
+    // Server wallets don't store the daily pledges-result ledger. Rebuild it from resolved pledges
     // so previous-day results continue to determine today's screen-time balance after sync.
-    const settledNetByDay = {};
-    for (const bet of d.bets || []) {
-      if (bet.status === 'open') continue;
-      const day = bet.dayKey || (Number.isFinite(Number(bet.placedAt)) ? TO.dayKey(Number(bet.placedAt)) : null);
+    const resolvedNetByDay = {};
+    for (const challenge of d.challenges || []) {
+      if (challenge.status === 'open') continue;
+      const day = challenge.dayKey || (Number.isFinite(Number(challenge.placedAt)) ? TO.dayKey(Number(challenge.placedAt)) : null);
       if (!day) continue;
-      settledNetByDay[day] = (settledNetByDay[day] || 0) + (Number(bet.payout || 0) - Number(bet.stake || 0));
+      resolvedNetByDay[day] = (resolvedNetByDay[day] || 0) + (Number(challenge.reward || 0) - Number(challenge.pledgeMinutes || 0));
     }
-    Object.assign(d.wallet.netByDay, settledNetByDay);
+    Object.assign(d.wallet.netByDay, resolvedNetByDay);
     if (!d.settings.lockedApps.length) d.settings.enforce = false; // nothing to block, so limits can't be on
     delete d.challengesIn;
     if (d.settings.notify) delete d.settings.notify.challenges;
@@ -370,7 +407,7 @@
     const balance = Math.max(0, Number(w.balance) || 0);
     const used = w.usageByDay[day] || 0;
     const todayLimit = limitFor(day);
-    const open = TO.data.bets.filter((b) => b.status === 'open');
+    const open = TO.data.challenges.filter((b) => b.status === 'open');
     const t = tier();
     return {
       day, balance, lockedOut: balance <= 0,
@@ -383,7 +420,7 @@
       overridesUsed: w.overridesByDay[day] || 0,
       used, phoneLeft: Math.max(todayLimit - used, 0),
       appsLocked: TO.data.settings.enforce && used >= todayLimit,
-      atRisk: open.reduce((s, b) => s + b.stake, 0),
+      atRisk: open.reduce((s, b) => s + b.pledgeMinutes, 0),
       openCount: open.length,
       tier: t, points: lockPoints(),
       streak: w.streakDays, multiplier: streakMultiplier(w.streakDays),
@@ -404,7 +441,7 @@
     }
   }
 
-  /** Starts a new day at local midnight: closes out the old day, updates the streak, resets the betting balance. */
+  /** Starts a new day at local midnight: closes out the old day, updates the streak, resets the challenge balance. */
   function rollover(now) {
     const w = W();
     const target = TO.dayKey(now);
@@ -481,7 +518,7 @@
   }
 
   // ---------- pledges ----------
-  function legFromSelection(sel, now) {
+  function pickFromSelection(sel, now) {
     if (sel.kind === 'pred' || sel.market === 'pred') {
       const p = S.prediction(sel.predId, now);
       return { selId: sel.id, kind: 'pred', predId: sel.predId, market: 'pred', side: sel.side, line: null, price: sel.price,
@@ -499,194 +536,194 @@
       short: `${g.away.abbr} @ ${g.home.abbr}`, league: g.league, start: g.start, result: 'pending', final: null };
   }
 
-  const combine = (legs) => {
-    const dec = legs.reduce((p, l) => p * TO.odds.decimal(l.price), 1);
-    return { decimal: dec, american: TO.odds.fromDecimal(dec) };
+  const combine = (picks) => {
+    const dec = picks.reduce((p, l) => p * TO.pointValue.decimal(l.price), 1);
+    return { decimal: dec, american: TO.pointValue.fromDecimal(dec) };
   };
 
   /** Saves a daily commitment from selected matchup choices. */
-  function submitPledge({ picks, stake, boost, insure }, now = TO.now()) {
+  function submitPledge({ picks, pledgeMinutes, boost, insure }, now = TO.now()) {
     rollover(now);
     const w = W();
-    if (!picks.length) throw new AppError('empty', 'Add a pick to your bet commitment.');
+    if (!picks.length) throw new AppError('empty', 'Add a pick to your challenge commitment.');
     if (picks.length > RULES.maxMatchupPicks) throw new AppError('too_many', `Combo Goals can include up to ${RULES.maxMatchupPicks} matchup choices.`);
     // Every pick must still be open and at the price the user saw.
     const changed = [];
-    const legs = picks.map((p) => {
+    const built = picks.map((p) => {
       const cur = S.currentSelection(p.selId, now);
       if (!cur || !cur.sel || !cur.open) throw new AppError('closed', 'One of your picks is no longer available. Remove it to continue.');
       if (cur.sel.price !== p.price || cur.sel.line !== p.line) changed.push(p.selId);
-      return legFromSelection(cur.sel, now);
+      return pickFromSelection(cur.sel, now);
     });
-    const matchupIds = legs.map((leg) => leg.gameId).filter(Boolean);
+    const matchupIds = built.map((pick) => pick.gameId).filter(Boolean);
     if (new Set(matchupIds).size !== matchupIds.length) throw new AppError('duplicate_matchup', 'Choose only one target from each matchup.');
-    if (changed.length) throw new AppError('odds_changed', 'The odds changed. Review the new odds and confirm again.', { changed });
-    if (legs.some((leg) => leg.kind === 'race') && legs.length !== 1) {
-      throw new AppError('race_single', 'Virtual race picks can only be placed as a single bet.');
+    if (changed.length) throw new AppError('value_changed', 'The point values changed. Review the new point value and confirm again.', { changed });
+    if (built.some((pick) => pick.kind === 'race') && built.length !== 1) {
+      throw new AppError('race_single', 'Virtual race picks can only be placed as a single challenge.');
     }
 
     if (w.lockedOut || w.balance <= 0) throw new AppError('locked', 'You\'re out of pledge minutes for today. Pledges reopen at midnight.');
-    if (!Number.isInteger(stake) || stake < 1) throw new AppError('stake', 'Enter a stake of at least 1 minute.');
-    if (stake > w.balance) throw new AppError('not_enough', `Not enough screentime. You have ${w.balance} min left to bet today.`, { remaining: w.balance });
+    if (!Number.isInteger(pledgeMinutes) || pledgeMinutes < 1) throw new AppError('pledge', 'Enter a pledge of at least 1 minute.');
+    if (pledgeMinutes > w.balance) throw new AppError('not_enough', `Not enough screentime. You have ${w.balance} min left to challenge today.`, { remaining: w.balance });
 
     const wl = wallet();
-    const { decimal, american } = combine(legs);
-    const bet = {
-      id: TO.uid('pledge'), kind: legs[0].kind === 'race' ? 'race' : 'sports', placedAt: now, dayKey: w.dayKey,
-      stake, legs, decimal, american,
-      boosted: false, insured: false, multiplier: 1, targetMultiplier: +decimal.toFixed(2), maxAllowedMinutes: MAX_ALLOWED_MINUTES, status: 'open', payout: 0, settledAt: null,
+    const { decimal, american } = combine(built);
+    const challenge = {
+      id: TO.uid('pledge'), kind: built[0].kind === 'race' ? 'race' : 'sports', placedAt: now, dayKey: w.dayKey,
+      pledgeMinutes, picks: built, decimal, american,
+      boosted: false, insured: false, multiplier: 1, targetMultiplier: +decimal.toFixed(2), maxAllowedMinutes: MAX_ALLOWED_MINUTES, status: 'open', reward: 0, resolvedAt: null,
     };
     let mult = wl.multiplier;
     if (boost && wl.boostsLeft > 0) {
-      bet.boosted = true;
+      challenge.boosted = true;
       mult *= 1 + RULES.boostPercent;
       w.boostsByDay[w.dayKey] = (w.boostsByDay[w.dayKey] || 0) + 1;
     }
-    if (insure && legs.length > 1 && wl.insuranceLeft > 0) {
-      bet.insured = true;
+    if (insure && built.length > 1 && wl.insuranceLeft > 0) {
+      challenge.insured = true;
       const wk = TO.weekKey(now);
       w.insuranceByWeek[wk] = (w.insuranceByWeek[wk] || 0) + 1;
     }
-    bet.multiplier = +mult.toFixed(4);
-    w.balance -= stake;
-    TO.data.lastStake = stake;
+    challenge.multiplier = +mult.toFixed(4);
+    w.balance -= pledgeMinutes;
+    TO.data.lastPledge = pledgeMinutes;
     if (w.balance <= 0) { w.balance = 0; w.lockedOut = true; }
-    TO.data.bets.push(bet);
-    if (bet.kind === 'race') TO.races.startForBet(bet, now);
+    TO.data.challenges.push(challenge);
+    if (challenge.kind === 'race') TO.races.startForChallenge(challenge, now);
     save();
-    return bet;
+    return challenge;
   }
 
-  /** To-do Combo Goal (Could-have): stake minutes on finishing up to 3 tasks before midnight. */
-  const TODO_ODDS = { easy: 50, medium: 100, hard: 200 };
-  function placeTodoParlay({ tasks, stake }, now = TO.now()) {
+  /** To-do Combo Goal (Could-have): pledge minutes on finishing up to 3 tasks before midnight. */
+  const TODO_VALUE = { easy: 50, medium: 100, hard: 200 };
+  function placeTodoCombo({ tasks, pledgeMinutes }, now = TO.now()) {
     rollover(now);
     const w = W();
     const clean = tasks.map((t) => ({ text: String(t.text || '').trim(), difficulty: t.difficulty })).filter((t) => t.text);
     if (!clean.length) throw new AppError('empty', 'Add at least one task.');
-    if (clean.length > RULES.maxLegs) throw new AppError('too_many', `To-do parlays can have up to ${RULES.maxLegs} tasks.`);
+    if (clean.length > RULES.maxPicks) throw new AppError('too_many', `To-do combos can have up to ${RULES.maxPicks} tasks.`);
     if (w.lockedOut || w.balance <= 0) throw new AppError('locked', 'You\'re out of pledge minutes for today. Pledges reopen at midnight.');
-    if (!Number.isInteger(stake) || stake < 1) throw new AppError('stake', 'Enter a stake of at least 1 minute.');
-    if (stake > RULES.todoMaxStake) throw new AppError('stake', `To-do parlays are capped at ${RULES.todoMaxStake} minutes.`);
-    if (stake > w.balance) throw new AppError('not_enough', `Not enough screentime. You have ${w.balance} min left to bet today.`, { remaining: w.balance });
-    const legs = clean.map((t, i) => ({ selId: `todo-${i}`, kind: 'todo', market: 'todo', text: t.text, difficulty: t.difficulty, price: TODO_ODDS[t.difficulty] || 100,
+    if (!Number.isInteger(pledgeMinutes) || pledgeMinutes < 1) throw new AppError('pledge', 'Enter a pledge of at least 1 minute.');
+    if (pledgeMinutes > RULES.todoMaxPledge) throw new AppError('pledge', `To-do combos are capped at ${RULES.todoMaxPledge} minutes.`);
+    if (pledgeMinutes > w.balance) throw new AppError('not_enough', `Not enough screentime. You have ${w.balance} min left to challenge today.`, { remaining: w.balance });
+    const picks = clean.map((t, i) => ({ selId: `todo-${i}`, kind: 'todo', market: 'todo', text: t.text, difficulty: t.difficulty, price: TODO_VALUE[t.difficulty] || 100,
       label: t.text, marketLabel: `To-do · ${t.difficulty}`, matchup: 'Finish before midnight', result: 'pending', final: null }));
-    const { decimal, american } = combine(legs);
-    const bet = { id: TO.uid('pledge'), kind: 'todo', placedAt: now, dayKey: w.dayKey, deadline: TO.nextMidnight(now), stake, legs, decimal, american,
-      boosted: false, insured: false, multiplier: wallet().multiplier, status: 'open', payout: 0, settledAt: null };
-    w.balance -= stake;
+    const { decimal, american } = combine(picks);
+    const challenge = { id: TO.uid('pledge'), kind: 'todo', placedAt: now, dayKey: w.dayKey, deadline: TO.nextMidnight(now), pledgeMinutes, picks, decimal, american,
+      boosted: false, insured: false, multiplier: wallet().multiplier, status: 'open', reward: 0, resolvedAt: null };
+    w.balance -= pledgeMinutes;
     if (w.balance <= 0) { w.balance = 0; w.lockedOut = true; }
-    TO.data.bets.push(bet);
+    TO.data.challenges.push(challenge);
     save();
-    return bet;
+    return challenge;
   }
 
-  function completeTodo(betId, legIndex) {
-    const bet = TO.data.bets.find((b) => b.id === betId);
-    if (!bet || bet.status !== 'open') return null;
-    const leg = bet.legs[legIndex];
-    leg.result = 'won'; leg.final = `Done ${TO.fmtTime(TO.now())}`;
-    const settled = finishIfDone(bet);
+  function completeTodo(challengeId, pickIndex) {
+    const challenge = TO.data.challenges.find((b) => b.id === challengeId);
+    if (!challenge || challenge.status !== 'open') return null;
+    const pick = challenge.picks[pickIndex];
+    pick.result = 'won'; pick.final = `Done ${TO.fmtTime(TO.now())}`;
+    const resolved = finishIfDone(challenge);
     save();
-    return settled;
+    return resolved;
   }
 
   function closeTodos(day, now) {
-    for (const bet of TO.data.bets) {
-      if (bet.kind !== 'todo' || bet.status !== 'open' || bet.dayKey !== day) continue;
-      bet.legs.forEach((l) => { if (l.result === 'pending') { l.result = 'lost'; l.final = 'Not done by midnight'; } });
-      finishIfDone(bet, now);
+    for (const challenge of TO.data.challenges) {
+      if (challenge.kind !== 'todo' || challenge.status !== 'open' || challenge.dayKey !== day) continue;
+      challenge.picks.forEach((l) => { if (l.result === 'pending') { l.result = 'lost'; l.final = 'Not done by midnight'; } });
+      finishIfDone(challenge, now);
     }
   }
 
-  function outcome(bet) {
-    const legs = bet.legs;
-    const lost = legs.filter((l) => l.result === 'lost').length;
-    const pending = legs.some((l) => l.result === 'pending');
+  function outcome(challenge) {
+    const picks = challenge.picks;
+    const lost = picks.filter((l) => l.result === 'lost').length;
+    const pending = picks.some((l) => l.result === 'pending');
     if (lost) {
-      if (bet.insured) {
+      if (challenge.insured) {
         if (pending) return { status: 'open' };
-        if (lost === 1) return { status: 'push', payout: bet.stake, insurancePaid: true };
+        if (lost === 1) return { status: 'tie', reward: challenge.pledgeMinutes, insurancePaid: true };
       }
-      return { status: 'lost', payout: 0 };
+      return { status: 'lost', reward: 0 };
     }
     if (pending) return { status: 'open' };
-    const won = legs.filter((l) => l.result === 'won');
-    if (!won.length) return { status: legs.every((l) => l.result === 'void') ? 'void' : 'push', payout: bet.stake };
-    const dec = won.reduce((p, l) => p * TO.convertOddsToMultiplier(l.price), 1);
-    let payout = Math.round(bet.stake * dec);
-    payout = bet.stake + Math.round((payout - bet.stake) * (bet.multiplier || 1));
-    payout = Math.min(payout, bet.maxAllowedMinutes || MAX_ALLOWED_MINUTES);
-    return { status: 'won', payout };
+    const won = picks.filter((l) => l.result === 'won');
+    if (!won.length) return { status: picks.every((l) => l.result === 'void') ? 'void' : 'tie', reward: challenge.pledgeMinutes };
+    const dec = won.reduce((p, l) => p * TO.convertPointValueToMultiplier(l.price), 1);
+    let reward = Math.round(challenge.pledgeMinutes * dec);
+    reward = challenge.pledgeMinutes + Math.round((reward - challenge.pledgeMinutes) * (challenge.multiplier || 1));
+    reward = Math.min(reward, challenge.maxAllowedMinutes || MAX_ALLOWED_MINUTES);
+    return { status: 'won', reward };
   }
 
-  function finishIfDone(bet, now = TO.now()) {
-    const res = outcome(bet);
+  function finishIfDone(challenge, now = TO.now()) {
+    const res = outcome(challenge);
     if (res.status === 'open') return null;
-    bet.status = res.status;
-    bet.payout = res.payout;
-    bet.insurancePaid = !!res.insurancePaid;
-    bet.settledAt = now;
+    challenge.status = res.status;
+    challenge.reward = res.reward;
+    challenge.insurancePaid = !!res.insurancePaid;
+    challenge.resolvedAt = now;
     const w = W();
-    w.netByDay[bet.dayKey] = (w.netByDay[bet.dayKey] || 0) + (bet.payout - bet.stake);
-    // Voids and pushes return the stake; wins and losses only affect the next day's limit.
-    if (bet.dayKey === w.dayKey && (bet.status === 'void' || bet.status === 'push')) w.balance += bet.payout;
-    return bet;
+    w.netByDay[challenge.dayKey] = (w.netByDay[challenge.dayKey] || 0) + (challenge.reward - challenge.pledgeMinutes);
+    // Voids and pushes return the pledge; wins and losses only affect the next day's limit.
+    if (challenge.dayKey === w.dayKey && (challenge.status === 'void' || challenge.status === 'tie')) w.balance += challenge.reward;
+    return challenge;
   }
 
-  /** Grades every open pledges against the latest scores. Runs on every tick, so pledges settle seconds after a game ends. */
-  function settle(now = TO.now()) {
-    const settled = [];
-    for (const bet of TO.data.bets) {
-      if (bet.status !== 'open' || bet.kind === 'todo') continue;
+  /** Grades every open pledges against the latest scores. Runs on every tick, so pledges resolve seconds after a game ends. */
+  function resolve(now = TO.now()) {
+    const resolved = [];
+    for (const challenge of TO.data.challenges) {
+      if (challenge.status !== 'open' || challenge.kind === 'todo') continue;
       let changed = false;
-      for (const leg of bet.legs) {
-        if (leg.result !== 'pending') continue;
-        const r = S.grade(leg, now);
+      for (const pick of challenge.picks) {
+        if (pick.result !== 'pending') continue;
+        const r = S.grade(pick, now);
         if (r === 'pending') continue;
-        leg.result = r;
+        pick.result = r;
         changed = true;
-        if (leg.kind === 'pred') {
-          const p = S.prediction(leg.predId, now);
-          leg.final = `Resolved ${p.outcome === 'yes' ? 'YES' : 'NO'}`;
-        } else if (leg.kind === 'race') {
-          const race = TO.races.get(leg.raceId);
-          leg.final = race && race.winnerId ? `Winner: ${TO.races.horse(race.winnerId).name}` : 'Race finished';
+        if (pick.kind === 'pred') {
+          const p = S.prediction(pick.predId, now);
+          pick.final = `Resolved ${p.outcome === 'yes' ? 'YES' : 'NO'}`;
+        } else if (pick.kind === 'race') {
+          const race = TO.races.get(pick.raceId);
+          pick.final = race && race.winnerId ? `Winner: ${TO.races.horse(race.winnerId).name}` : 'Race finished';
         } else {
-          const g = S.game(leg.gameId, now);
-          leg.final = g.state === 'postponed' ? 'Postponed' : `${g.away.abbr} ${g.awayScore} – ${g.home.abbr} ${g.homeScore}${g.ot ? ` (${g.ot.label === '10' ? '10 inn' : 'OT'})` : ''}`;
+          const g = S.game(pick.gameId, now);
+          pick.final = g.state === 'postponed' ? 'Postponed' : `${g.away.abbr} ${g.awayScore} – ${g.home.abbr} ${g.homeScore}${g.ot ? ` (${g.ot.label === '10' ? '10 inn' : 'OT'})` : ''}`;
         }
       }
-      if (changed && finishIfDone(bet, now)) settled.push(bet);
+      if (changed && finishIfDone(challenge, now)) resolved.push(challenge);
     }
-    if (settled.length) save();
-    return settled;
+    if (resolved.length) save();
+    return resolved;
   }
 
   // ---------- Record / stats ----------
-  function statsFor(bets) {
-    const settled = bets.filter((b) => b.status !== 'open');
-    const won = settled.filter((b) => b.status === 'won');
-    const lost = settled.filter((b) => b.status === 'lost');
-    const voids = settled.filter((b) => b.status === 'void' || b.status === 'push');
-    const net = settled.reduce((s, b) => s + (b.payout - b.stake), 0);
+  function statsFor(challenges) {
+    const resolved = challenges.filter((b) => b.status !== 'open');
+    const won = resolved.filter((b) => b.status === 'won');
+    const lost = resolved.filter((b) => b.status === 'lost');
+    const voids = resolved.filter((b) => b.status === 'void' || b.status === 'tie');
+    const net = resolved.reduce((s, b) => s + (b.reward - b.pledgeMinutes), 0);
     const bySport = {};
-    for (const b of settled) {
-      const key = b.kind === 'todo' ? 'todo' : b.kind === 'race' ? 'race' : b.legs.length > 1 ? 'combo-goal' : b.legs[0].league;
+    for (const b of resolved) {
+      const key = b.kind === 'todo' ? 'todo' : b.kind === 'race' ? 'race' : b.picks.length > 1 ? 'combo-goal' : b.picks[0].league;
       bySport[key] = bySport[key] || { w: 0, l: 0, net: 0 };
       if (b.status === 'won') bySport[key].w++;
       if (b.status === 'lost') bySport[key].l++;
-      bySport[key].net += b.payout - b.stake;
+      bySport[key].net += b.reward - b.pledgeMinutes;
     }
     return {
       w: won.length, l: lost.length, v: voids.length, net,
       pct: won.length + lost.length ? Math.round((100 * won.length) / (won.length + lost.length)) : null,
-      best: won.reduce((m, b) => Math.max(m, b.payout - b.stake), 0),
+      best: won.reduce((m, b) => Math.max(m, b.reward - b.pledgeMinutes), 0),
       bySport,
-      recent: settled.filter((b) => b.status === 'won' || b.status === 'lost').sort((a, b) => b.settledAt - a.settledAt).slice(0, 5).map((b) => (b.status === 'won' ? 'W' : 'L')),
+      recent: resolved.filter((b) => b.status === 'won' || b.status === 'lost').sort((a, b) => b.resolvedAt - a.resolvedAt).slice(0, 5).map((b) => (b.status === 'won' ? 'W' : 'L')),
     };
   }
-  const myStats = () => statsFor(TO.data.bets);
+  const myStats = () => statsFor(TO.data.challenges);
 
   // ---------- People & friends ----------
   function person(username) {
@@ -695,24 +732,24 @@
     const acc = findAccountByUsername(username);
     if (!acc) return null;
     const d = acc.id === (TO.account && TO.account.id) ? TO.data : migrate(TO.store.get(dataKey(acc.id), null) || freshData(TO.now()));
-    const st = statsFor(d.bets);
+    const st = statsFor(d.challenges);
     return { username: acc.username, name: acc.username, photo: acc.photo, w: st.w, l: st.l, net: st.net, tier: tier(d).id, streak: d.wallet.streakDays,
-      share: d.settings.privacy, local: true, accountId: acc.id, openBets: d.bets.filter((b) => b.status === 'open') };
+      share: d.settings.privacy, local: true, accountId: acc.id, openChallenges: d.challenges.filter((b) => b.status === 'open') };
   }
 
   /** Open picks a friend has shared (fake friends pick from the live board). */
   function sharedPicks(p, now = TO.now()) {
-    if (!p || !p.share.bets) return [];
-    if (p.local) return (p.openBets || []).slice(0, 3).map((b) => ({ label: b.legs.map((l) => l.label).join(' + '), matchup: b.legs.length > 1 ? `${b.legs.length}-pick Combo Goal` : b.legs[0].matchup, price: b.american, stake: b.stake }));
+    if (!p || !p.share.challenges) return [];
+    if (p.local) return (p.openChallenges || []).slice(0, 3).map((b) => ({ label: b.picks.map((l) => l.label).join(' + '), matchup: b.picks.length > 1 ? `${b.picks.length}-pick Combo Goal` : b.picks[0].matchup, price: b.american, pledgeMinutes: b.pledgeMinutes }));
     const games = S.board(now).filter((g) => (g.state === 'live' || g.state === 'scheduled') && !g.simulated);
     const rand = TO.rng(`${p.username}-${Math.floor(now / S.SLOT)}`);
     const picks = [];
     const count = 1 + Math.floor(rand() * 2);
     for (let i = 0; i < count && games.length; i++) {
       const g = games[Math.floor(rand() * games.length)];
-      const o = S.odds(g.id, now);
+      const o = S.pointValue(g.id, now);
       const sel = o.all[Math.floor(rand() * o.all.length)];
-      picks.push({ label: S.selectionLabel(sel, g), matchup: `${g.away.name} @ ${g.home.name}`, price: sel.price, stake: 5 + Math.floor(rand() * 4) * 5, gameId: g.id });
+      picks.push({ label: S.selectionLabel(sel, g), matchup: `${g.away.name} @ ${g.home.name}`, price: sel.price, pledgeMinutes: 5 + Math.floor(rand() * 4) * 5, gameId: g.id });
     }
     return picks;
   }
@@ -865,10 +902,10 @@
       }
       let net = 0, w = 0, l = 0, hidden = false;
       if (!p || p.local) {
-        const bets = p ? migrate(TO.store.get(dataKey(p.accountId), null) || freshData(now)).bets : TO.data.bets;
-        for (const b of bets) {
+        const challenges = p ? migrate(TO.store.get(dataKey(p.accountId), null) || freshData(now)).challenges : TO.data.challenges;
+        for (const b of challenges) {
           if (b.status === 'open' || b.placedAt < start || b.placedAt >= end) continue;
-          net += b.payout - b.stake;
+          net += b.reward - b.pledgeMinutes;
           if (b.status === 'won') w++;
           if (b.status === 'lost') l++;
         }
@@ -1113,7 +1150,7 @@
   function leaderboard() {
     const me = myStats();
     const rows = [{ username: TO.account.username, me: true, photo: TO.account.photo, w: me.w, l: me.l, net: me.net, tier: tier().id, streak: W().streakDays,
-      share: { record: true, minutes: true, bets: true } }];
+      share: { record: true, minutes: true, challenges: true } }];
     for (const f of TO.data.friends) {
       const p = person(f);
       if (p) rows.push({ username: p.username, me: false, photo: p.photo, w: p.w, l: p.l, net: p.net, tier: p.tier, streak: p.streak, share: p.share, name: p.name });
@@ -1141,34 +1178,34 @@
       const dk = TO.addDays(day, -back);
       w.usageByDay[dk] = 25 + Math.floor(rand() * 25);
       for (let k = 0; k < 2 + (back % 2); k++) {
-        const legsN = rand() < 0.25 ? 2 : 1;
-        const legs = [];
+        const picksN = rand() < 0.25 ? 2 : 1;
+        const picks = [];
         const placedAt = TO.dayStart(dk) + (12 + k * 3) * TO.HOUR + Math.floor(rand() * 40) * MIN;
-        for (let j = 0; j < legsN; j++) {
+        for (let j = 0; j < picksN; j++) {
           const league = leagues[Math.floor(rand() * leagues.length)];
           const L = S.LEAGUES[league];
           const slot = Math.floor((placedAt - L.offset) / S.SLOT) + 1;
           const id = `${league}-${slot}-${j % L.perSlot}`;
           const g0 = S.game(id, now);
-          if (!g0 || g0.state === 'postponed' || legs.some((l) => l.gameId === id)) continue;
-          const o = S.odds(id, g0.start - 60000);
+          if (!g0 || g0.state === 'postponed' || picks.some((l) => l.gameId === id)) continue;
+          const o = S.pointValue(id, g0.start - 60000);
           const pool = o.all.filter((s) => s.side !== 'draw');
           const sel = pool[Math.floor(rand() * pool.length)];
-          const leg = legFromSelection(sel, g0.start - 60000);
-          leg.result = S.grade(leg, now);
+          const pick = pickFromSelection(sel, g0.start - 60000);
+          pick.result = S.grade(pick, now);
           const g = S.game(id, now);
-          leg.final = `${g.away.abbr} ${g.awayScore} – ${g.home.abbr} ${g.homeScore}`;
-          legs.push(leg);
+          pick.final = `${g.away.abbr} ${g.awayScore} – ${g.home.abbr} ${g.homeScore}`;
+          picks.push(pick);
         }
-        if (!legs.length) continue;
-        const stake = 5 + Math.floor(rand() * 3) * 5;
-        const { decimal, american } = combine(legs);
-        const bet = { id: TO.uid('pledge'), kind: 'sports', placedAt, dayKey: dk, stake, legs, decimal, american,
-          boosted: false, insured: false, multiplier: 1, status: 'open', payout: 0, settledAt: null };
-        const res = outcome(bet);
-        bet.status = res.status; bet.payout = res.payout; bet.settledAt = Math.max(...legs.map((l) => (S.game(l.gameId, now) || {}).end || placedAt));
-        w.netByDay[dk] = (w.netByDay[dk] || 0) + (bet.payout - bet.stake);
-        d.bets.push(bet);
+        if (!picks.length) continue;
+        const pledgeMinutes = 5 + Math.floor(rand() * 3) * 5;
+        const { decimal, american } = combine(picks);
+        const challenge = { id: TO.uid('pledge'), kind: 'sports', placedAt, dayKey: dk, pledgeMinutes, picks, decimal, american,
+          boosted: false, insured: false, multiplier: 1, status: 'open', reward: 0, resolvedAt: null };
+        const res = outcome(challenge);
+        challenge.status = res.status; challenge.reward = res.reward; challenge.resolvedAt = Math.max(...picks.map((l) => (S.game(l.gameId, now) || {}).end || placedAt));
+        w.netByDay[dk] = (w.netByDay[dk] || 0) + (challenge.reward - challenge.pledgeMinutes);
+        d.challenges.push(challenge);
       }
     }
     w.streakDays = 4;
@@ -1180,27 +1217,27 @@
     const board = S.board(now).filter((g) => !g.simulated);
     const live = board.filter((g) => g.state === 'live' && g.progress < 0.7);
     const upcoming = board.filter((g) => g.state === 'scheduled' && g.start - now > 4 * MIN);
-    const mk = (g, pickFn) => { const o = S.odds(g.id, now); return pickFn(o); };
+    const mk = (g, pickFn) => { const o = S.pointValue(g.id, now); return pickFn(o); };
     if (live[0]) {
-      const sel = mk(live[0], (o) => o.moneyline.find((s) => s.side === 'home'));
-      pushOpen(d, [legFromSelection(sel, now)], 10, now - 3 * MIN);
+      const sel = mk(live[0], (o) => o.winner.find((s) => s.side === 'home'));
+      pushOpen(d, [pickFromSelection(sel, now)], 10, now - 3 * MIN);
     }
     if (upcoming.length >= 2) {
       const a = mk(upcoming[0], (o) => o.total[0]);
-      const b = mk(upcoming[1], (o) => (o.spread[1] || o.moneyline[1]));
-      pushOpen(d, [legFromSelection(a, now), legFromSelection(b, now)], 5, now - MIN);
+      const b = mk(upcoming[1], (o) => (o.margin[1] || o.winner[1]));
+      pushOpen(d, [pickFromSelection(a, now), pickFromSelection(b, now)], 5, now - MIN);
     } else if (live[1]) {
       const sel = mk(live[1], (o) => o.total[1]);
-      pushOpen(d, [legFromSelection(sel, now)], 5, now - MIN);
+      pushOpen(d, [pickFromSelection(sel, now)], 5, now - MIN);
     }
     return d;
   }
 
-  function pushOpen(d, legs, stake, placedAt) {
-    const { decimal, american } = combine(legs);
-    d.bets.push({ id: TO.uid('pledge'), kind: 'sports', placedAt, dayKey: d.wallet.dayKey, stake, legs, decimal, american,
-      boosted: false, insured: false, multiplier: streakMultiplier(d.wallet.streakDays), status: 'open', payout: 0, settledAt: null });
-    d.wallet.balance -= stake;
+  function pushOpen(d, picks, pledgeMinutes, placedAt) {
+    const { decimal, american } = combine(picks);
+    d.challenges.push({ id: TO.uid('pledge'), kind: 'sports', placedAt, dayKey: d.wallet.dayKey, pledgeMinutes, picks, decimal, american,
+      boosted: false, insured: false, multiplier: streakMultiplier(d.wallet.streakDays), status: 'open', reward: 0, resolvedAt: null });
+    d.wallet.balance -= pledgeMinutes;
   }
 
   const DEMO = { username: 'demo', email: 'demo@timeout.app', password: 'timeout123' };
@@ -1237,12 +1274,12 @@
   }
 
   TO.state = {
-    RULES, TIERS, LOCKABLE, PEOPLE, DEMO, TODO_ODDS,
+    RULES, TIERS, LOCKABLE, PEOPLE, DEMO, TODO_VALUE,
     tierById, tierForPoints, tierPerks, streakMultiplier, nextStreakMilestone, fmtMult,
     accounts, findAccount, createAccount, login, logout, loadSession, startSession, updateAccount, deleteAccount, adoptServerUser,
     validateUsername, validateEmail, validatePassword,
     save, wallet, rollover, grantTierBonus, addUsage, checkPhoneTime, useEmergencyUnlock, setSetting, limitFor, baseLimitFor, lockPoints, tier,
-    submitPledge, placeTodoParlay, completeTodo, settle, outcome, combine, legFromSelection,
+    submitPledge, placeTodoCombo, completeTodo, resolve, outcome, combine, pickFromSelection,
     myStats, statsFor, person, sharedPicks, searchPeople, relation,
     sendFriendRequest, addFriend, acceptFriendRequest, declineFriendRequest, cancelFriendRequest, resendFriendRequest, resendWait, removeFriend,
     socialTick,

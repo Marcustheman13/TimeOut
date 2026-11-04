@@ -1,6 +1,6 @@
 import Foundation
 
-/// Simulated sports feed, fair odds and grading. A port of the web demo's sim.js.
+/// Simulated sports feed, fair point value and grading. A port of the web demo's sim.js.
 ///
 /// Every league runs on rolling 20-minute slots. Each game lasts 12 real minutes, and every score and price is a
 /// pure function of the game ID and the clock, so the same game looks the same on every refresh (and on the web).
@@ -10,8 +10,8 @@ enum Sim {
     static let DURATION: Ms = 12 * TO.MIN
     static let STEP: Ms = 5000
     static let STEPS = Int(DURATION / STEP) // 144
-    static let oddsBucketLive: Ms = 15_000
-    static let oddsBucketPre: Ms = 2 * TO.MIN
+    static let pointValueBucketLive: Ms = 15_000
+    static let pointValueBucketPre: Ms = 2 * TO.MIN
 
     struct Sport {
         var periods: Int
@@ -20,19 +20,19 @@ enum Sim {
         var totalSigma: Double
         var perTeam: Double
         var homeEdge: Double
-        var spread: String?
-        var spreadLabel: String = "Spread"
+        var margin: String?
+        var marginLabel: String = "Margin"
         var draw = false
         var discrete: Bool
         var unit: String
     }
 
     static let sports: [String: Sport] = [
-        "football": Sport(periods: 4, periodMin: 15, marginSigma: 13.5, totalSigma: 10, perTeam: 21.6, homeEdge: 1.5, spread: "dynamic", spreadLabel: "Spread", discrete: false, unit: "pts"),
-        "basketball": Sport(periods: 4, periodMin: 12, marginSigma: 12, totalSigma: 15, perTeam: 111, homeEdge: 2.5, spread: "dynamic", spreadLabel: "Spread", discrete: false, unit: "pts"),
-        "baseball": Sport(periods: 9, marginSigma: 4.2, totalSigma: 3.2, perTeam: 4.3, homeEdge: 0.25, spread: "fixed", spreadLabel: "Run line", discrete: true, unit: "runs"),
-        "hockey": Sport(periods: 3, periodMin: 20, marginSigma: 2.4, totalSigma: 2.2, perTeam: 3.0, homeEdge: 0.2, spread: "fixed", spreadLabel: "Puck line", discrete: true, unit: "goals"),
-        "soccer": Sport(periods: 2, marginSigma: 1.6, totalSigma: 1.6, perTeam: 1.35, homeEdge: 0.3, spread: nil, draw: true, discrete: true, unit: "goals"),
+        "football": Sport(periods: 4, periodMin: 15, marginSigma: 13.5, totalSigma: 10, perTeam: 21.6, homeEdge: 1.5, margin: "dynamic", marginLabel: "Margin", discrete: false, unit: "pts"),
+        "basketball": Sport(periods: 4, periodMin: 12, marginSigma: 12, totalSigma: 15, perTeam: 111, homeEdge: 2.5, margin: "dynamic", marginLabel: "Margin", discrete: false, unit: "pts"),
+        "baseball": Sport(periods: 9, marginSigma: 4.2, totalSigma: 3.2, perTeam: 4.3, homeEdge: 0.25, margin: "fixed", marginLabel: "Run margin", discrete: true, unit: "runs"),
+        "hockey": Sport(periods: 3, periodMin: 20, marginSigma: 2.4, totalSigma: 2.2, perTeam: 3.0, homeEdge: 0.2, margin: "fixed", marginLabel: "Goal margin", discrete: true, unit: "goals"),
+        "soccer": Sport(periods: 2, marginSigma: 1.6, totalSigma: 1.6, perTeam: 1.35, homeEdge: 0.3, margin: nil, draw: true, discrete: true, unit: "goals"),
     ]
 
     struct League {
@@ -235,19 +235,19 @@ enum Sim {
         return list.sorted { (rank[$0.state]!, $0.start) < (rank[$1.state]!, $1.start) }
     }
 
-    // MARK: Odds
+    // MARK: Point value
 
-    private static var oddsCache: [String: OddsBoard] = [:]
+    private static var pointValueCache: [String: PointValueBoard] = [:]
 
     private static func expectedMargin(_ g: Game, _ now: Ms) -> Double {
         let S = sports[g.sport]!
         let d = strength(g.league, g.home) - strength(g.league, g.away)
         var mu = S.perTeam * 0.12 * d + S.homeEdge
-        if g.state == .scheduled { mu += 0.05 * S.marginSigma * TO.unit("drift-\(g.id)-\(Int((now / oddsBucketPre).rounded(.down)))") }
+        if g.state == .scheduled { mu += 0.05 * S.marginSigma * TO.unit("drift-\(g.id)-\(Int((now / pointValueBucketPre).rounded(.down)))") }
         return mu
     }
 
-    private static func computeOdds(_ g: Game, _ now: Ms) -> OddsBoard {
+    private static func computePointValue(_ g: Game, _ now: Ms) -> PointValueBoard {
         let S = sports[g.sport]!
         let rem = g.state == .live ? 1 - g.progress : 1
         let suspended = !(g.state == .scheduled || g.state == .live) || (g.state == .live && rem < 0.03)
@@ -259,22 +259,22 @@ enum Sim {
             sd = max(S.marginSigma * pow(rem, 0.4), minSD)
         } else { mu = mu0; sd = S.marginSigma }
         func sel(_ market: String, _ side: String, _ line: Double?, _ p: Double) -> Selection {
-            Selection(id: "\(g.id)|\(market)|\(side)", kind: "game", gameId: g.id, market: market, side: side, line: line, price: OddsMath.fromProb(p))
+            Selection(id: "\(g.id)|\(market)|\(side)", kind: "game", gameId: g.id, market: market, side: side, line: line, price: PointValueMath.fromProb(p))
         }
-        var board = OddsBoard()
+        var board = PointValueBoard()
         if S.draw {
             let pHome = 1 - TO.phi((0.5 - mu) / sd)
             let pAway = TO.phi((-0.5 - mu) / sd)
             let pDraw = max(1 - pHome - pAway, 0.02)
-            board.moneyline = [sel("ml", "away", nil, pAway), sel("ml", "draw", nil, pDraw), sel("ml", "home", nil, pHome)]
+            board.winner = [sel("winner", "away", nil, pAway), sel("winner", "draw", nil, pDraw), sel("winner", "home", nil, pHome)]
         } else {
             let pHome = TO.phi(mu / sd)
-            board.moneyline = [sel("ml", "away", nil, 1 - pHome), sel("ml", "home", nil, pHome)]
+            board.winner = [sel("winner", "away", nil, 1 - pHome), sel("winner", "home", nil, pHome)]
         }
-        if let spread = S.spread {
-            let homeLine = spread == "fixed" ? (mu >= 0 ? -1.5 : 1.5) : -TO.hook(mu)
+        if let margin = S.margin {
+            let homeLine = margin == "fixed" ? (mu >= 0 ? -1.5 : 1.5) : -TO.hook(mu)
             let pCover = 1 - TO.phi((-homeLine - mu) / sd)
-            board.spread = [sel("spread", "away", -homeLine, 1 - pCover), sel("spread", "home", homeLine, pCover)]
+            board.margin = [sel("margin", "away", -homeLine, 1 - pCover), sel("margin", "home", homeLine, pCover)]
         }
         let base = g.league == "sim" ? 222 : S.perTeam * 2
         let baseTotal = base * (1 + 0.06 * TO.unit("total-\(g.id)"))
@@ -285,38 +285,38 @@ enum Sim {
         } else { projected = baseTotal; sdT = S.totalSigma }
         let line = TO.hook(projected)
         let pOver = 1 - TO.phi((line - projected) / sdT)
-        board.total = [sel("total", "over", line, pOver), sel("total", "under", line, 1 - pOver)]
+        board.total = [sel("total", "higher", line, pOver), sel("total", "lower", line, 1 - pOver)]
         board.suspended = suspended
         return board
     }
 
-    /// Current odds for a game. Live prices refresh every 15 seconds; pre-game every 2 minutes.
-    static func odds(_ id: String, _ now: Ms = TO.now()) -> OddsBoard? {
+    /// Current point value for a game. Live prices refresh every 15 seconds; pre-game every 2 minutes.
+    static func pointValue(_ id: String, _ now: Ms = TO.now()) -> PointValueBoard? {
         guard let g = game(id, now) else { return nil }
-        let bucketLen = g.state == .live ? oddsBucketLive : oddsBucketPre
+        let bucketLen = g.state == .live ? pointValueBucketLive : pointValueBucketPre
         let bucket = (now / bucketLen).rounded(.down) * bucketLen
         let key = "\(id)|\(bucket)|\(g.state.rawValue)"
-        if let hit = oddsCache[key] { return hit }
+        if let hit = pointValueCache[key] { return hit }
         let gb = g.state == .live ? (game(id, max(bucket, g.start)) ?? g) : g
-        var o = computeOdds(gb.state == .live || gb.state == .scheduled ? gb : g, bucket)
+        var o = computePointValue(gb.state == .live || gb.state == .scheduled ? gb : g, bucket)
         if g.state != .live && g.state != .scheduled { o.suspended = true }
         if g.state == .live && 1 - g.progress < 0.03 { o.suspended = true }
         o.updatedAt = bucket
         let prevT = bucket - bucketLen
         if let gp = game(id, prevT), gp.state == .live || gp.state == .scheduled {
-            let prev = computeOdds(gp, prevT)
+            let prev = computePointValue(gp, prevT)
             for s in o.all {
                 if let p = prev.all.first(where: { $0.id == s.id }), p.price != s.price { o.move[s.id] = s.price > p.price ? 1 : -1 }
             }
         }
-        if oddsCache.count > 3000 { oddsCache.removeAll() }
-        oddsCache[key] = o
+        if pointValueCache.count > 3000 { pointValueCache.removeAll() }
+        pointValueCache[key] = o
         return o
     }
 
     static func currentSelection(_ selId: String, _ now: Ms = TO.now()) -> (sel: Selection?, open: Bool)? {
         let ref = String(selId.split(separator: "|").first ?? "")
-        guard let o = odds(ref, now) else { return nil }
+        guard let o = pointValue(ref, now) else { return nil }
         let sel = o.all.first { $0.id == selId }
         return (sel, sel != nil && !o.suspended)
     }
@@ -327,9 +327,9 @@ enum Sim {
         if sel.market == "pred" { return sel.side == "yes" ? "Yes" : "No" }
         let team = g?.team(sel.side)
         switch sel.market {
-        case "ml": return team.map { "\($0.name) to win" } ?? "Draw"
-        case "spread": return "\(team?.name ?? "") \(OddsMath.fmtLine(sel.line ?? 0))"
-        case "total": return "\(sel.side == "over" ? "Over" : "Under") \(OddsMath.fmtLine(sel.line ?? 0, signed: false))"
+        case "winner": return team.map { "\($0.name) to win" } ?? "Draw"
+        case "margin": return "\(team?.name ?? "") \(PointValueMath.fmtLine(sel.line ?? 0))"
+        case "total": return "Combined score \(sel.side == "higher" ? "above" : "below") \(PointValueMath.fmtLine(sel.line ?? 0, signed: false))"
         default: return ""
         }
     }
@@ -338,50 +338,50 @@ enum Sim {
         switch sel.market {
         case "race": return "Race winner"
         case "pred": return "Prediction"
-        case "ml": return "Moneyline"
-        case "spread": return g.flatMap { sports[$0.sport]?.spreadLabel } ?? "Spread"
+        case "winner": return "Winner"
+        case "margin": return g.flatMap { sports[$0.sport]?.marginLabel } ?? "Margin"
         default: return "Total"
         }
     }
 
-    static func grade(_ leg: Leg, _ now: Ms = TO.now()) -> String {
-        guard let gameId = leg.gameId, let g = game(gameId, now) else { return "pending" }
+    static func grade(_ pick: Pick, _ now: Ms = TO.now()) -> String {
+        guard let gameId = pick.gameId, let g = game(gameId, now) else { return "pending" }
         if g.state == .postponed { return "void" }
         if g.state != .final { return "pending" }
-        return gradeScore(market: leg.market, side: leg.side ?? "", line: leg.line, H: g.homeScore, A: g.awayScore)
+        return gradeScore(market: pick.market, side: pick.side ?? "", line: pick.line, H: g.homeScore, A: g.awayScore)
     }
 
     static func gradeScore(market: String, side: String, line: Double?, H: Int, A: Int) -> String {
         switch market {
-        case "ml":
+        case "winner":
             if side == "draw" { return H == A ? "won" : "lost" }
             if H == A { return "lost" }
             return (side == "home") == (H > A) ? "won" : "lost"
-        case "spread":
+        case "margin":
             let m = Double(side == "home" ? H - A : A - H) + (line ?? 0)
-            return m > 0 ? "won" : m < 0 ? "lost" : "push"
+            return m > 0 ? "won" : m < 0 ? "lost" : "tie"
         case "total":
             let tot = Double(H + A)
-            if tot == line { return "push" }
-            return (side == "over") == (tot > (line ?? 0)) ? "won" : "lost"
+            if tot == line { return "tie" }
+            return (side == "higher") == (tot > (line ?? 0)) ? "won" : "lost"
         default: return "pending"
         }
     }
 
     /// How an open pick is doing right now: winning | losing | even | upcoming | void.
-    static func liveStanding(_ leg: Leg, _ g: Game?) -> String {
+    static func liveStanding(_ pick: Pick, _ g: Game?) -> String {
         guard let g, g.state != .scheduled else { return "upcoming" }
         if g.state == .postponed || g.state == .canceled { return "void" }
-        if leg.market == "total" {
+        if pick.market == "total" {
             // Compare pace, not the raw score, so an over isn't "losing" in the first minute.
-            let line = leg.line ?? 0
+            let line = pick.line ?? 0
             let pace = g.progress > 0.05 ? Double(g.homeScore + g.awayScore) / g.progress : line
             if abs(pace - line) < 0.5 { return "even" }
-            return (leg.side == "over") == (pace > line) ? "winning" : "losing"
+            return (pick.side == "higher") == (pace > line) ? "winning" : "losing"
         }
-        let r = gradeScore(market: leg.market, side: leg.side ?? "", line: leg.line, H: g.homeScore, A: g.awayScore)
-        if r == "push" { return "even" }
-        if leg.market == "ml" && g.homeScore == g.awayScore { return leg.side == "draw" ? "winning" : "even" }
+        let r = gradeScore(market: pick.market, side: pick.side ?? "", line: pick.line, H: g.homeScore, A: g.awayScore)
+        if r == "tie" { return "even" }
+        if pick.market == "winner" && g.homeScore == g.awayScore { return pick.side == "draw" ? "winning" : "even" }
         return r == "won" ? "winning" : "losing"
     }
 }

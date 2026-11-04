@@ -4,11 +4,11 @@ import Observation
 import SwiftUI
 import UserNotifications
 
-/// App shell logic from the web demo's app.js: boot, the live loop, settlement alerts and Supabase sync.
+/// App shell logic from the web demo's app.js: boot, the live loop, resolution alerts and Supabase sync.
 @Observable
 final class AppModel {
     static let shared = AppModel()
-    static let backgroundTaskID = "com.marcuswilliams.staketime.settle"
+    static let backgroundTaskID = "com.marcuswilliams.staketime.resolve"
 
     /// False until the first session restore finishes (shows the launch screen).
     private(set) var ready = false
@@ -88,7 +88,7 @@ final class AppModel {
         #endif
     }
 
-    /// Bet results and the "5 minutes left" warning arrive as notifications while the app is in the background.
+    /// Challenge results and the "5 minutes left" warning arrive as notifications while the app is in the background.
     private func requestNotifications() {
         Task { _ = try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) }
     }
@@ -97,12 +97,12 @@ final class AppModel {
 
     func tickNow(force: Bool) {
         let now = TO.now()
-        // Settle as soon as new scores arrive (the web's live:updated event).
+        // Resolve as soon as new scores arrive (the web's live:updated event).
         if live.version != lastLiveVersion {
             lastLiveVersion = live.version
-            if inShell { notifySettled(store.settle(now)) }
+            if inShell { notifyResolved(store.resolve(now)) }
         }
-        if Races.shared.finalizeIfDone(now), inShell { notifySettled(store.settle(now)) }
+        if Races.shared.finalizeIfDone(now), inShell { notifyResolved(store.resolve(now)) }
         if !force && Date().timeIntervalSince(lastFull) < 5 { return }
         lastFull = Date()
         tick &+= 1
@@ -111,12 +111,12 @@ final class AppModel {
         live.refresh(now)
         live.refreshUpcoming(now)
 
-        // Midnight reset, bet settlement and friend activity.
+        // Midnight reset, challenge resolution and friend activity.
         if store.rollover(now) {
             store.save()
-            ui.toast(.info, "New day, new 60 minutes", "Today's phone limit is \(store.wallet.todayLimit) min after yesterday's bets.")
+            ui.toast(.info, "New day, new 60 minutes", "Today's phone limit is \(store.wallet.todayLimit) min after yesterday's challenges.")
         }
-        notifySettled(store.settle(now))
+        notifyResolved(store.resolve(now))
         for username in store.socialTick(now) where store.data?.settings.notify.friends == true {
             ui.toast(.win, "@\(username) accepted your friend request")
         }
@@ -125,21 +125,21 @@ final class AppModel {
         if Date().timeIntervalSince(lastRemoteSync) > 30 { syncRemoteState() }
     }
 
-    func notifySettled(_ list: [Bet]) {
-        guard store.data?.settings.notify.settled == true else { return }
+    func notifyResolved(_ list: [Challenge]) {
+        guard store.data?.settings.notify.resolved == true else { return }
         for b in list {
-            let title = BetText.title(b)
-            if b.status == "won" { ui.toast(.win, "Won: \(title)", "+\(b.payout - b.stake) min added to tomorrow's phone time.") }
-            else if b.status == "lost" { ui.toast(.loss, "Lost: \(title)", "−\(b.stake) min from tomorrow's phone time.") }
-            else { ui.toast(.info, "Voided: \(title)", "\(b.insurancePaid == true ? "Parlay insurance paid out." : "The game was postponed.") Your \(b.stake) min stake came back.") }
+            let title = ChallengeText.title(b)
+            if b.status == "won" { ui.toast(.win, "Won: \(title)", "+\(b.reward - b.pledgeMinutes) min added to tomorrow's phone time.") }
+            else if b.status == "lost" { ui.toast(.loss, "Lost: \(title)", "−\(b.pledgeMinutes) min from tomorrow's phone time.") }
+            else { ui.toast(.info, "Voided: \(title)", "\(b.insurancePaid == true ? "Combo protection paid out." : "The game was postponed.") Your \(b.pledgeMinutes) min pledged came back.") }
         }
     }
 
     func netChanged() {
-        if Net.shared.online { ui.toast(.win, "Back online", "Odds are updating again.") }
+        if Net.shared.online { ui.toast(.win, "Back online", "Point values are updating again.") }
     }
 
-    /// Bets placed on another device (or the website) show up here within 30 seconds.
+    /// Challenges placed on another device (or the website) show up here within 30 seconds.
     func syncRemoteState(force: Bool = false) {
         guard inShell, API.shared.configured, API.shared.hasToken, let server = store.account?.server, !remoteSyncing else { return }
         if !force && Date().timeIntervalSince(lastRemoteSync) < 30 { return }
@@ -157,7 +157,7 @@ final class AppModel {
         scheduleBackgroundRefresh()
     }
 
-    // MARK: Background settlement
+    // MARK: Background resolution
 
     func scheduleBackgroundRefresh() {
         let request = BGAppRefreshTaskRequest(identifier: Self.backgroundTaskID)
@@ -165,19 +165,19 @@ final class AppModel {
         try? BGTaskScheduler.shared.submit(request)
     }
 
-    /// Runs when iOS wakes the app: refresh scores, settle, and notify about finished bets.
+    /// Runs when iOS wakes the app: refresh scores, resolve, and notify about finished challenges.
     func backgroundRefresh() async {
         scheduleBackgroundRefresh()
         guard inShell else { return }
         live.refresh(force: true)
         for _ in 0..<20 where live.loading { try? await Task.sleep(for: .milliseconds(500)) }
-        let settled = store.settle(TO.now())
-        guard store.data?.settings.notify.settled == true else { return }
-        for b in settled {
+        let resolved = store.resolve(TO.now())
+        guard store.data?.settings.notify.resolved == true else { return }
+        for b in resolved {
             let content = UNMutableNotificationContent()
-            content.title = b.status == "won" ? "Won: \(BetText.title(b))" : b.status == "lost" ? "Lost: \(BetText.title(b))" : "Voided: \(BetText.title(b))"
-            content.body = b.status == "won" ? "+\(b.payout - b.stake) min added to tomorrow's phone time."
-                : b.status == "lost" ? "−\(b.stake) min from tomorrow's phone time." : "Your \(b.stake) min stake came back."
+            content.title = b.status == "won" ? "Won: \(ChallengeText.title(b))" : b.status == "lost" ? "Lost: \(ChallengeText.title(b))" : "Voided: \(ChallengeText.title(b))"
+            content.body = b.status == "won" ? "+\(b.reward - b.pledgeMinutes) min added to tomorrow's phone time."
+                : b.status == "lost" ? "−\(b.pledgeMinutes) min from tomorrow's phone time." : "Your \(b.pledgeMinutes) min pledged came back."
             content.sound = .default
             try? await UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: b.id, content: content, trigger: nil))
         }
@@ -263,14 +263,14 @@ enum Invites {
     }
 }
 
-/// Bet titles shared by toasts, cards and the share image.
-enum BetText {
-    static func title(_ b: Bet) -> String {
-        if b.kind == "todo" { return "To-do parlay · \(b.legs.count) task\(b.legs.count == 1 ? "" : "s")" }
-        return b.legs.count > 1 ? "\(b.legs.count)-pick parlay" : (b.legs.first?.label ?? "Bet")
+/// Challenge titles shared by toasts, cards and the share image.
+enum ChallengeText {
+    static func title(_ b: Challenge) -> String {
+        if b.kind == "todo" { return "To-do combo · \(b.picks.count) task\(b.picks.count == 1 ? "" : "s")" }
+        return b.picks.count > 1 ? "\(b.picks.count)-pick combo" : (b.picks.first?.label ?? "Challenge")
     }
 
-    static func toWin(_ b: Bet) -> Int {
-        jsRoundInt(Double(jsRoundInt(Double(b.stake) * b.decimal) - b.stake) * b.multiplier)
+    static func toWin(_ b: Challenge) -> Int {
+        jsRoundInt(Double(jsRoundInt(Double(b.pledgeMinutes) * b.decimal) - b.pledgeMinutes) * b.multiplier)
     }
 }

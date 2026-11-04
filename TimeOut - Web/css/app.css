@@ -231,7 +231,7 @@ button:disabled { cursor: not-allowed; }
 .status-pill { display: inline-grid; place-items: center; height: 22px; padding: 0 8px; border-radius: 999px; font-size: 11px; font-weight: 900; letter-spacing: 0.05em; }
 .status-pill.won { background: var(--accent); color: var(--accent-ink); }
 .status-pill.lost { background: var(--loss); color: #fff; }
-.status-pill.void, .status-pill.push { background: var(--muted); color: #fff; }
+.status-pill.void, .status-pill.tie { background: var(--muted); color: #fff; }
 .status-pill.open { background: var(--raised); color: var(--text); }
 
 .live { display: inline-flex; align-items: center; gap: 4px; color: var(--live); font-size: 11px; font-weight: 900; letter-spacing: 0.04em; }
@@ -506,16 +506,16 @@ label.list-row { cursor: pointer; }
 .pledge-top { display: flex; align-items: flex-start; gap: 10px; }
 .pledge-top .t { font-weight: 800; font-size: 16px; line-height: 1.2; }
 .pledge-top .multiplier { font-family: var(--font-display); font-weight: 800; font-size: 18px; color: var(--text-2); margin-left: auto; white-space: nowrap; font-variant-numeric: tabular-nums; }
-.leg { display: flex; gap: 10px; align-items: flex-start; }
-.leg + .leg { border-top: 1px dashed var(--stroke); padding-top: 10px; }
-.leg-dot { width: 20px; height: 20px; border-radius: 50%; flex: none; display: grid; place-items: center; margin-top: 1px; background: var(--raised); color: var(--text-2); }
-.leg-dot.won { background: var(--accent); color: var(--accent-ink); }
-.leg-dot.lost { background: var(--loss); color: #fff; }
-.leg-dot.void, .leg-dot.push { background: var(--muted); color: #fff; }
-.leg-dot.winning { background: var(--accent-soft); color: var(--accent); }
-.leg-dot.losing { background: var(--loss-soft); color: var(--loss); }
-.leg .lt { font-weight: 700; font-size: 14.5px; }
-.leg .lm { font-size: 12.5px; color: var(--text-2); }
+.pick { display: flex; gap: 10px; align-items: flex-start; }
+.pick + .pick { border-top: 1px dashed var(--stroke); padding-top: 10px; }
+.pick-dot { width: 20px; height: 20px; border-radius: 50%; flex: none; display: grid; place-items: center; margin-top: 1px; background: var(--raised); color: var(--text-2); }
+.pick-dot.won { background: var(--accent); color: var(--accent-ink); }
+.pick-dot.lost { background: var(--loss); color: #fff; }
+.pick-dot.void, .pick-dot.tie { background: var(--muted); color: #fff; }
+.pick-dot.winning { background: var(--accent-soft); color: var(--accent); }
+.pick-dot.losing { background: var(--loss-soft); color: var(--loss); }
+.pick .lt { font-weight: 700; font-size: 14.5px; }
+.pick .lm { font-size: 12.5px; color: var(--text-2); }
 .livebox { background: var(--bg); border: 1px solid var(--stroke); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
 .livebox .lb-score { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 14px; }
 .livebox .lb-score .sc { font-family: var(--font-display); font-weight: 900; font-size: 20px; font-variant-numeric: tabular-nums; }
@@ -525,11 +525,11 @@ label.list-row { cursor: pointer; }
 .standing.winning { color: var(--accent); }
 .standing.losing { color: var(--loss); }
 .standing.even, .standing.upcoming { color: var(--text-2); }
-.stake-row { display: grid; grid-template-columns: 1fr 1fr 1fr; background: var(--bg); border-radius: 12px; padding: 9px 4px; border: 1px solid var(--stroke); }
-.stake-row > div { text-align: center; }
-.stake-row > div + div { border-left: 1px solid var(--stroke); }
-.stake-row b { display: block; font-family: var(--font-display); font-weight: 800; font-size: 18px; font-variant-numeric: tabular-nums; }
-.stake-row span { font-size: 11px; font-weight: 700; color: var(--muted); }
+.pledge-row { display: grid; grid-template-columns: 1fr 1fr 1fr; background: var(--bg); border-radius: 12px; padding: 9px 4px; border: 1px solid var(--stroke); }
+.pledge-row > div { text-align: center; }
+.pledge-row > div + div { border-left: 1px solid var(--stroke); }
+.pledge-row b { display: block; font-family: var(--font-display); font-weight: 800; font-size: 18px; font-variant-numeric: tabular-nums; }
+.pledge-row span { font-size: 11px; font-weight: 700; color: var(--muted); }
 .pledge-actions { display: flex; gap: 8px; }
 .pledge-actions .btn { flex: 1; }
 
@@ -684,19 +684,19 @@ label.list-row { cursor: pointer; }
 .build-combo-goal.active .link-btn { flex: none; }
 
 /* pledges commitment */
-.commitment-leg { display: flex; gap: 10px; align-items: flex-start; padding: 12px; border-radius: 14px; background: var(--surface); border: 1px solid var(--stroke); }
-.commitment-leg.changed { border-color: rgba(255, 201, 64, 0.6); }
-.commitment-leg.closed { border-color: rgba(255, 90, 95, 0.5); opacity: 0.85; }
-.commitment-leg .price { font-family: var(--font-display); font-weight: 900; font-size: 20px; color: var(--accent); white-space: nowrap; font-variant-numeric: tabular-nums; }
-.commitment-leg .old { text-decoration: line-through; color: var(--muted); font-size: 14px; margin-right: 4px; }
-.stake-box { display: grid; grid-template-columns: 48px 1fr 48px; gap: 8px; align-items: center; }
-.stake-box .step { height: 52px; border-radius: 14px; background: var(--raised); border: 1px solid var(--stroke); display: grid; place-items: center; }
-.stake-input { position: relative; }
-.stake-input input { width: 100%; height: 52px; text-align: center; border-radius: 14px; border: 1px solid var(--stroke); background: var(--raised); font-family: var(--font-display); font-weight: 900; font-size: 30px; outline: none; font-variant-numeric: tabular-nums; padding-right: 36px; padding-left: 36px; -moz-appearance: textfield; }
-.stake-input input::-webkit-outer-spin-button, .stake-input input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-.stake-input input:focus { border-color: var(--accent); }
-.stake-input input.bad { border-color: var(--loss); color: var(--loss); }
-.stake-input span { position: absolute; right: 14px; top: 50%; translate: 0 -50%; font-weight: 700; color: var(--text-2); font-size: 14px; pointer-events: none; }
+.commitment-pick { display: flex; gap: 10px; align-items: flex-start; padding: 12px; border-radius: 14px; background: var(--surface); border: 1px solid var(--stroke); }
+.commitment-pick.changed { border-color: rgba(255, 201, 64, 0.6); }
+.commitment-pick.closed { border-color: rgba(255, 90, 95, 0.5); opacity: 0.85; }
+.commitment-pick .price { font-family: var(--font-display); font-weight: 900; font-size: 20px; color: var(--accent); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.commitment-pick .old { text-decoration: line-through; color: var(--muted); font-size: 14px; margin-right: 4px; }
+.pledge-box { display: grid; grid-template-columns: 48px 1fr 48px; gap: 8px; align-items: center; }
+.pledge-box .step { height: 52px; border-radius: 14px; background: var(--raised); border: 1px solid var(--stroke); display: grid; place-items: center; }
+.pledge-input { position: relative; }
+.pledge-input input { width: 100%; height: 52px; text-align: center; border-radius: 14px; border: 1px solid var(--stroke); background: var(--raised); font-family: var(--font-display); font-weight: 900; font-size: 30px; outline: none; font-variant-numeric: tabular-nums; padding-right: 36px; padding-left: 36px; -moz-appearance: textfield; }
+.pledge-input input::-webkit-outer-spin-button, .pledge-input input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.pledge-input input:focus { border-color: var(--accent); }
+.pledge-input input.bad { border-color: var(--loss); color: var(--loss); }
+.pledge-input span { position: absolute; right: 14px; top: 50%; translate: 0 -50%; font-weight: 700; color: var(--text-2); font-size: 14px; pointer-events: none; }
 .quick { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
 .quick button { height: 34px; border-radius: 10px; background: var(--surface); border: 1px solid var(--stroke); font-weight: 800; font-size: 13.5px; }
 .quick button.on { border-color: var(--accent); color: var(--accent); }

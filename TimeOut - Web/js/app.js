@@ -54,7 +54,7 @@
       <button class="icon-btn" data-act="menu" aria-label="Menu and settings">${icon('menu', 22)}${wl.appsLocked ? '<span class="dotbadge"></span>' : ''}</button>
       <div class="brand">${brandMark(18, 'brand-mark')}<span class="brand-word">TIME<b>OUT</b></span></div>
       <button class="bal-pill ${locked ? 'locked' : ''}" data-act="settings" data-section="screentime" aria-label="${locked ? 'New pledges resume at midnight' : `${wl.balance} minutes available to pledge`}">${icon(locked ? 'lock' : 'hourglass', 15)}${locked ? 'Locked' : `${wl.balance} min`}</button>`;
-    const open = TO.data.bets.filter((b) => b.status === 'open' && (b.kind === 'sports' || b.kind === 'race') && b.legs.length && b.legs.every((leg) => leg.kind === 'race' || leg.kind === 'game' || (leg.kind === 'sports' && leg.gameId))).length;
+    const open = TO.data.challenges.filter((b) => b.status === 'open' && (b.kind === 'sports' || b.kind === 'race') && b.picks.length && b.picks.every((pick) => pick.kind === 'race' || pick.kind === 'game' || (pick.kind === 'sports' && pick.gameId))).length;
     document.getElementById('tabbar').innerHTML = TABS.map(([k, label, ic]) => {
       const badge = k === 'challenges' && open ? `<span class="badge green">${open}</span>` : k === 'social' && socialBadge ? `<span class="badge">${socialBadge}</span>` : '';
       return `<button class="tab ${app.tab === k ? 'on' : ''}" data-act="tab" data-tab="${k}" aria-current="${app.tab === k ? 'page' : 'false'}">${icon(ic, 23)}<span>${label}</span>${badge}</button>`;
@@ -69,14 +69,14 @@
     let markup = '';
     if (commitment.comboGoalMode && commitment.selectedPicks.length && !ui.sheetOpen('commitment')) {
       const st = commitment.status();
-      const dec = commitment.selectedPicks.reduce((p, l) => p * TO.convertOddsToMultiplier(l.price), 1);
+      const dec = commitment.selectedPicks.reduce((p, l) => p * TO.convertPointValueToMultiplier(l.price), 1);
       const detail = st.closed ? 'Choice unavailable' : st.changed ? 'Target updated' : `${dec.toFixed(2)}x Target`;
       const title = commitment.selectedPicks.length > 1 ? 'Review Combo Goal' : 'Review Single Matchup Pledge';
       markup = `<button class="commitment-bar combo-goal-finalize" data-act="open-commitment" aria-label="${title}"><span class="n">${commitment.selectedPicks.length}</span><span>${title}</span><span class="o">${detail}</span></button>`;
     } else if (commitment.selectedPicks.length && !commitment.comboGoalMode && !ui.sheetOpen('commitment')) {
       const st = commitment.status();
-      const dec = commitment.selectedPicks.reduce((p, l) => p * TO.odds.decimal(l.price), 1);
-      markup = `<button class="commitment-bar" data-act="open-commitment"><span class="n">${commitment.selectedPicks.length}</span><span>Daily Commitment</span>${st.changed || st.closed ? `<span class="o row-s" style="font-family:var(--font-body);font-size:13px;color:var(--warn)">${icon('alert', 15)} ${st.closed ? 'Choice unavailable' : 'Target updated'}</span>` : `<span class="o">${TO.convertOddsToMultiplier(commitment.selectedPicks[0].price).toFixed(2)}x Target</span>`}</button>`;
+      const dec = commitment.selectedPicks.reduce((p, l) => p * TO.pointValue.decimal(l.price), 1);
+      markup = `<button class="commitment-bar" data-act="open-commitment"><span class="n">${commitment.selectedPicks.length}</span><span>Daily Commitment</span>${st.changed || st.closed ? `<span class="o row-s" style="font-family:var(--font-body);font-size:13px;color:var(--warn)">${icon('alert', 15)} ${st.closed ? 'Choice unavailable' : 'Target updated'}</span>` : `<span class="o">${TO.convertPointValueToMultiplier(commitment.selectedPicks[0].price).toFixed(2)}x Target</span>`}</button>`;
     }
     if (host.innerHTML !== markup) host.innerHTML = markup;
   };
@@ -93,7 +93,7 @@
   };
 
   app.render = () => { app.renderChrome(); app.renderView(); };
-  app.refreshOddsButtons = () => {
+  app.refreshPointValueButtons = () => {
     app.renderView();
     if (ui.pageOpen('game')) TO.views.game.refresh();
     if (ui.pageOpen('combo-goal')) ui.refreshPage('combo-goal');
@@ -111,13 +111,13 @@
   // ---------- Live loop ----------
   let lastFull = 0;
   let lastSlipUiSig = '';
-  function betTitle(b) { return TO.views.bets.betTitle(b); }
+  function challengeTitle(b) { return TO.views.challenges.challengeTitle(b); }
 
   function refreshSlip() {
     const commitment = TO.comboGoalBuilder;
     if (!commitment.selectedPicks.length) { lastSlipUiSig = ''; return; }
-    const sig = commitment.selectedPicks.map((leg) => {
-      const cur = TO.sim.currentSelection(leg.selId);
+    const sig = commitment.selectedPicks.map((pick) => {
+      const cur = TO.sim.currentSelection(pick.selId);
       return cur?.sel ? `${cur.sel.price}|${cur.sel.line}|${cur.open}` : 'x';
     }).join(',');
     if (sig !== lastSlipUiSig) {
@@ -126,13 +126,13 @@
     }
   }
 
-  function notifySettled(list) {
+  function notifyResolved(list) {
     const n = TO.data.settings.notify;
     for (const b of list) {
-      if (!n.settled) continue;
-      if (b.status === 'won') ui.toast({ kind: 'win', title: `Challenge complete: ${betTitle(b)}`, msg: `+${b.payout - b.stake} earned minutes added to tomorrow's phone time.` });
-      else if (b.status === 'lost') ui.toast({ kind: 'loss', title: `Challenge missed: ${betTitle(b)}`, msg: `${b.stake} committed minutes deducted from tomorrow's phone time.` });
-      else ui.toast({ kind: 'info', title: `Challenge returned: ${betTitle(b)}`, msg: `${b.insurancePaid ? 'Miss-one protection returned your minutes.' : 'The game was postponed.'} ${b.stake} minutes are available again.` });
+      if (!n.resolved) continue;
+      if (b.status === 'won') ui.toast({ kind: 'win', title: `Challenge complete: ${challengeTitle(b)}`, msg: `+${b.reward - b.pledgeMinutes} earned minutes added to tomorrow's phone time.` });
+      else if (b.status === 'lost') ui.toast({ kind: 'loss', title: `Challenge missed: ${challengeTitle(b)}`, msg: `${b.pledgeMinutes} committed minutes deducted from tomorrow's phone time.` });
+      else ui.toast({ kind: 'info', title: `Challenge returned: ${challengeTitle(b)}`, msg: `${b.insurancePaid ? 'Miss-one protection returned your minutes.' : 'The game was postponed.'} ${b.pledgeMinutes} minutes are available again.` });
     }
   }
 
@@ -146,14 +146,14 @@
 
     TO.live.refresh();
 
-    // Midnight reset, pledges settlement and friend activity.
+    // Midnight reset, pledges resolution and friend activity.
     const rolledOver = St.rollover(now);
     if (rolledOver) {
       St.save();
       ui.toast({ kind: 'info', title: 'Your daily minutes refreshed', msg: `Today's phone limit is ${St.wallet().todayLimit} min after yesterday's challenge results.` });
     }
-    const settled = St.settle(now);
-    notifySettled(settled);
+    const resolved = St.resolve(now);
+    notifyResolved(resolved);
     const socialEvents = St.socialTick(now);
     for (const ev of socialEvents) {
       if (ev.type === 'friend' && TO.data.settings.notify.friends) ui.toast({ kind: 'win', title: `@${ev.username} accepted your friend request` });
@@ -165,7 +165,7 @@
       refreshSlip();
     }
 
-    const stateChanged = rolledOver || settled.length || socialEvents.length;
+    const stateChanged = rolledOver || resolved.length || socialEvents.length;
     if (stateChanged && !app.pressing && !isTyping()) {
       app.renderChrome();
       app.renderView();
@@ -221,7 +221,13 @@
     }
     ui.closeSheet(el.dataset.name);
   };
-  A['close-page'] = (el) => { ui.closePage(el.dataset.name); app.render(); };
+  A['close-page'] = (el) => {
+    const name = el.dataset.name;
+    ui.closePage(name);
+    app.render();
+    // Phone shell: the settings list is the menu drawer. Back from a section returns there, not Home.
+    if (name === 'settings' && !document.getElementById('side')) TO.views.settings.openDrawer();
+  };
 
   // ---------- Event wiring ----------
   document.addEventListener('click', (e) => {
@@ -238,9 +244,9 @@
   });
   TO.on('live:updated', () => {
     if (!inShell()) return;
-    const settled = St.settle(TO.now());
-    notifySettled(settled);
-    if (settled.length) app.renderChrome();
+    const resolved = St.resolve(TO.now());
+    notifyResolved(resolved);
+    if (resolved.length) app.renderChrome();
     if (app.tab === 'home') TO.views.home.refreshLive();
     if (app.tab === 'challenges') app.renderView();
     if (ui.pageOpen('game')) TO.views.game.refresh();
@@ -265,7 +271,7 @@
     if (!last) return;
     if (last.dataset.sheet) ui.closeSheet(last.dataset.sheet);
     else if (last.dataset.drawer) TO.views.settings.closeDrawer();
-    else if (last.dataset.page) { ui.closePage(last.dataset.page); app.render(); }
+    else if (last.dataset.page) A['close-page']({ dataset: { name: last.dataset.page } });
   });
   document.addEventListener('pointerdown', () => { app.pressing = true; });
   document.addEventListener('pointerup', () => { setTimeout(() => { app.pressing = false; }, 60); });

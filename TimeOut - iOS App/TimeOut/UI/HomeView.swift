@@ -44,12 +44,12 @@ final class HomeModel {
         UIState.shared.scrollToFilters()
     }
 
-    static func myOpenBets(on ref: String) -> [Bet] {
-        (Store.shared.data?.bets ?? []).filter { $0.status == "open" && $0.legs.contains { $0.gameId == ref || $0.predId == ref || $0.raceId == ref } }
+    static func myOpenChallenges(on ref: String) -> [Challenge] {
+        (Store.shared.data?.challenges ?? []).filter { $0.status == "open" && $0.picks.contains { $0.gameId == ref || $0.predId == ref || $0.raceId == ref } }
     }
 
-    static func sportsOnly(_ bet: Bet) -> Bool {
-        bet.kind == "race" || (bet.kind == "sports" && bet.legs.allSatisfy { leg in leg.gameId != nil && Feed.game(leg.gameId!)?.league != "sim" })
+    static func sportsOnly(_ challenge: Challenge) -> Bool {
+        challenge.kind == "race" || (challenge.kind == "sports" && challenge.picks.allSatisfy { pick in pick.gameId != nil && Feed.game(pick.gameId!)?.league != "sim" })
     }
 }
 
@@ -72,12 +72,12 @@ struct HomeView: View {
                     WalletCard(wl: wl)
                     if wl.appsLocked { AppLockBanner(wl: wl) }
                     StatusStrip(wl: wl)
-                    OpenBetsStrip()
+                    OpenChallengesStrip()
                     Section {
                         VStack(spacing: 12) {
-                            BuildParlayControl()
+                            BuildComboControl()
                             if live.offline {
-                                Note(.blue, icon: .info, "Live ESPN odds can't be reached here, so these are simulated games with real team names. Everything else works the same.").gutter()
+                                Note(.blue, icon: .info, "Live ESPN point value can't be reached here, so these are simulated games with real team names. Everything else works the same.").gutter()
                             }
                             FeedList(games: games)
                         }
@@ -105,11 +105,11 @@ struct WalletCard: View {
     var body: some View {
         if wl.lockedOut || wl.balance <= 0 {
             VStack(alignment: .leading, spacing: 0) {
-                HStack(spacing: 6) { Icon(.lock, 14); Text("OUT OF BETTING MINUTES").font(.barlow(12, 900)).tracking(0.72) }
+                HStack(spacing: 6) { Icon(.lock, 14); Text("OUT OF CHALLENGING MINUTES").font(.barlow(12, 900)).tracking(0.72) }
                     .foregroundStyle(Theme.loss)
-                Text("Betting is locked. It reopens at midnight.").font(.barlow(16, 700)).padding(.top, 8)
+                Text("Challenging is locked. It reopens at midnight.").font(.barlow(16, 700)).padding(.top, 8)
                 Countdown(target: TO.nextMidnight()).font(.display(46, 900)).padding(.top, 6)
-                Text("Your open bets still settle and count toward tomorrow's phone time.").font(.barlow(13)).foregroundStyle(Theme.text2).padding(.top, 4)
+                Text("Your open challenges still resolve and count toward tomorrow's phone time.").font(.barlow(13)).foregroundStyle(Theme.text2).padding(.top, 4)
                 WalletStats(wl: wl)
             }
             .card(16, border: Theme.loss.opacity(0.45))
@@ -120,7 +120,7 @@ struct WalletCard: View {
                 HStack(alignment: .bottom) {
                     VStack(alignment: .leading, spacing: 4) {
                         HStack(spacing: 8) {
-                            Text("Betting balance today").eyebrow()
+                            Text("Challenging balance today").eyebrow()
                             if wl.bonusToday > 0 { Text("+\(wl.bonusToday) min \(wl.tier.title) bonus included").font(.barlow(11.5, 700)).foregroundStyle(Theme.accent) }
                         }
                         HStack(alignment: .lastTextBaseline, spacing: 3) {
@@ -138,7 +138,7 @@ struct WalletCard: View {
                 Bar(pct: pct).padding(.top, 12)
                 WalletStats(wl: wl)
                 Button { HowItWorks.open() } label: {
-                    HStack(spacing: 6) { Icon(.info, 14); Text("You bet with tomorrow's phone time. How it works") }
+                    HStack(spacing: 6) { Icon(.info, 14); Text("You challenge with tomorrow's phone time. How it works") }
                         .font(.barlow(12.5, 600)).foregroundStyle(Theme.text2)
                 }
                 .buttonStyle(.press)
@@ -162,7 +162,7 @@ struct WalletStats: View {
             HStack(spacing: 0) {
                 stat(s?.enforce == true ? "\(wl.phoneLeft) min" : "Off", "Phone time left", pColor)
                 VRule()
-                stat("\(wl.atRisk) min", "In open bets", wl.atRisk > 0 ? Theme.warn : Theme.text)
+                stat("\(wl.atRisk) min", "In open challenges", wl.atRisk > 0 ? Theme.warn : Theme.text)
                 VRule()
                 stat("\(wl.tomorrowLimit) min", "Tomorrow's limit", tColor)
             }
@@ -237,27 +237,27 @@ struct StatusStrip: View {
     }
 }
 
-struct OpenBetsStrip: View {
+struct OpenChallengesStrip: View {
     var body: some View {
-        let open = (Store.shared.data?.bets ?? []).filter { $0.status == "open" && !$0.legs.isEmpty && HomeModel.sportsOnly($0) }.sorted { $0.placedAt > $1.placedAt }
+        let open = (Store.shared.data?.challenges ?? []).filter { $0.status == "open" && !$0.picks.isEmpty && HomeModel.sportsOnly($0) }.sorted { $0.placedAt > $1.placedAt }
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 HStack(spacing: 6) {
-                    Text("Open bets").font(.barlow(17, 800))
+                    Text("Open challenges").font(.barlow(17, 800))
                     CountPill(n: open.count, off: open.isEmpty)
                 }
                 Spacer(minLength: 0)
                 if !open.isEmpty {
-                    Button("See all") { UIState.shared.go("bets") }.font(.barlow(13.5, 700)).foregroundStyle(Theme.accent).buttonStyle(.press)
+                    Button("See all") { UIState.shared.go("challenges") }.font(.barlow(13.5, 700)).foregroundStyle(Theme.accent).buttonStyle(.press)
                 }
             }
             .gutter()
             if open.isEmpty {
-                Text("No open bets. Tap any odds below to start one.").font(.barlow(13)).foregroundStyle(Theme.text2)
+                Text("No open challenges. Tap any point value below to start one.").font(.barlow(13)).foregroundStyle(Theme.text2)
                     .card(12).gutter()
             } else {
                 ScrollView(.horizontal) {
-                    HStack(spacing: 8) { ForEach(open) { MiniBet(bet: $0) } }.padding(.horizontal, 16).padding(.bottom, 2)
+                    HStack(spacing: 8) { ForEach(open) { MiniChallenge(challenge: $0) } }.padding(.horizontal, 16).padding(.bottom, 2)
                 }
                 .scrollIndicators(.hidden)
             }
@@ -265,25 +265,25 @@ struct OpenBetsStrip: View {
     }
 }
 
-struct MiniBet: View {
-    var bet: Bet
+struct MiniChallenge: View {
+    var challenge: Challenge
     var body: some View {
-        let title = bet.kind == "todo" ? "To-do parlay (\(bet.legs.count))" : bet.legs.count > 1 ? "\(bet.legs.count)-pick parlay" : (bet.legs.first?.label ?? "")
-        let leg = bet.legs.first { $0.result == "pending" } ?? bet.legs.first ?? Leg(selId: "", kind: "game", market: "ml", price: 100, label: "", marketLabel: "", matchup: "")
-        let win = jsRoundInt(Double(bet.stake) * bet.decimal) - bet.stake
-        Button { UIState.shared.go("bets") } label: {
+        let title = challenge.kind == "todo" ? "To-do combo (\(challenge.picks.count))" : challenge.picks.count > 1 ? "\(challenge.picks.count)-pick combo" : (challenge.picks.first?.label ?? "")
+        let pick = challenge.picks.first { $0.result == "pending" } ?? challenge.picks.first ?? Pick(selId: "", kind: "game", market: "winner", price: 100, label: "", marketLabel: "", matchup: "")
+        let win = jsRoundInt(Double(challenge.pledgeMinutes) * challenge.decimal) - challenge.pledgeMinutes
+        Button { UIState.shared.go("challenges") } label: {
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
                     Text(title).font(.barlow(14, 800)).lineLimit(1)
                     Spacer(minLength: 6)
-                    Text(OddsMath.fmt(bet.american)).font(.display(15, 800)).foregroundStyle(Theme.text2)
+                    Text(PointValueMath.fmt(challenge.american)).font(.display(15, 800)).foregroundStyle(Theme.text2)
                 }
-                line(leg).font(.barlow(13, 600)).foregroundStyle(Theme.text2).lineLimit(1)
+                line(pick).font(.barlow(13, 600)).foregroundStyle(Theme.text2).lineLimit(1)
                 Spacer(minLength: 0)
                 HStack(spacing: 6) {
-                    Text("\(bet.stake) min").foregroundStyle(Theme.text2)
+                    Text("\(challenge.pledgeMinutes) min").foregroundStyle(Theme.text2)
                     Icon(.chevR, 12)
-                    if win > 0 { Text("win \(BetText.toWin(bet)) min").foregroundStyle(Theme.accent) }
+                    if win > 0 { Text("win \(ChallengeText.toWin(challenge)) min").foregroundStyle(Theme.accent) }
                 }
                 .font(.barlow(13, 700))
             }
@@ -296,19 +296,19 @@ struct MiniBet: View {
         .buttonStyle(.press)
     }
 
-    @ViewBuilder private func line(_ leg: Leg) -> some View {
-        if bet.kind == "todo" {
-            Text("\(bet.legs.filter { $0.result == "won" }.count)/\(bet.legs.count) done · due midnight")
-        } else if leg.kind == "pred" {
-            Text("Resolves in \(Fmt.inTime((leg.start ?? 0) - TO.now()))")
-        } else if leg.kind == "race" {
-            let race = Races.shared.get(leg.raceId)
+    @ViewBuilder private func line(_ pick: Pick) -> some View {
+        if challenge.kind == "todo" {
+            Text("\(challenge.picks.filter { $0.result == "won" }.count)/\(challenge.picks.count) done · due midnight")
+        } else if pick.kind == "pred" {
+            Text("Resolves in \(Fmt.inTime((pick.start ?? 0) - TO.now()))")
+        } else if pick.kind == "race" {
+            let race = Races.shared.get(pick.raceId)
             if race?.status == "running" {
                 HStack(spacing: 4) { LiveTag(); Text("Virtual Race #\(race!.number)") }
             } else {
-                Text("Virtual Race #\((leg.raceId ?? "").replacingOccurrences(of: "race-", with: "")) · \(race?.status == "final" ? "Finished" : "Starting soon")")
+                Text("Virtual Race #\((pick.raceId ?? "").replacingOccurrences(of: "race-", with: "")) · \(race?.status == "final" ? "Finished" : "Starting soon")")
             }
-        } else if let g = leg.gameId.flatMap({ Feed.game($0) }) {
+        } else if let g = pick.gameId.flatMap({ Feed.game($0) }) {
             switch g.state {
             case .live: HStack(spacing: 4) { LiveTag(); Text("\(g.away.abbr) \(g.awayScore) – \(g.home.abbr) \(g.homeScore) · \(g.clock)") }
             case .scheduled: Text("\(g.away.abbr) @ \(g.home.abbr) · \(Fmt.time(g.start))")
@@ -395,15 +395,15 @@ struct DayBar: View {
     }
 }
 
-struct BuildParlayControl: View {
+struct BuildComboControl: View {
     private var slip: Slip { .shared }
     var body: some View {
-        if !slip.parlayMode {
-            Button { slip.toggleParlayMode() } label: {
+        if !slip.comboMode {
+            Button { slip.toggleComboMode() } label: {
                 HStack(spacing: 12) {
                     Icon(.ticket, 18).foregroundStyle(Theme.accent)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Build parlay").font(.barlow(14, 700))
+                        Text("Build combo").font(.barlow(14, 700))
                         Text("Select picks from multiple games").font(.barlow(12)).foregroundStyle(Theme.muted)
                     }
                     Spacer(minLength: 0)
@@ -422,11 +422,11 @@ struct BuildParlayControl: View {
             HStack(spacing: 12) {
                 LrIcon(icon: .ticket, size: 34, iconSize: 18)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Choose your parlay picks").font(.barlow(14, 700))
-                    Text("\(slip.legs.count) of \(Rules.maxLegs) picks · choose one bet per game").font(.barlow(12)).foregroundStyle(Theme.muted)
+                    Text("Choose your combo picks").font(.barlow(14, 700))
+                    Text("\(slip.picks.count) of \(Rules.maxPicks) picks · choose one challenge per game").font(.barlow(12)).foregroundStyle(Theme.muted)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                Button("Cancel") { slip.toggleParlayMode() }.font(.barlow(13.5, 700)).foregroundStyle(Theme.accent).buttonStyle(.press)
+                Button("Cancel") { slip.toggleComboMode() }.font(.barlow(13.5, 700)).foregroundStyle(Theme.accent).buttonStyle(.press)
             }
             .padding(.vertical, 10).padding(.horizontal, 14)
             .frame(minHeight: 58)
@@ -519,9 +519,9 @@ struct GameStatusText: View {
         case .final:
             Text(g.statusText)
         case .canceled:
-            HStack(spacing: 6) { Icon(.alert, 13); Text("Canceled · all bets voided, stakes returned") }.foregroundStyle(Theme.warn)
+            HStack(spacing: 6) { Icon(.alert, 13); Text("Canceled · all challenges cancelled, pledged minutes returned") }.foregroundStyle(Theme.warn)
         case .postponed:
-            HStack(spacing: 6) { Icon(.alert, 13); Text("Postponed · all bets voided, stakes returned") }.foregroundStyle(Theme.warn)
+            HStack(spacing: 6) { Icon(.alert, 13); Text("Postponed · all challenges cancelled, pledged minutes returned") }.foregroundStyle(Theme.warn)
         }
     }
 }
@@ -533,13 +533,13 @@ struct GameCard: View {
     var body: some View {
         let _ = live.version
         let g = game
-        let o = Feed.odds(g.id)
+        let o = Feed.pointValue(g.id)
         let bettable = g.state == .live || g.state == .scheduled
-        let mine = HomeModel.myOpenBets(on: g.id)
+        let mine = HomeModel.myOpenChallenges(on: g.id)
         return VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
                 GameStatusText(g: g).lineLimit(1)
-                if o.suspended && g.state == .live { Tag("Betting closed", icon: .lock) }
+                if o.suspended && g.state == .live { Tag("Challenging closed", icon: .lock) }
                 Spacer(minLength: 0)
                 Text(g.otherConferenceLive ? "LIVE · \(g.conferenceName.isEmpty ? "UNRANKED" : g.conferenceName)" : g.simulated ? "SIMULATED" : Sim.leagues[g.league]?.short ?? "")
                     .font(.barlow(11, 800)).tracking(0.44).foregroundStyle(Theme.muted)
@@ -557,18 +557,18 @@ struct GameCard: View {
                     finalRow(g.home, g.homeScore, g.homeScore > g.awayScore, g)
                 }
                 if g.state == .postponed {
-                    Note(.warn, icon: .info, "This game was postponed. Every bet on it is void and the full stake goes back to the bettor.").padding(.top, 6)
+                    Note(.warn, icon: .info, "This game was postponed. Every challenge on it is void and the full pledge goes back to the player.").padding(.top, 6)
                 }
             }
 
             HStack {
                 if !mine.isEmpty {
-                    HStack(spacing: 4) { Icon(.ticket, 14); Text("You have \(mine.count == 1 ? "a bet" : "\(mine.count) bets") on this game") }
+                    HStack(spacing: 4) { Icon(.ticket, 14); Text("You have \(mine.count == 1 ? "a challenge" : "\(mine.count) challenges") on this game") }
                         .foregroundStyle(Theme.accent)
                 }
                 Spacer(minLength: 0)
                 Button { GameModel.open(g.id) } label: {
-                    HStack(spacing: 6) { Text("Stats & all odds"); Icon(.chevR, 14) }.font(.barlow(12.5, 700)).foregroundStyle(Theme.accent)
+                    HStack(spacing: 6) { Text("Stats & all point value"); Icon(.chevR, 14) }.font(.barlow(12.5, 700)).foregroundStyle(Theme.accent)
                 }
                 .buttonStyle(.press)
             }
@@ -596,17 +596,17 @@ struct GameCard: View {
     }
 
     /// ESPN layout: teams and scores on the left, a 2-column grid of every price on the right.
-    @ViewBuilder private func espnBody(_ g: Game, _ o: OddsBoard) -> some View {
+    @ViewBuilder private func espnBody(_ g: Game, _ o: PointValueBoard) -> some View {
         let picks: [(Selection?, String, Bool)] = {
             var p: [(Selection?, String, Bool)] = [
-                (o.spread.first { $0.side == "away" }, "Away · \(g.away.abbr)", false),
-                (o.spread.first { $0.side == "home" }, "Home · \(g.home.abbr)", false),
-                (o.total.first { $0.side == "over" }, "Over", false),
-                (o.total.first { $0.side == "under" }, "Under", false),
-                (o.moneyline.first { $0.side == "away" }, "Away ML · \(g.away.abbr)", true),
-                (o.moneyline.first { $0.side == "home" }, "Home ML · \(g.home.abbr)", true),
+                (o.margin.first { $0.side == "away" }, "Away · \(g.away.abbr)", false),
+                (o.margin.first { $0.side == "home" }, "Home · \(g.home.abbr)", false),
+                (o.total.first { $0.side == "higher" }, "Higher", false),
+                (o.total.first { $0.side == "lower" }, "Lower", false),
+                (o.winner.first { $0.side == "away" }, "Away to win · \(g.away.abbr)", true),
+                (o.winner.first { $0.side == "home" }, "Home to win · \(g.home.abbr)", true),
             ]
-            if g.sport == "soccer" { p.append((o.moneyline.first { $0.side == "draw" }, "Draw", true)) }
+            if g.sport == "soccer" { p.append((o.winner.first { $0.side == "draw" }, "Draw", true)) }
             return p
         }()
         FrColumns(left: 0.9, right: 1.2, minLeft: 112, spacing: 9) {
@@ -618,9 +618,9 @@ struct GameCard: View {
                 ForEach(picks.indices, id: \.self) { i in
                     let (sel, label, ml) = picks[i]
                     if let sel {
-                        OddsButton(sel: sel, suspended: o.suspended, move: o.move[sel.id], big: true, label: label, compact: true)
+                        PointValueButton(sel: sel, suspended: o.suspended, move: o.move[sel.id], big: true, label: label, compact: true)
                     } else {
-                        UnavailableOdds(label: label, text: ml ? "N/A" : "—", compact: true)
+                        UnavailablePointValue(label: label, text: ml ? "N/A" : "—", compact: true)
                     }
                 }
             }
@@ -648,16 +648,16 @@ struct GameCard: View {
         .frame(height: 48)
     }
 
-    /// Simulated layout: a grid with spread / total / money columns.
-    @ViewBuilder private func simBody(_ g: Game, _ o: OddsBoard) -> some View {
+    /// Simulated layout: a grid with margin / total / money columns.
+    @ViewBuilder private func simBody(_ g: Game, _ o: PointValueBoard) -> some View {
         let Sp = Sim.sports[g.sport]!
         let cols: [(String, [Selection])] = [
-            o.spread.count == 2 ? (Sp.spreadLabel, o.spread) : nil,
+            o.margin.count == 2 ? (Sp.marginLabel, o.margin) : nil,
             o.total.count == 2 ? ("Total", o.total) : nil,
-            o.moneyline.filter { $0.side != "draw" }.count == 2 ? ("Money", o.moneyline.filter { $0.side != "draw" }) : nil,
+            o.winner.filter { $0.side != "draw" }.count == 2 ? ("Money", o.winner.filter { $0.side != "draw" }) : nil,
         ].compactMap { $0 }
         let w: CGFloat = cols.count == 2 ? 66 : 60
-        let draw = o.moneyline.first { $0.side == "draw" }
+        let draw = o.winner.first { $0.side == "draw" }
         VStack(spacing: 5) {
             HStack(spacing: 5) {
                 Spacer(minLength: 0)
@@ -686,18 +686,18 @@ struct GameCard: View {
                     .buttonStyle(.press)
                     ForEach(cols.indices, id: \.self) { i in
                         let sel = cols[i].1[row]
-                        OddsButton(sel: sel, suspended: o.suspended, move: o.move[sel.id], label: team.name).frame(width: w)
+                        PointValueButton(sel: sel, suspended: o.suspended, move: o.move[sel.id], label: team.name).frame(width: w)
                     }
                 }
             }
             if let draw {
                 HStack(spacing: 5) {
                     Text("Draw").font(.barlow(14.5, 700)).foregroundStyle(Theme.text2).frame(maxWidth: .infinity, alignment: .leading).frame(height: 40)
-                    OddsButton(sel: draw, suspended: o.suspended, move: o.move[draw.id], label: "Draw").frame(width: w)
+                    PointValueButton(sel: draw, suspended: o.suspended, move: o.move[draw.id], label: "Draw").frame(width: w)
                 }
             }
             if cols.isEmpty {
-                Text("Betting lines are not available for this game yet.").font(.barlow(11.5)).foregroundStyle(Theme.muted)
+                Text("Challenging lines are not available for this game yet.").font(.barlow(11.5)).foregroundStyle(Theme.muted)
                     .frame(maxWidth: .infinity, alignment: .leading).padding(.top, 6).padding(.horizontal, 2)
             }
         }

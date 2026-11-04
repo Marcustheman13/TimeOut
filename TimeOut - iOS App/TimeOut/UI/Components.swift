@@ -136,12 +136,12 @@ struct Avatar: View {
 struct StatusPill: View {
     var status: String
     var body: some View {
-        let label = ["won": "Won", "lost": "Lost", "void": "Void", "push": "Push", "open": "Open"][status] ?? status
+        let label = ["won": "Won", "lost": "Lost", "void": "Void", "tie": "Tie", "open": "Open"][status] ?? status
         let (bg, fg): (Color, Color) = {
             switch status {
             case "won": return (Theme.accent, Theme.accentInk)
             case "lost": return (Theme.loss, .white)
-            case "void", "push": return (Theme.muted, .white)
+            case "void", "tie": return (Theme.muted, .white)
             default: return (Theme.raised, Theme.text)
             }
         }()
@@ -551,10 +551,10 @@ struct Countdown: View {
     }
 }
 
-// MARK: - Odds button
+// MARK: - Point value button
 
-/// One odds button. Tapping adds or removes the pick on the bet slip.
-struct OddsButton: View {
+/// One point-value button. Tapping adds or removes the pick on the challenge slip.
+struct PointValueButton: View {
     var sel: Selection
     var suspended = false
     var move: Int?
@@ -564,8 +564,8 @@ struct OddsButton: View {
 
     var body: some View {
         let on = Slip.shared.has(sel.id)
-        let ln: String? = sel.market == "spread" ? OddsMath.fmtLine(sel.line ?? 0)
-            : sel.market == "total" ? "\(sel.side == "over" ? "O" : "U") \(OddsMath.fmtLine(sel.line ?? 0, signed: false))" : nil
+        let ln: String? = sel.market == "margin" ? PointValueMath.fmtLine(sel.line ?? 0)
+            : sel.market == "total" ? "\(sel.side == "higher" ? "O" : "U") \(PointValueMath.fmtLine(sel.line ?? 0, signed: false))" : nil
         Button { Slip.shared.toggle(sel.id) } label: {
             VStack(spacing: 1) {
                 if suspended {
@@ -579,7 +579,7 @@ struct OddsButton: View {
                         if let move, move != 0 {
                             Text(move > 0 ? "▲" : "▼").font(.system(size: 8)).foregroundStyle(on ? Theme.accentInk : move > 0 ? Theme.accent : Theme.loss)
                         }
-                        Text(OddsMath.fmt(sel.price))
+                        Text(PointValueMath.fmt(sel.price))
                             .font(.barlow(compact ? 12 : (ln == nil && !(big && label != nil) ? 15 : 13.5), 800))
                             .monospacedDigit()
                             .foregroundStyle(on ? Theme.accentInk : Theme.accent)
@@ -595,13 +595,13 @@ struct OddsButton: View {
         }
         .buttonStyle(.press)
         .disabled(suspended)
-        .accessibilityLabel("\(label ?? "") \(ln ?? "") \(OddsMath.fmt(sel.price))\(suspended ? " suspended" : "")")
+        .accessibilityLabel("\(label ?? "") \(ln ?? "") \(PointValueMath.fmt(sel.price))\(suspended ? " suspended" : "")")
         .accessibilityAddTraits(on ? .isSelected : [])
     }
 }
 
-/// A disabled odds button for a market with no line ("N/A" / "—").
-struct UnavailableOdds: View {
+/// A disabled point-value button for a market with no line ("N/A" / "—").
+struct UnavailablePointValue: View {
     var label: String
     var text: String
     var compact = false

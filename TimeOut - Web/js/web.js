@@ -21,10 +21,8 @@
   // Titles match the settings page titles so the open page can be highlighted.
   const MENU = [
     ['screentime', 'Screen time', 'hourglass'],
-    ['status', 'Tier & streak', 'trophy'],
-    ['sports', 'Sports on Home', 'grid'],
-    ['notifications', 'Notifications', 'bell'],
-    ['privacy', 'What friends can see', 'eye'],
+    ['sports', 'Sports & races', 'grid'],
+    ['notifications', 'Notifications & privacy', 'bell'],
     ['account', 'Account', 'user'],
   ];
 
@@ -48,7 +46,7 @@
 
   function sideHtml() {
     const wl = St.wallet();
-    const open = TO.data.bets.filter((b) => b.status === 'open').length;
+    const open = TO.data.challenges.filter((b) => b.status === 'open').length;
     const socialBadge = TO.views.social.badge();
     const section = openSection();
     const tabs = TABS.map(([k, label, ic]) => {
@@ -56,7 +54,7 @@
       const n = k === 'challenges' ? open : k === 'social' ? socialBadge : 0;
       return `<button class="sn primary ${on ? 'on' : ''}" data-act="tab" data-tab="${k}" title="${label}" aria-current="${on ? 'page' : 'false'}">${icon(ic, 21)}<span class="sn-l">${label}</span>${n ? `<span class="sn-n ${k === 'challenges' ? 'green' : ''}">${n}</span>` : ''}</button>`;
     }).join('');
-    const subs = { screentime: `${wl.phoneLeft} min left`, status: wl.streak ? `${wl.streak}-day streak` : '' };
+    const subs = { screentime: `${wl.phoneLeft} min left${wl.streak ? ` · ${wl.streak}-day streak` : ''}` };
     const item = (key, title, ic, cls = '') => {
       const on = section === title;
       return `<button class="sn ${cls} ${on ? 'on' : ''}" data-act="settings" data-section="${key}" title="${title}" aria-current="${on ? 'page' : 'false'}">${icon(ic, 19)}<span class="sn-l">${title}</span>${subs[key] ? `<span class="sn-sub">${subs[key]}</span>` : ''}${key === 'screentime' && wl.appsLocked ? '<span class="sn-dot"></span>' : ''}</button>`;
@@ -162,6 +160,15 @@
   // The sidebar is always on screen, so a settings section can be opened over a game page. Replace it instead.
   const appSettings = A.settings;
   A.settings = (el) => { ui.closeAllPages(); appSettings(el); app.renderChrome(); };
+
+  // Narrow layout: the menu is the slide-in sidebar. Back from a settings section reopens it
+  // instead of leaving the person on Home.
+  const closePageAction = A['close-page'];
+  A['close-page'] = (el) => {
+    const name = el.dataset.name;
+    closePageAction(el);
+    if (name === 'settings' && !wide.matches) setSide(true);
+  };
 
   // Escape closes the sidebar or a dialog, but never the docked commitment.
   window.addEventListener('keydown', (e) => {
