@@ -77,7 +77,7 @@ final class AppModel {
             AuthModel.shared.startOnboarding()
             return
         }
-        ui.tab = "home"
+        ui.tab = Notifier.shared.takeLaunchTab() ?? "home"
         live.refresh(force: true)
         live.refreshUpcoming()
         Task {
@@ -133,9 +133,11 @@ final class AppModel {
         guard store.data?.settings.notify.resolved == true else { return }
         for b in list {
             let title = ChallengeText.title(b)
-            if b.status == "won" { Notifier.shared.announce(.win, "Challenge complete: \(title)", "+\(b.reward - b.pledgeMinutes) earned minutes added to tomorrow's phone time.", id: b.id, tab: "challenges") }
-            else if b.status == "lost" { Notifier.shared.announce(.loss, "Challenge missed: \(title)", "\(b.pledgeMinutes) committed minutes deducted from tomorrow's phone time.", id: b.id, tab: "challenges") }
-            else { Notifier.shared.announce(.info, "Challenge returned: \(title)", "\(b.insurancePaid == true ? "Miss-one protection returned your minutes." : "The game was postponed.") \(b.pledgeMinutes) minutes are available again.", id: b.id, tab: "challenges") }
+            // The same id the server's push uses, so a result that arrives both ways only shows once.
+            let id = b.supabaseId ?? b.id
+            if b.status == "won" { Notifier.shared.announce(.win, "Challenge complete: \(title)", "+\(b.reward - b.pledgeMinutes) earned minutes added to tomorrow's phone time.", id: id, tab: "challenges") }
+            else if b.status == "lost" { Notifier.shared.announce(.loss, "Challenge missed: \(title)", "\(b.pledgeMinutes) committed minutes deducted from tomorrow's phone time.", id: id, tab: "challenges") }
+            else { Notifier.shared.announce(.info, "Challenge returned: \(title)", "\(b.insurancePaid == true ? "Miss-one protection returned your minutes." : "The game was postponed.") \(b.pledgeMinutes) minutes are available again.", id: id, tab: "challenges") }
         }
     }
 
