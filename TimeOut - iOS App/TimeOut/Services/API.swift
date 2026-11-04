@@ -559,11 +559,27 @@ final class API {
 
     func logout() async {
         try? await flushState()
+        // While still signed in, so this phone stops getting this account's notifications.
+        if token != nil, let device = Notifier.shared.deviceToken {
+            _ = try? await rest("rpc/timeout_unregister_device", method: "POST", body: ["p_token": device], timeout: 4)
+        }
         if token != nil { _ = try? await send(URL(string: "\(Self.baseURL)/auth/v1/logout")!, method: "POST") }
         clearToken()
         lastSettingsSnapshot = ""
         inviteCode = nil
         syncedStreak = nil
+    }
+
+    // MARK: Push
+
+    /// Tells the server where this account's notifications go. A failure can wait: this runs again on every launch.
+    func registerDevice(_ device: String, environment: String) async {
+        guard token != nil else { return }
+        do {
+            _ = try await rest("rpc/timeout_register_device", method: "POST", body: ["p_token": device, "p_environment": environment], timeout: 8)
+        } catch {
+            print("TimeOut: couldn't register this phone for push: \(error)")
+        }
     }
 
     // MARK: People
