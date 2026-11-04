@@ -17,6 +17,23 @@ alter table public.challenges
   add column if not exists insured boolean not null default false,
   add column if not exists multiplier numeric not null default 1;
 
+-- Lock points from a saved settings object: the app/site list, or the real Screen Time picks made on an iPhone,
+-- whichever is higher. Limits have to be on for them to count.
+create or replace function public.timeout_lock_points(p_prefs jsonb)
+returns integer
+language sql
+immutable
+set search_path = ''
+as $$
+  select case when coalesce((p_prefs->>'enforce')::boolean, false) then greatest(
+    coalesce((
+      select sum(case when locked_app in ('cat-social', 'cat-ent', 'cat-games') then 3 else 1 end)::integer
+      from jsonb_array_elements_text(case when jsonb_typeof(p_prefs->'lockedApps') = 'array' then p_prefs->'lockedApps' else '[]'::jsonb end) as selected(locked_app)
+    ), 0),
+    least(greatest(coalesce((p_prefs->>'deviceLockPoints')::integer, 0), 0), 30)
+  ) else 0 end
+$$;
+
 create or replace function public.timeout_place_challenge_with_tiers(
   p_pledge_minutes integer,
   p_combined_value numeric,
@@ -37,7 +54,6 @@ declare
   v_bonus_minutes integer;
   v_bonus_delta integer;
   v_enforce boolean := false;
-  v_locked_apps jsonb := '[]'::jsonb;
   v_lock_points integer := 0;
   v_tier_bonus integer := 0;
   v_challenge_id uuid;
@@ -47,15 +63,11 @@ begin
   if p_pledge_minutes < 1 or p_combined_value <= 1 or p_potential_reward < 0 then raise exception 'Invalid challenge values'; end if;
   if jsonb_typeof(p_picks) <> 'array' or jsonb_array_length(p_picks) < 1 then raise exception 'At least one challenge pick is required'; end if;
 
-  select coalesce((app_preferences->>'enforce')::boolean, false),
-         coalesce(app_preferences->'lockedApps', '[]'::jsonb)
-  into v_enforce, v_locked_apps
+  select public.timeout_lock_points(app_preferences), coalesce((app_preferences->>'enforce')::boolean, false)
+  into v_lock_points, v_enforce
   from public.user_settings where user_id = v_user_id;
-  if v_enforce then
-    select coalesce(sum(case when locked_app in ('cat-social', 'cat-ent', 'cat-games') then 3 else 1 end), 0)::integer
-    into v_lock_points
-    from jsonb_array_elements_text(v_locked_apps) as selected(locked_app);
-  end if;
+  v_lock_points := coalesce(v_lock_points, 0);
+  v_enforce := coalesce(v_enforce, false);
   v_tier_bonus := case
     when not v_enforce then 0
     when v_lock_points >= 8 then 10
@@ -147,7 +159,6 @@ declare
   v_user_id uuid := auth.uid();
   v_wallet_id uuid;
   v_enforce boolean := false;
-  v_locked_apps jsonb := '[]'::jsonb;
   v_lock_points integer := 0;
   v_boost_limit integer := 0;
   v_insurance_limit integer := 0;
@@ -162,15 +173,11 @@ begin
   if p_multiplier < 1 or p_multiplier > 1.5 then raise exception 'Invalid reward multiplier'; end if;
   if p_use_insurance and jsonb_array_length(p_picks) < 2 then raise exception 'Insurance requires a combo'; end if;
 
-  select coalesce((app_preferences->>'enforce')::boolean, false),
-         coalesce(app_preferences->'lockedApps', '[]'::jsonb)
-  into v_enforce, v_locked_apps
+  select public.timeout_lock_points(app_preferences), coalesce((app_preferences->>'enforce')::boolean, false)
+  into v_lock_points, v_enforce
   from public.user_settings where user_id = v_user_id;
-  if v_enforce then
-    select coalesce(sum(case when locked_app in ('cat-social', 'cat-ent', 'cat-games') then 3 else 1 end), 0)::integer
-    into v_lock_points
-    from jsonb_array_elements_text(v_locked_apps) as selected(locked_app);
-  end if;
+  v_lock_points := coalesce(v_lock_points, 0);
+  v_enforce := coalesce(v_enforce, false);
   v_boost_limit := case when not v_enforce then 0 when v_lock_points >= 8 then 2 when v_lock_points >= 4 then 1 else 0 end;
   v_insurance_limit := case when v_enforce and v_lock_points >= 12 then 1 else 0 end;
   v_week_key := (p_current_day - (extract(isodow from p_current_day)::integer - 1))::text;

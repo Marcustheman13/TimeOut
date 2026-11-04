@@ -30,6 +30,8 @@ final class API {
     @ObservationIgnored private var placing = Set<String>()
     @ObservationIgnored private var settling = Set<String>()
     @ObservationIgnored private var alertTimes: [String: Date] = [:]
+    @ObservationIgnored private var syncedStreak: Int?
+    @ObservationIgnored private var inviteCode: String?
 
     private let session: URLSession = {
         let c = URLSessionConfiguration.default
@@ -291,8 +293,9 @@ final class API {
                 let eventId = pick["espn_event_id"].string ?? ""
                 let market = pick["market"].string ?? "winner", side = pick["side"].string ?? ""
                 let line = pick["line"].number
+                let matchup = pick["matchup"].string ?? ""
                 var l = Pick(selId: "\(eventId)|\(market)|\(side)", kind: "game", market: market, price: Int(pick["accepted_value"].number ?? 100),
-                            label: "\(market) · \(side)\(pick["line"].isNull ? "" : " \(pick["line"].string ?? "")")", marketLabel: market, matchup: pick["matchup"].string ?? "")
+                            label: Sim.pickLabel(market: market, side: side, line: line, matchup: matchup), marketLabel: Sim.marketTitle(market), matchup: matchup)
                 l.gameId = eventId; l.league = pick["league"].string; l.side = side; l.line = line
                 l.result = resultMap[pick["result"].string ?? ""] ?? "pending"
                 return l
@@ -431,6 +434,11 @@ final class API {
                 let synced = resolved.bool != false
                 update(challenge.id) { $0.supabaseSynced = synced }
             }
+            // Friends see this streak. The app works it out on the device, so the server needs telling.
+            if syncedStreak != data.wallet.streakDays {
+                _ = try? await rest("rpc/timeout_set_streak", method: "POST", body: ["p_streak": data.wallet.streakDays], timeout: 4)
+                syncedStreak = data.wallet.streakDays
+            }
             lastSaveAt = Date()
         } catch let rejected as RejectedChallenge {
             pendingState = nil
@@ -450,7 +458,7 @@ final class API {
     /// Saves one challenge through the newest RPC the database has, falling back like the web demo.
     private func placeRemote(_ challenge: Challenge, _ data: UserData) async throws -> String {
         let reward = challenge.reward > 0 ? challenge.reward
-            : max(0, challenge.pledgeMinutes + jsRoundInt(Double(jsRoundInt(Double(challenge.pledgeMinutes) * challenge.decimal) - challenge.pledgeMinutes) * challenge.multiplier))
+            : min(Rules.maxAllowedMinutes, max(0, challenge.pledgeMinutes + jsRoundInt(Double(jsRoundInt(Double(challenge.pledgeMinutes) * challenge.decimal) - challenge.pledgeMinutes) * challenge.multiplier)))
         let bonusToday = data.wallet.bonusDay == data.wallet.dayKey ? data.wallet.bonusGranted : 0
         let picks: [[String: Any]] = challenge.picks.map { pick in
             ["espn_event_id": pick.gameId ?? "", "league": pick.league ?? "unknown", "matchup": pick.matchup, "market": pick.market,
@@ -546,6 +554,7 @@ final class API {
         saveTask?.cancel(); saveTask = nil
         clearToken()
         lastSettingsSnapshot = ""
+        inviteCode = nil
     }
 
     func logout() async {
@@ -553,28 +562,95 @@ final class API {
         if token != nil { _ = try? await send(URL(string: "\(Self.baseURL)/auth/v1/logout")!, method: "POST") }
         clearToken()
         lastSettingsSnapshot = ""
+        inviteCode = nil
+        syncedStreak = nil
     }
 
     // MARK: People
 
     struct FoundUser: Hashable { var username: String; var name: String; var photo: String? }
 
-    /// Usernames matching a query, from Supabase profiles. A failure is just no extra rows.
+    /// Usernames matching a query. A failure is just no extra rows.
     func searchUsers(_ query: String) async -> [FoundUser] {
         var safe = query.trimmingCharacters(in: .whitespaces)
         if safe.hasPrefix("@") { safe.removeFirst() }
         safe = String(safe.prefix(20).filter { $0.isLetter || $0.isNumber || $0 == "_" || $0 == "." }.filter(\.isASCII))
         guard !safe.isEmpty, configured, token != nil else { return [] }
         let me = Store.shared.account?.username.lowercased() ?? ""
-        let like = safe.replacingOccurrences(of: "_", with: "\\_")
-        guard let rows = try? await rest("profiles?select=username,display_name,avatar_url&username=ilike.*\(Self.enc(like))*&limit=8", timeout: 4) else { return [] }
+        var rows = try? await rest("rpc/timeout_search_users", method: "POST", body: ["p_query": safe], timeout: 4)
+        if rows == nil {
+            // A database without the friends update: read profiles directly.
+            let like = safe.replacingOccurrences(of: "_", with: "\\_")
+            rows = try? await rest("profiles?select=username,name:display_name,photo:avatar_url&username=ilike.*\(Self.enc(like))*&limit=8", timeout: 4)
+        }
         var out: [FoundUser] = []
-        for r in rows.array {
+        for r in rows?.array ?? [] {
             guard let u = r["username"].text, u.lowercased() != me, !out.contains(where: { $0.username.lowercased() == u.lowercased() }),
                   u.range(of: #"^[a-zA-Z0-9_.]{1,20}$"#, options: .regularExpression) != nil else { continue }
-            out.append(FoundUser(username: u, name: r["display_name"].text ?? u, photo: r["avatar_url"].text))
+            out.append(FoundUser(username: u, name: r["name"].text ?? u, photo: r["photo"].text))
         }
         return Array(out.prefix(8))
+    }
+
+    // MARK: Friends
+
+    struct SocialRequest { var id: String; var username: String; var name: String; var photo: String?; var at: Ms }
+    struct SocialState { var friends: [SocialProfile]; var requestsIn: [SocialRequest]; var requestsOut: [SocialRequest] }
+
+    /// Friends and requests from the server. Nil when it can't be reached or doesn't have the friends update yet.
+    func socialState() async -> SocialState? {
+        guard configured, token != nil, let json = try? await rest("rpc/timeout_social_state", method: "POST", body: [String: Any](), timeout: 6), json.isObject else { return nil }
+        func request(_ r: JSON) -> SocialRequest? {
+            guard let u = r["username"].text else { return nil }
+            return SocialRequest(id: r["id"].string ?? u, username: u, name: r["name"].text ?? u, photo: r["photo"].text, at: LiveFeed.parseDate(r["at"].string) ?? TO.now())
+        }
+        let friends: [SocialProfile] = json["friends"].array.compactMap { f in
+            guard let u = f["username"].text else { return nil }
+            let share = PrivacySettings(record: f["share"]["record"].bool ?? false, minutes: f["share"]["minutes"].bool ?? false, challenges: f["share"]["challenges"].bool ?? false)
+            let picks: [SharedPick] = f["picks"].array.map { c in
+                let legs = c["picks"].array
+                let label = legs.map { Sim.pickLabel(market: $0["market"].string ?? "winner", side: $0["side"].string ?? "", line: $0["line"].number, matchup: $0["matchup"].string ?? "") }.joined(separator: " + ")
+                return SharedPick(label: label, matchup: legs.count > 1 ? "\(legs.count)-pick Combo Goal" : (legs.first?["matchup"].string ?? ""),
+                                  price: PointValueMath.fromDecimal(c["combinedValue"].number ?? 1), pledgeMinutes: Int(c["pledgeMinutes"].number ?? 0))
+            }
+            return SocialProfile(username: u, name: f["name"].text ?? u, photo: f["photo"].text, w: Int(f["w"].number ?? 0), l: Int(f["l"].number ?? 0),
+                                 net: Int(f["net"].number ?? 0), tier: f["tier"].text ?? "rookie", streak: Int(f["streak"].number ?? 0), share: share, picks: picks)
+        }
+        return SocialState(friends: friends, requestsIn: json["requestsIn"].array.compactMap(request), requestsOut: json["requestsOut"].array.compactMap(request))
+    }
+
+    /// Runs one friends function. Turns "the database doesn't have it yet" into a sentence people can act on.
+    private func friendCall(_ name: String, _ body: [String: Any]) async throws -> JSON {
+        do {
+            return try await rest("rpc/\(name)", method: "POST", body: body, timeout: 8)
+        } catch let e as AppError where Self.rpcMissing(e.message, name) {
+            throw AppError(code: "not_set_up", message: "Friends aren't set up on the server yet. Run server/db/apply-all-november-2026.sql in Supabase.")
+        }
+    }
+
+    /// "requested", or "friends" when they had already asked you.
+    func sendFriendRequest(_ username: String) async throws -> String {
+        try await friendCall("timeout_send_friend_request", ["p_username": username]).string ?? "requested"
+    }
+    func answerFriendRequest(_ username: String, accept: Bool) async throws {
+        _ = try await friendCall("timeout_answer_friend_request", ["p_username": username, "p_accept": accept])
+    }
+    func cancelFriendRequest(_ username: String) async throws {
+        _ = try await friendCall("timeout_cancel_friend_request", ["p_username": username])
+    }
+    func removeFriend(_ username: String) async throws {
+        _ = try await friendCall("timeout_remove_friend", ["p_username": username])
+    }
+    /// "friends", "requested" (no valid code, so it is an ordinary request) or "self".
+    func acceptFriendInvite(_ username: String, code: String) async throws -> String {
+        try await friendCall("timeout_accept_friend_invite", ["p_username": username, "p_code": code]).string ?? "requested"
+    }
+    /// The secret for this account's invite links. Nil only when the server can't provide one; the link then sends a request.
+    func myInviteCode() async -> String? {
+        if let inviteCode { return inviteCode }
+        guard configured, token != nil, let code = (try? await rest("rpc/timeout_my_invite_code", method: "POST", body: [String: Any](), timeout: 4))?.string else { return nil }
+        inviteCode = code
+        return code
     }
 
     // MARK: Teams
@@ -620,6 +696,15 @@ final class API {
         guard canUseTeams else { return .unreachable }
         guard let row = try? await rest("rpc/timeout_get_team", method: "POST", body: ["p_id": id, "p_key": key], timeout: 4) else { return .unreachable }
         return Self.team(row).map { .team($0) } ?? .gone
+    }
+
+    func teamStandings(_ id: String, key: String) async -> [TeamStanding]? {
+        guard canUseTeams, let rows = try? await rest("rpc/timeout_team_standings", method: "POST", body: ["p_id": id, "p_key": key], timeout: 4), rows.isArray else { return nil }
+        return rows.array.compactMap { r in
+            guard let u = r["username"].text else { return nil }
+            return TeamStanding(username: u, photo: r["photo"].text, tier: r["tier"].text ?? "rookie", hidden: r["hidden"].bool ?? true,
+                                w: Int(r["w"].number ?? 0), l: Int(r["l"].number ?? 0), net: Int(r["net"].number ?? 0))
+        }
     }
 
     /// Teams this signed-in profile is on. Nil means "don't change the local list".

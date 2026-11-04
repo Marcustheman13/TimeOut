@@ -259,10 +259,14 @@
       if (challenge.status !== 'open') continue;
       for (const pick of challenge.picks || []) {
         if (pick.result !== 'pending' || !pick.gameId || !LEAGUES[pick.league] || byId(pick.gameId)) continue;
-        const day = TO.dayKey(challenge.placedAt);
-        const key = `${pick.league}|${day}`;
-        if (!wantedByGroup.has(key)) wantedByGroup.set(key, { league: pick.league, day, ids: new Set() });
-        wantedByGroup.get(key).ids.add(String(pick.gameId));
+        // A challenge can be on tomorrow's game, so look on the game's own day when it's known.
+        // Picks loaded from the server don't carry a start time, so check the next day for those too.
+        const placedDay = TO.dayKey(challenge.placedAt);
+        for (const day of pick.start ? [TO.dayKey(pick.start)] : [placedDay, TO.addDays(placedDay, 1)]) {
+          const key = `${pick.league}|${day}`;
+          if (!wantedByGroup.has(key)) wantedByGroup.set(key, { league: pick.league, day, ids: new Set() });
+          wantedByGroup.get(key).ids.add(String(pick.gameId));
+        }
       }
     }
     const jobs = [...wantedByGroup.values()];

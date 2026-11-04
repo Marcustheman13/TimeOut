@@ -273,10 +273,12 @@ struct Settings: Codable, Equatable {
     var lowWarn = 10
     var notify = NotifySettings()
     var privacy = PrivacySettings()
+    /// Lock points from the real Screen Time picks on an iPhone. Saved with settings so the website shows the same tier.
+    var deviceLockPoints = 0
 
     init() {}
 
-    enum CodingKeys: String, CodingKey { case sports, showPredictions, showTodos, enforce, lockedApps, minLimit, lowWarn, notify, privacy }
+    enum CodingKeys: String, CodingKey { case sports, showPredictions, showTodos, enforce, lockedApps, minLimit, lowWarn, notify, privacy, deviceLockPoints }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -289,7 +291,33 @@ struct Settings: Codable, Equatable {
         lowWarn = (try? c.decode(Int.self, forKey: .lowWarn)) ?? 10
         notify = (try? c.decode(NotifySettings.self, forKey: .notify)) ?? NotifySettings()
         privacy = (try? c.decode(PrivacySettings.self, forKey: .privacy)) ?? PrivacySettings()
+        deviceLockPoints = (try? c.decode(Int.self, forKey: .deviceLockPoints)) ?? 0
     }
+}
+
+/// A friend's shared stats, from `timeout_social_state`. Anything they keep private arrives as zero with share off.
+struct SocialProfile: Codable, Hashable {
+    var username: String
+    var name: String
+    var photo: String?
+    var w = 0
+    var l = 0
+    var net = 0
+    var tier = "rookie"
+    var streak = 0
+    var share = PrivacySettings()
+    var picks: [SharedPick] = []
+}
+
+/// One teammate's result for a team's dates, from `timeout_team_standings`.
+struct TeamStanding: Codable, Hashable {
+    var username: String
+    var photo: String?
+    var tier = "rookie"
+    var hidden = false
+    var w = 0
+    var l = 0
+    var net = 0
 }
 
 struct FriendRequest: Codable, Hashable, Identifiable {
@@ -326,10 +354,16 @@ struct UserData: Codable {
     var requestsOut: [FriendRequest] = []
     var teams: [Squad] = []
     var feedFilter: String?
+    /// The Home "Live games only" switch. It works with whichever sport is picked.
+    var feedLive = false
+    /// Friends' shared stats and team results, cached from the server so Social opens instantly.
+    var socialProfiles: [String: SocialProfile] = [:]
+    var teamResults: [String: [TeamStanding]] = [:]
+    var socialSynced = false
 
     init(wallet: WalletData) { self.wallet = wallet }
 
-    enum CodingKeys: String, CodingKey { case v, wallet, challenges, lastPledge, settings, onboarded, friends, requestsIn, requestsOut, teams, feedFilter }
+    enum CodingKeys: String, CodingKey { case v, wallet, challenges, lastPledge, settings, onboarded, friends, requestsIn, requestsOut, teams, feedFilter, feedLive, socialProfiles, teamResults, socialSynced }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -344,6 +378,12 @@ struct UserData: Codable {
         requestsOut = (try? c.decode([FriendRequest].self, forKey: .requestsOut)) ?? []
         teams = (try? c.decode([Squad].self, forKey: .teams)) ?? []
         feedFilter = try? c.decodeIfPresent(String.self, forKey: .feedFilter)
+        feedLive = (try? c.decode(Bool.self, forKey: .feedLive)) ?? false
+        socialProfiles = (try? c.decode([String: SocialProfile].self, forKey: .socialProfiles)) ?? [:]
+        teamResults = (try? c.decode([String: [TeamStanding]].self, forKey: .teamResults)) ?? [:]
+        socialSynced = (try? c.decode(Bool.self, forKey: .socialSynced)) ?? false
+        // "Live" used to be one of the sport chips.
+        if feedFilter == "live" { feedFilter = "all"; feedLive = true }
     }
 }
 
@@ -451,6 +491,10 @@ struct Stats {
 enum Rules {
     static let daily = 60
     static let maxPicks = 10
+    /// A Combo Goal links at most this many matchups.
+    static let maxMatchupPicks = 4
+    /// The most minutes one challenge can pay back, pledge included.
+    static let maxAllowedMinutes = 120
     static let overrideMinutes = 15
     static let overridePenalty = 30
     static let maxOverrides = 2

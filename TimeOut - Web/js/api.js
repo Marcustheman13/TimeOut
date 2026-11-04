@@ -182,6 +182,17 @@
     const state = await api.loadState();
     return { user, state };
   };
+  /** A readable pick from what the server stores, for challenges placed on another device. */
+  function pickLabel(market, side, line, matchup) {
+    const teams = String(matchup || '').split(' @ ');
+    const team = side === 'away' ? teams[0] : side === 'home' && teams.length > 1 ? teams[teams.length - 1] : null;
+    if (market === 'winner') return team ? `${team} to win` : 'Draw';
+    if (market === 'margin') return `${team || ''} ${TO.pointValue.fmtLine(Number(line || 0))}`;
+    if (market === 'total') return `Combined score ${side === 'higher' ? 'above' : 'below'} ${TO.pointValue.fmtLine(Number(line || 0), false)}`;
+    return matchup || '';
+  }
+  const marketTitle = (market) => ({ winner: 'Winner', margin: 'Margin', total: 'Total', race: 'Race winner' }[market] || market);
+
   api.me = async () => {
     await ensureFreshSession();
     const res = await fetch(`${config.url}/auth/v1/user`, { headers: authHeaders(true) });
@@ -223,13 +234,14 @@
       supportsAppPreferences = false;
       settingsRows = await rest(`user_settings?select=followed_sports,timezone,notifications_enabled&user_id=eq.${safeId}&limit=1`);
     }
-    const status = { pending: 'open', won: 'won', lost: 'lost', pushed: 'tie', voided: 'void', cancelled: 'void' };
-    const result = { pending: 'pending', win: 'won', loss: 'lost', push: 'tie', void: 'void' };
+    // "pushed" and "push" are the previous database labels.
+    const status = { pending: 'open', won: 'won', lost: 'lost', tied: 'tie', pushed: 'tie', voided: 'void', cancelled: 'void' };
+    const result = { pending: 'pending', win: 'won', loss: 'lost', tie: 'tie', push: 'tie', void: 'void' };
     const challenges = challengeRows.map((row) => {
       const picks = (row.challenge_picks || []).map((pick) => ({
         selId: `${pick.espn_event_id}|${pick.market}|${pick.side}`, kind: 'game', gameId: pick.espn_event_id, league: pick.league, market: pick.market, side: pick.side,
-        line: pick.line == null ? null : Number(pick.line), price: Number(pick.accepted_value), label: `${pick.market} · ${pick.side}${pick.line == null ? '' : ` ${pick.line}`}`,
-        marketLabel: pick.market, matchup: pick.matchup, result: result[pick.result] || 'pending', final: null,
+        line: pick.line == null ? null : Number(pick.line), price: Number(pick.accepted_value), label: pickLabel(pick.market, pick.side, pick.line, pick.matchup),
+        marketLabel: marketTitle(pick.market), matchup: pick.matchup, result: result[pick.result] || 'pending', final: null,
       }));
       const decimal = Number(row.combined_value);
       const placedAt = Date.parse(row.placed_at);
@@ -263,6 +275,9 @@
       ...(settings ? { settings: remotePreferences, appPreferencesReady: supportsAppPreferences } : {}),
     };
   };
+  let syncedStreak = null;
+  let inviteCode = null;
+
   api.queueStateSave = (data) => {
     if (!api.configured || !token()) return;
     pendingState = JSON.parse(JSON.stringify(data));
@@ -383,6 +398,12 @@
           } finally { settling.delete(challenge.supabaseId); }
         }
       }
+      // Friends see this streak. The app works it out on the device, so the server needs telling.
+      const streak = Number(data.wallet?.streakDays || 0);
+      if (syncedStreak !== streak) {
+        await rest('rpc/timeout_set_streak', { method: 'POST', signal: AbortSignal.timeout(4000), body: JSON.stringify({ p_streak: streak }) }).catch(() => {});
+        syncedStreak = streak;
+      }
       lastSaveAt = Date.now();
       api.syncError = null;
     } catch (e) {
@@ -434,6 +455,91 @@
     }
     api.clearToken();
     lastSettingsSnapshot = '';
+    inviteCode = null;
+    syncedStreak = null;
+  };
+
+  /** Permanently deletes the signed-in account and its data (server/db/supabase-delete-account.sql). */
+  api.deleteAccount = async () => {
+    try {
+      await rest('rpc/timeout_delete_account', { method: 'POST', body: '{}' });
+    } catch (e) {
+      if (/timeout_delete_account/i.test(e.message || '') && /schema cache|function.*(not found|does not exist|could not find)/i.test(e.message || '')) {
+        throw new TO.AppError('not_set_up', 'Account deletion isn\'t set up on the server yet. Email the TimeOut team to delete your account.');
+      }
+      throw e;
+    }
+    pendingState = null;
+    api.clearToken();
+    lastSettingsSnapshot = '';
+    inviteCode = null;
+  };
+
+  /** Emails a password-reset link. Opening it signs the person in here, where Account can set a new password. */
+  api.sendPasswordReset = async (email) => {
+    const res = await fetch(`${config.url}/auth/v1/recover?redirect_to=${encodeURIComponent(`${location.origin}${location.pathname}`)}`, {
+      method: 'POST', headers: authHeaders(false), body: JSON.stringify({ email: String(email).trim() }),
+    });
+    await parseResponse(res);
+  };
+
+  // ---------- Friends ----------
+  /** Friends and requests from the server. Null when it can't be reached or doesn't have the friends update yet. */
+  api.socialState = async () => {
+    if (!api.configured || !token()) return null;
+    try {
+      const json = await rest('rpc/timeout_social_state', { method: 'POST', signal: AbortSignal.timeout(6000), body: '{}' });
+      if (!json || !Array.isArray(json.friends)) return null;
+      const request = (r) => ({ id: String(r.id), username: r.username, name: r.name || r.username, photo: r.photo || null, at: Date.parse(r.at) || TO.now() });
+      return {
+        friends: json.friends.filter((f) => f && f.username).map((f) => ({
+          username: f.username, name: f.name || f.username, photo: f.photo || null, w: Number(f.w || 0), l: Number(f.l || 0), net: Number(f.net || 0),
+          tier: f.tier || 'rookie', streak: Number(f.streak || 0), share: f.share || { record: false, minutes: false, challenges: false },
+          picks: (f.picks || []).map((c) => {
+            const legs = c.picks || [];
+            return { label: legs.map((k) => pickLabel(k.market, k.side, k.line, k.matchup)).join(' + '), matchup: legs.length > 1 ? `${legs.length}-pick Combo Goal` : (legs[0]?.matchup || ''),
+              price: TO.pointValue.fromDecimal(Number(c.combinedValue || 1)), pledgeMinutes: Number(c.pledgeMinutes || 0) };
+          }),
+        })),
+        requestsIn: (json.requestsIn || []).map(request),
+        requestsOut: (json.requestsOut || []).map(request),
+      };
+    } catch (e) { return null; }
+  };
+
+  /** Runs one friends function. Turns "the database doesn't have it yet" into a sentence people can act on. */
+  async function friendCall(name, body) {
+    try {
+      return await rest(`rpc/${name}`, { method: 'POST', signal: AbortSignal.timeout(8000), body: JSON.stringify(body) });
+    } catch (e) {
+      if (new RegExp(name, 'i').test(e.message || '') && /schema cache|function.*(not found|does not exist|could not find)/i.test(e.message || '')) {
+        throw new TO.AppError('not_set_up', 'Friends aren\'t set up on the server yet. Run server/db/apply-all-november-2026.sql in Supabase.');
+      }
+      throw e;
+    }
+  }
+  /** 'requested', or 'friends' when they had already asked you. */
+  api.sendFriendRequest = (username) => friendCall('timeout_send_friend_request', { p_username: username });
+  api.answerFriendRequest = (username, accept) => friendCall('timeout_answer_friend_request', { p_username: username, p_accept: accept });
+  api.cancelFriendRequest = (username) => friendCall('timeout_cancel_friend_request', { p_username: username });
+  api.removeFriend = (username) => friendCall('timeout_remove_friend', { p_username: username });
+  /** 'friends', 'requested' (no valid code, so it is an ordinary request) or 'self'. */
+  api.acceptFriendInvite = (username, code) => friendCall('timeout_accept_friend_invite', { p_username: username, p_code: code || '' });
+  /** The secret for this account's invite links. Null when the server can't provide one; the link then sends a request. */
+  api.myInviteCode = async () => {
+    if (inviteCode) return inviteCode;
+    if (!api.configured || !token()) return null;
+    try {
+      inviteCode = await rest('rpc/timeout_my_invite_code', { method: 'POST', signal: AbortSignal.timeout(4000), body: '{}' });
+      return typeof inviteCode === 'string' ? inviteCode : null;
+    } catch (e) { return null; }
+  };
+  api.teamStandings = async (id, key) => {
+    if (!api.configured || !token()) return null;
+    try {
+      const rows = await rest('rpc/timeout_team_standings', { method: 'POST', signal: AbortSignal.timeout(4000), body: JSON.stringify({ p_id: id, p_key: key }) });
+      return Array.isArray(rows) ? rows.filter((r) => r && r.username) : null;
+    } catch (e) { return null; }
   };
 
   /** Usernames that match a query, from Supabase profiles (when signed in) and this app's API.
@@ -453,10 +559,16 @@
     if (api.configured && token()) {
       tasks.push((async () => {
         try {
-          const like = safe.replace(/[_\\*]/g, (ch) => `\\${ch}`);
-          const rows = await rest(`profiles?select=username,display_name,avatar_url&username=ilike.*${encodeURIComponent(like)}*&limit=8`, { signal: AbortSignal.timeout(4000) });
-          if (Array.isArray(rows)) for (const r of rows) add(r.username, r.display_name, r.avatar_url);
-        } catch (e) { /* RLS or a slow network: local results still show */ }
+          const rows = await rest('rpc/timeout_search_users', { method: 'POST', signal: AbortSignal.timeout(4000), body: JSON.stringify({ p_query: safe }) });
+          if (Array.isArray(rows)) for (const r of rows) add(r.username, r.name, r.photo);
+        } catch (searchError) {
+          // A database without the friends update: read profiles directly.
+          try {
+            const like = safe.replace(/[_\\*]/g, (ch) => `\\${ch}`);
+            const rows = await rest(`profiles?select=username,display_name,avatar_url&username=ilike.*${encodeURIComponent(like)}*&limit=8`, { signal: AbortSignal.timeout(4000) });
+            if (Array.isArray(rows)) for (const r of rows) add(r.username, r.display_name, r.avatar_url);
+          } catch (e) { /* RLS or a slow network: local results still show */ }
+        }
       })());
     }
     tasks.push((async () => {

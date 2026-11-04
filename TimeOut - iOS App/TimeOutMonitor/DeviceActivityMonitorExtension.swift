@@ -29,14 +29,21 @@ private enum Shared {
     static let limitReachedKey = "st.limitReachedDay"
     static let overrideUntilKey = "st.overrideUntil"
     static let selectionVersionKey = "st.selectionVersion"
+    static let lowWarnKey = "st.lowWarn"
+    static let notifyLowKey = "st.notifyLow"
+
+    static var lowWarn: Int { let v = defaults.integer(forKey: lowWarnKey); return v > 0 ? v : 10 }
+    /// Off only when the user switched it off in the app.
+    static var notifyLow: Bool { defaults.object(forKey: notifyLowKey) as? Bool ?? true }
 
     static var defaults: UserDefaults { UserDefaults(suiteName: appGroup) ?? .standard }
 
     /// Same as ScreenTimeShared.checkpoints in the app.
-    static func checkpoints(for limit: Int) -> [Int] {
+    static func checkpoints(for limit: Int, lowWarn: Int) -> [Int] {
         guard limit > 1 else { return [] }
         var marks = Set(stride(from: 5, to: limit, by: 5))
         for minute in max(1, limit - 5)..<limit { marks.insert(minute) }
+        if limit - lowWarn >= 1 { marks.insert(limit - lowWarn) }
         return marks.sorted()
     }
 }
@@ -68,7 +75,7 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
         promotePendingSelection(today: today)
         let limit = (defaults.dictionary(forKey: Shared.limitsKey) as? [String: Int])?[today] ?? 60
         let version = defaults.integer(forKey: Shared.selectionVersionKey)
-        let signature = "\(today)|\(limit)|\(version)"
+        let signature = "\(today)|\(limit)|\(version)|\(Shared.lowWarn)"
 
         // The app registers monitoring itself (which also triggers this callback) and stores the signature first.
         // Only act when a new day started without the app re-registering.
@@ -88,7 +95,7 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
         var events: [DeviceActivityEvent.Name: DeviceActivityEvent] = [:]
         if limit > 0 {
             events[.timeOutLimit] = event(selection, minutes: limit)
-            for minute in Shared.checkpoints(for: limit) {
+            for minute in Shared.checkpoints(for: limit, lowWarn: Shared.lowWarn) {
                 events[DeviceActivityEvent.Name(Shared.usedEventPrefix + String(minute))] = event(selection, minutes: minute)
             }
         }
@@ -116,8 +123,8 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
         if event.rawValue.hasPrefix(Shared.usedEventPrefix) {
             guard let minutes = Int(event.rawValue.dropFirst(Shared.usedEventPrefix.count)) else { return }
             recordUsage(minutes, today: today)
-            if minutes == limit - 5 && limit >= 10 && !overrideActive {
-                notify("5 minutes left", "Your limited apps lock when today's \(limit) min run out.")
+            if minutes == limit - Shared.lowWarn && minutes > 0 && !overrideActive && Shared.notifyLow {
+                notify("\(Shared.lowWarn) minutes of phone time left", "Your limited apps lock when today's \(limit) min run out.")
             }
             return
         }
@@ -128,6 +135,7 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
         Shared.mark(today, in: Shared.reachedDaysKey)
         guard !overrideActive, let selection = loadSelection() else { return }
         shield(selection)
+        if Shared.notifyLow { notify("Time's up for today", "Your limited apps are locked until midnight. Emergency unlock is in TimeOut.") }
     }
 
     override func intervalDidEnd(for activity: DeviceActivityName) {
@@ -183,6 +191,8 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
     private func shield(_ selection: FamilyActivitySelection) {
         store.shield.applications = selection.applicationTokens.isEmpty ? nil : selection.applicationTokens
         store.shield.applicationCategories = selection.categoryTokens.isEmpty ? nil : .specific(selection.categoryTokens)
+        // Without this, a blocked category still opens in Safari.
+        store.shield.webDomainCategories = selection.categoryTokens.isEmpty ? nil : .specific(selection.categoryTokens)
         store.shield.webDomains = selection.webDomainTokens.isEmpty ? nil : selection.webDomainTokens
     }
 

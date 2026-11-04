@@ -10,12 +10,15 @@
 
   const followed = () => TO.data.settings.sports?.length ? TO.data.settings.sports : S.REAL_LEAGUES;
   const offDay = () => TO.store.get('timeout.offDay', false);
-  const activeFilter = () => ['pred', 'todo', 'sim'].includes(TO.data.feedFilter) ? 'all' : (TO.data.feedFilter || 'all');
+  const activeFilter = () => ['pred', 'todo', 'sim', 'live'].includes(TO.data.feedFilter) ? 'all' : (TO.data.feedFilter || 'all');
+  // The Live switch on its own line. It narrows whichever sport is picked.
+  const liveOnly = () => !!TO.data.feedLive;
+  const filterName = () => { const f = activeFilter(); return f === 'all' ? 'all sports' : f === 'ncaaf' ? 'College Football' : S.LEAGUES[f].short; };
   const sportsOnly = (challenge) => challenge.kind === 'race' || (challenge.kind === 'sports' && challenge.picks.every((pick) => pick.gameId && S.game(pick.gameId)?.league !== 'sim'));
 
   // Which day the board shows: 0 = today, 1 = tomorrow. Live games are always today.
   let feedDay = 0;
-  const activeDay = () => (activeFilter() === 'live' ? 0 : feedDay);
+  const activeDay = () => (liveOnly() ? 0 : feedDay);
 
   function boardGames(day = activeDay(), peek = false) {
     return S.board(TO.now(), { offDay: offDay(), day, peek, leagues: S.LEAGUE_ORDER.filter((l) => l !== 'sim' && followed().includes(l)) }).filter((g) => !g.simulated && g.league !== 'sim');
@@ -30,7 +33,7 @@
 
   /** Today and tomorrow. Counts are games still to be played that day, in the sports being shown. */
   function dayBar() {
-    if (activeFilter() === 'live' || TO.live.offline) return '';
+    if (liveOnly() || TO.live.offline) return '';
     const f = activeFilter();
     const chips = [];
     for (let i = 0; i <= TO.live.days; i++) {
@@ -131,17 +134,21 @@
   // ---------- Filters ----------
   function filterBar(games) {
     const f = activeFilter();
-    const live = games.filter((g) => g.state === 'live').length;
+    const on = liveOnly();
+    // With Live on, each sport's number is how many games it has live right now.
+    const today = boardGames(0, true);
+    const liveNow = today.filter((g) => g.state === 'live' && (f === 'all' || g.league === f)).length;
     const chip = (key, label, n, ic) => `<button class="chip ${f === key ? 'on' : ''}" data-act="filter" data-f="${key}">${ic ? icon(ic, 14) : ''}${esc(label)}${n ? `<span class="n">${n}</span>` : ''}</button>`;
-    const chips = [chip('live', 'Live', live, 'radio'), chip('all', 'All', 0, 'grid')];
+    const chips = [chip('all', 'All', 0, 'grid')];
     for (const l of S.LEAGUE_ORDER) {
       if (l === 'sim' || !followed().includes(l)) continue;
-      const n = games.filter((g) => g.league === l && g.state !== 'final').length;
+      const n = on ? today.filter((g) => g.league === l && g.state === 'live').length : games.filter((g) => g.league === l && g.state !== 'final').length;
       chips.push(chip(l, l === 'ncaaf' ? 'College Football' : S.LEAGUES[l].short === 'SIM' ? 'Sim League' : S.LEAGUES[l].short, n));
     }
     chips.push(`<button class="chip dashed" data-act="settings" data-section="sports">${icon('sliders', 14)}Edit</button>`);
     const cfb = (f === 'ncaaf' || f === 'all') && !TO.live.offline ? `<label class="cfb-select-label" for="cfb-group">College Football</label><select id="cfb-group" class="cfb-select" aria-label="College football conference">${TO.live.groups.map(([id, name]) => `<option value="${id}" ${TO.live.selectedGroup() === id ? 'selected' : ''}>${esc(name)}</option>`).join('')}</select>` : '';
-    return `<div class="filterbar"><div class="hscroll" data-hkey="filters">${chips.join('')}</div>${dayBar()}${cfb}</div>`;
+    const liveTile = `<button class="live-tile ${on ? 'on' : ''}" data-act="feed-live" aria-pressed="${on}" aria-label="Live games only, ${liveNow} live now in ${esc(filterName())}"><i></i>Live${liveNow ? `<span class="n">${liveNow}</span>` : ''}</button>`;
+    return `<div class="filterbar"><div class="hscroll" data-hkey="filters">${chips.join('')}</div>${liveTile}${dayBar()}${cfb}</div>`;
   }
 
   // ---------- Game card ----------
@@ -178,10 +185,10 @@
         <button class="matchup-team" data-act="open-game" data-id="${g.id}">${ui.teamBadge(g.home, 30)}<span>${esc(g.home.name)}</span>${g.state === 'live' ? `<b>${g.homeScore}</b>` : ''}</button>
       </div><div class="matchup-time">${statusLine}</div>
       <div class="challenge-tabs" role="tablist" aria-label="Challenge type">${tabs.map(([key,label]) => `<button role="tab" aria-selected="${current?.[0] === key}" class="${current?.[0] === key ? 'on' : ''}" data-act="challenge-tab" data-game="${esc(g.id)}" data-market="${key}">${label}</button>`).join('')}</div>
-      <div class="challenge-choices">${choices.map((sel) => ui.challengeChoiceButton(sel, { suspended: false, big: true, label: choiceLabel(sel) })).join('')}</div>`;
+      ${tabs.length ? `<div class="challenge-choices">${choices.map((sel) => ui.challengeChoiceButton(sel, { suspended: false, big: true, label: choiceLabel(sel) })).join('')}</div>` : '<div class="tiny faint" style="margin-top:6px">Challenge targets are not available for this game yet.</div>'}`;
     } else {
-      const row = (team, score, won) => `<button class="gc-team" style="width:100%" data-act="open-game" data-id="${g.id}">${ui.teamBadge(team)}<span class="nm" style="${won ? '' : 'color:var(--text-2)'}">${esc(team.name)}</span>${g.state === 'final' ? `<span class="sc ${won ? '' : 'trail'}">${score}</span>` : ''}</button>`;
-      body = row(g.away, g.awayScore, g.awayScore > g.homeScore) + row(g.home, g.homeScore, g.homeScore > g.awayScore);
+      const row = (team, score, won) => `<button class="gc-team" style="width:100%" data-act="open-game" data-id="${g.id}">${ui.teamBadge(team)}<span class="nm" style="${won ? '' : 'color:var(--text-2)'}">${esc(team.name)}</span>${g.state === 'final' || g.state === 'live' ? `<span class="sc ${won ? '' : 'trail'}">${score}</span>` : ''}</button>`;
+      body = row(g.away, g.awayScore, g.awayScore >= g.homeScore) + row(g.home, g.homeScore, g.homeScore >= g.awayScore);
       if (g.state === 'postponed') body += `<div class="note warn" style="margin-top:6px">${icon('info', 15)}<span>This game was postponed. Any related pledge will be returned.</span></div>`;
     }
     const status = `${ui.gameStatus(g)}${o.suspended && g.state === 'live' ? `<span class="tag">${icon('lock', 10)} Challenges closed</span>` : ''}`;
@@ -196,15 +203,16 @@
     const day = activeDay();
     const when = day === 0 ? 'today' : day === 1 ? 'tomorrow' : `on ${dayLabel(day)}`;
     const loading = day > 0 && TO.live.upcomingLoading;
-    const title = f === 'live' ? 'No live games right now' : loading ? 'Loading the schedule…' : `Sorry, no games are happening for this sport ${when}.`;
-    const next = f !== 'live' && !loading ? Array.from({ length: TO.live.days + 1 }, (_, i) => i).find((i) => i !== day && boardGames(i, true).some((g) => f === 'all' || g.league === f)) : null;
+    const isLive = liveOnly();
+    const title = isLive ? (f === 'all' ? 'No live games right now' : `No live ${esc(filterName())} games right now`) : loading ? 'Loading the schedule…' : `Sorry, no games are happening for this sport ${when}.`;
+    const next = !isLive && !loading ? Array.from({ length: TO.live.days + 1 }, (_, i) => i).find((i) => i !== day && boardGames(i, true).some((g) => f === 'all' || g.league === f)) : null;
     if (TO.live.failed) {
       return `<div class="empty">${icon('alert', 40)}<h3>Sports couldn’t load</h3><p>Check your connection and try again.</p><button class="btn primary" data-act="refresh-live">Try again</button></div>`;
     }
     return `<div class="empty">
       ${icon(loading ? 'clock' : 'target', 40)}
       <h3>${title}</h3>
-      ${f === 'live' ? '<p>Check back when a game is underway.</p>' : ''}
+      ${isLive ? '<p>Check back when a game is underway.</p><button class="btn primary" data-act="feed-live-off">Show all games</button>' : ''}
       ${next != null ? `<button class="btn primary" data-act="feed-day" data-day="${next}">See games ${next === 1 ? 'tomorrow' : `on ${esc(dayLabel(next))}`}</button>` : ''}
     </div>`;
   }
@@ -217,9 +225,8 @@
 
   function feed(games) {
     const f = activeFilter();
-    let list = games;
-    if (f === 'live') list = games.filter((g) => g.state === 'live');
-    else if (f !== 'all') list = games.filter((g) => g.league === f);
+    let list = f === 'all' ? games : games.filter((g) => g.league === f);
+    if (liveOnly()) list = list.filter((g) => g.state === 'live');
     if (!list.length && f !== 'pred' && f !== 'todo') return emptyBoard(f);
     if (f === 'all') {
       const groups = S.LEAGUE_ORDER.filter((l) => l !== 'sim' && list.some((g) => g.league === l)).map((l) => {
@@ -231,6 +238,19 @@
     return list.map(gameCard).join('');
   }
 
+  /** The big prompt at the top of Home until app limits are set up. A browser can't block apps, so the real block is in the iPhone app. */
+  function setupBanner() {
+    const s = TO.data.settings;
+    const hasLocks = s.lockedApps.length > 0 || s.deviceLockPoints > 0;
+    if (s.enforce && hasLocks) return '';
+    const title = hasLocks ? 'App limits are off' : 'Set up your app limits';
+    const text = hasLocks
+      ? 'Your apps won\'t lock when your phone time runs out, and your tier stays at Rookie.'
+      : 'Choose the apps TimeOut locks when your phone time runs out. It takes about 30 seconds. Real blocking happens in the TimeOut iPhone app.';
+    const action = hasLocks ? 'Turn limits back on' : 'Choose apps';
+    return `<div class="setup-banner"><div class="row" style="align-items:flex-start"><span class="sb-icon">${icon('shield', 20)}</span><div class="grow"><b>${title}</b><p>${text}</p></div></div><button class="btn primary full" data-act="${hasLocks ? 'setup-limits-on' : 'locked-apps'}">${action}</button></div>`;
+  }
+
   function render() {
     const wl = TO.state.wallet();
     const games = boardGames();
@@ -238,6 +258,7 @@
       ? `<button class="app-lock" data-act="settings" data-section="screentime">${icon('phone', 22, 'red')}<span class="grow"><b class="red">Your locked apps are blocked</b><div class="small muted">You've used all ${wl.todayLimit} min of today's phone time. Emergency unlocks are in Settings.</div></span>${icon('chevR', 16)}</button>`
       : '';
     return `<div class="stack home" style="padding-top:2px">
+      ${setupBanner()}
       ${walletCard(wl)}
       ${lock}
       ${statusStrip(wl)}
@@ -295,6 +316,17 @@
     if (fb && v.scrollTop > fb.offsetTop) v.scrollTop = fb.offsetTop;
   };
   A.filter = (el) => { TO.data.feedFilter = el.dataset.f; TO.state.save(); TO.app.render(); const v = document.getElementById('view'); const fb = v.querySelector('.filterbar'); if (fb && v.scrollTop > fb.offsetTop) v.scrollTop = fb.offsetTop; };
+  const setLive = (on) => {
+    TO.data.feedLive = on;
+    TO.state.save();
+    TO.app.render();
+    const v = document.getElementById('view');
+    const fb = v && v.querySelector('.filterbar');
+    if (fb && v.scrollTop > fb.offsetTop) v.scrollTop = fb.offsetTop;
+  };
+  A['feed-live'] = () => setLive(!liveOnly());
+  A['feed-live-off'] = () => setLive(false);
+  A['setup-limits-on'] = () => { TO.state.setSetting('enforce', true); TO.app.render(); };
   A['refresh-live'] = () => TO.live.refresh(TO.now(), true);
   A['go-sim'] = () => {
     if (!followed().includes('sim')) TO.state.setSetting('sports', [...followed(), 'sim']);

@@ -1,6 +1,7 @@
 import FamilyControls
 import PhotosUI
 import SwiftUI
+import UIKit
 
 enum SettingsModel {
     static let sections: [String: (title: String, icon: IconName)] = [
@@ -173,9 +174,9 @@ struct ScreenTimeSection: View {
         let overridesLeft = Rules.maxOverrides - wl.overridesUsed
         VStack(alignment: .leading, spacing: 8) {
             H2("How your screen time works")
-            HowCard(n: 1, title: "\(Rules.daily) challenge minutes a day", text: "Your pledge balance starts at \(Rules.daily) minutes\(wl.tier.bonus > 0 ? " (plus \(wl.tier.bonus) from your \(wl.tier.title) tier)" : "") and resets at midnight, your local time.")
-            HowCard(n: 2, title: "You challenge tomorrow's phone time", text: "Every minute you win is added to tomorrow's limit. Every minute you lose comes off it.")
-            HowCard(n: 3, title: "The math", text: "Tomorrow's limit = \(Rules.daily) min + today's challenge results − emergency unlock penalties.")
+            HowCard(n: 1, title: "\(Rules.daily) pledge minutes a day", text: "Your available minutes start at \(Rules.daily)\(wl.tier.bonus > 0 ? " (plus \(wl.tier.bonus) from your \(wl.tier.title) tier)" : "") and reset at midnight, your local time.")
+            HowCard(n: 2, title: "Challenges affect tomorrow's phone time", text: "Successful challenges add minutes to tomorrow's allowance. Missed challenges subtract the committed minutes.")
+            HowCard(n: 3, title: "The calculation", text: "Tomorrow's allowance = \(Rules.daily) min + today's earned minutes − emergency unlock adjustments.")
         }
         .card()
 
@@ -196,7 +197,7 @@ struct ScreenTimeSection: View {
             HStack {
                 Text("\(wl.used) min used on locked apps").foregroundStyle(Theme.text2)
                 Spacer()
-                Text(s.enforce ? "\(wl.phoneLeft) min left" : "Limits are off").foregroundStyle(wl.appsLocked ? Theme.loss : Theme.text)
+                Text(st.isEnforcing ? "\(wl.phoneLeft) min left" : "Limits are off").foregroundStyle(wl.appsLocked ? Theme.loss : Theme.text)
             }
             .font(.barlow(11.5, 700))
         }
@@ -232,20 +233,14 @@ struct ScreenTimeSection: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Controls").eyebrow()
             ListBox {
-                ListRow("Enforce app limits", sub: s.lockedApps.isEmpty ? coloredSub("Lock at least one app or site below to turn this on", Theme.warn) : AttributedString("Blocks your locked apps when today's phone time runs out")) {
+                ListRow("Enforce app limits", sub: st.setupStep == .allow || st.setupStep == .pick ? coloredSub("Set up Screen Time below to turn this on", Theme.warn) : AttributedString("Blocks your chosen apps when today's phone time runs out")) {
                     LrIcon(icon: .shield)
                 } trailing: {
-                    SwitchView(isOn: s.enforce && !s.lockedApps.isEmpty) { toggleEnforce(!(s.enforce && !s.lockedApps.isEmpty)) }
+                    SwitchView(isOn: st.isEnforcing) { toggleEnforce(!st.isEnforcing) }
                 }
-                Button { ui.openSheet(.locked) } label: {
-                    ListRow("Locked apps & sites", sub: AttributedString("\(s.lockedApps.count) locked · \(store.lockPoints(store.data ?? store.freshData(TO.now()))) lock points")) {
-                        LrIcon(icon: .lock)
-                    } trailing: { Icon(.chevR, 18).foregroundStyle(Theme.muted) }
-                }
-                .buttonStyle(.press)
                 Button { ui.openSheet(.screenTimeApps) } label: {
-                    ListRow("Block apps on this iPhone", sub: AttributedString(deviceSummary)) {
-                        LrIcon(icon: .phone)
+                    ListRow("Locked apps & sites", sub: AttributedString(deviceSummary)) {
+                        LrIcon(icon: .lock)
                     } trailing: { Icon(.chevR, 18).foregroundStyle(Theme.muted) }
                 }
                 .buttonStyle(.press)
@@ -264,7 +259,10 @@ struct ScreenTimeSection: View {
                         .padding(.bottom, -14)
                     Seg {
                         ForEach([5, 10, 15], id: \.self) { v in
-                            SegButton(on: s.lowWarn == v, action: { store.updateSettings { $0.lowWarn = v } }) { Text("\(v) min left") }
+                            SegButton(on: s.lowWarn == v, action: {
+                                store.updateSettings { $0.lowWarn = v }
+                                ScreenTime.shared.sync()
+                            }) { Text("\(v) min left") }
                         }
                     }
                     .padding(.horizontal, 14).padding(.bottom, 10)
@@ -276,7 +274,7 @@ struct ScreenTimeSection: View {
 
     private var deviceSummary: String {
         switch st.status {
-        case .approved: return st.hasSelection ? "\(st.selectionSummary) blocked at your limit" : "Pick the apps Screen Time blocks"
+        case .approved: return st.hasSelection ? "\(st.selectionSummary) · \(store.lockPoints(store.data ?? store.freshData(TO.now()))) lock points" : "Choose the apps Screen Time blocks"
         case .denied: return "Screen Time access is off"
         case .notDetermined: return "Allow Screen Time to block apps for real"
         }
@@ -297,6 +295,10 @@ struct ScreenTimeSection: View {
             cost.inlinePresentationIntent = .stronglyEmphasized
             body += cost
             body += AttributedString("\(wl.streak > 0 ? " and ends your \(wl.streak)-day clean streak" : ""). You have \(Rules.maxOverrides - wl.overridesUsed) of \(Rules.maxOverrides) unlocks left today.")
+            guard st.isEnforcing else {
+                ui.toast(.info, "Nothing is blocked yet", "Set up Screen Time first. Emergency unlocks lift a real block.")
+                return
+            }
             guard await ui.confirm("Unlock \(Rules.overrideMinutes) minutes now?", body, confirm: "Unlock now", kind: .warn) else { return }
             do {
                 try store.useEmergencyUnlock()
@@ -311,10 +313,13 @@ struct ScreenTimeSection: View {
 
     private func toggleEnforce(_ want: Bool) {
         Task {
-            if want && (store.data?.settings.lockedApps.isEmpty ?? true) {
-                if await ui.confirm("Lock an app first", "App limits need at least one locked app, site or category to block. Choose what TimeOut locks when your phone time runs out, and limits turn on with it.", confirm: "Choose apps", cancel: "Not now") {
-                    ui.openSheet(.locked)
-                }
+            if want && (st.status != .approved || !st.hasSelection) {
+                ui.openSheet(.screenTimeApps)
+                return
+            }
+            // The same rule as removing apps: a limit that's already been hit can't be dodged by switching it off.
+            if !want && st.isShieldActive && !st.isOverrideActive {
+                _ = await ui.confirm("Your apps are locked right now", "Limits can't be turned off while they're blocking your apps. Use an emergency unlock, or turn limits off after midnight.", confirm: "OK", cancel: nil)
                 return
             }
             let ok = want
@@ -377,7 +382,7 @@ struct StatusSection: View {
                 }
             }
             Text("Lock more of your real screen time to climb. Apps and websites are 1 point; whole categories (like Social) are 3.").font(.barlow(11.5)).foregroundStyle(Theme.muted)
-            Button { UIState.shared.openSheet(.locked) } label: { BtnLabel("Choose locked apps", icon: .lock, iconSize: 16) }.buttonStyle(.btn(.ghost, .sm, full: true))
+            Button { UIState.shared.openSheet(.screenTimeApps) } label: { BtnLabel("Choose locked apps", icon: .lock, iconSize: 16) }.buttonStyle(.btn(.ghost, .sm, full: true))
         }
         .card()
 
@@ -392,11 +397,11 @@ struct StatusSection: View {
             }
             if let ms = Store.nextStreakMilestone(wl.streak) {
                 Bar(pct: Double(wl.streak) / Double(ms.days) * 100, color: Theme.warn)
-                Text("\(ms.days - wl.streak) more clean day\(ms.days - wl.streak == 1 ? "" : "s") for \(Fmt.mult(ms.mult)) winnings.").font(.barlow(13, 700)).foregroundStyle(Theme.text2)
+                Text("\(ms.days - wl.streak) more clean day\(ms.days - wl.streak == 1 ? "" : "s") for \(Fmt.mult(ms.mult)) earned minutes.").font(.barlow(13, 700)).foregroundStyle(Theme.text2)
             } else {
                 Text("Max multiplier reached. Keep it going.").font(.barlow(13, 700)).foregroundStyle(Theme.accent)
             }
-            Text("A clean day means limits were on, you stayed under your phone time, and you didn't use an emergency unlock. Winnings get ×1.1 at 3 days and ×1.25 at 7. An emergency unlock resets the streak.")
+            Text("A clean day means limits were on, you stayed under your phone time, and you didn't use an emergency unlock. Earned minutes get ×1.1 at 3 days and ×1.25 at 7. An emergency unlock resets the streak.")
                 .font(.barlow(13)).foregroundStyle(Theme.text2)
         }
         .card()
@@ -436,12 +441,40 @@ struct NotificationsSection: View {
     private var store: Store { .shared }
     var body: some View {
         let n = store.data?.settings.notify ?? NotifySettings()
-        Text("These show as banners at the top of the screen.").font(.barlow(13)).foregroundStyle(Theme.text2)
-        ListBox {
-            row(.ticket, "Challenge results", "When a challenge wins, loses or is voided", n.resolved) { v in store.updateSettings { $0.notify.resolved = v } }
-            row(.userPlus, "Friend requests", "When someone adds or accepts you", n.friends) { v in store.updateSettings { $0.notify.friends = v } }
-            row(.phone, "Low phone time", "Before your locked apps close", n.lowTime) { v in store.updateSettings { $0.notify.lowTime = v } }
+        let notifier = Notifier.shared
+        switch notifier.access {
+        case .allowed, .unknown:
+            Text("Banners while TimeOut is open, and iPhone notifications when it isn't.").font(.barlow(13)).foregroundStyle(Theme.text2)
+        case .notDetermined:
+            Note(.blue, icon: .bell) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Turn on notifications to hear about results and friend requests when TimeOut is closed.")
+                    Button("Turn on notifications") { Task { await notifier.requestIfNeeded() } }.buttonStyle(.btn(.primary, .xs))
+                }
+            }
+        case .denied:
+            Note(.warn, icon: .bell) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Notifications are off for TimeOut in iPhone Settings, so these only show while the app is open.")
+                    Button("Open iPhone Settings") { openSettings() }.buttonStyle(.btn(.primary, .xs))
+                }
+            }
         }
+        ListBox {
+            row(.target, "Challenge results", "When a matchup challenge is completed", n.resolved) { v in store.updateSettings { $0.notify.resolved = v } }
+            row(.userPlus, "Friend requests", "When someone adds or accepts you", n.friends) { v in store.updateSettings { $0.notify.friends = v } }
+            row(.phone, "Low phone time", "Before your locked apps close", n.lowTime) { v in
+                store.updateSettings { $0.notify.lowTime = v }
+                ScreenTime.shared.sync()
+            }
+        }
+        Text("Screen time warnings always arrive on time. Results and friend requests arrive when iOS next wakes TimeOut, usually within an hour or two, and right away when you open it.")
+            .font(.barlow(11.5)).foregroundStyle(Theme.muted)
+            .onAppear { Task { await notifier.refreshAccess() } }
+    }
+
+    private func openSettings() {
+        if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
     }
 
     private func row(_ icon: IconName, _ title: String, _ sub: String, _ on: Bool, _ set: @escaping (Bool) -> Void) -> some View {
@@ -458,7 +491,7 @@ struct PrivacySection: View {
         ListBox {
             row(.chart, "My record", "Wins and losses", p.record) { v in store.updateSettings { $0.privacy.record = v } }
             row(.hourglass, "Minutes won or lost", "Your leaderboard number", p.minutes) { v in store.updateSettings { $0.privacy.minutes = v } }
-            row(.ticket, "My open challenges", "Picks you currently have open", p.challenges) { v in store.updateSettings { $0.privacy.challenges = v } }
+            row(.target, "My active challenges", "Picks you currently have open", p.challenges) { v in store.updateSettings { $0.privacy.challenges = v } }
         }
     }
 
@@ -602,6 +635,7 @@ struct AccountSection: View {
                     return
                 }
             }
+            ScreenTime.shared.accountGone()
             store.deleteAccount()
             Slip.shared.clear()
             AppModel.shared.boot()
@@ -614,111 +648,115 @@ struct AccountSection: View {
 struct HowItWorksSheet: View {
     var body: some View {
         SheetFrame("How TimeOut works", close: { UIState.shared.closeSheet(.how) }) {
-            HowCard(n: 1, title: "Challenge screen time, not money", text: "You get \(Rules.daily) challenge minutes every day. They reset at midnight.")
-            HowCard(n: 2, title: "Winning buys you phone time", text: "Win a challenge and the minutes you win are added to tomorrow's phone time. Lose and they come off it.")
-            HowCard(n: 3, title: "Challenges resolve on their own", text: "When a game ends, your challenge pays out within minutes. Postponed games are voided and you get your pledge back.")
-            HowCard(n: 4, title: "Out of minutes? Wait for midnight", text: "At 0 minutes, new pledges pause until the reset. Emergency unlocks exist, but they cost you tomorrow.")
+            HowCard(n: 1, title: "Commit screen time minutes", text: "You get \(Rules.daily) available minutes every day. They reset at midnight.")
+            HowCard(n: 2, title: "Meet the challenge to earn time", text: "Successful challenges add earned minutes to tomorrow's phone-time allowance.")
+            HowCard(n: 3, title: "Results update automatically", text: "When a game ends, the challenge is resolved. Postponed games return your committed minutes.")
+            HowCard(n: 4, title: "Out of minutes? Wait for midnight", text: "At 0 minutes, new pledges pause until the reset. Emergency unlocks adjust tomorrow's allowance.")
         } foot: {
             Button("Got it") { UIState.shared.closeSheet(.how) }.buttonStyle(.btn(.primary, full: true))
         }
     }
 }
 
-struct LockedAppsSheet: View {
-    @State private var draft: [String] = Store.shared.data?.settings.lockedApps ?? []
-    private var store: Store { .shared }
-    private var ui: UIState { .shared }
-
-    var body: some View {
-        let pts = Store.points(draft)
-        let t = Store.tierForPoints(store.data?.settings.enforce == true ? pts : 0)
-        SheetFrame("Locked apps & sites", tall: true, close: { ui.closeSheet(.locked) }) {
-            Text("These are the apps TimeOut blocks when your phone time runs out. The more you lock, the higher your tier.").font(.barlow(13)).foregroundStyle(Theme.text2)
-            HStack { Text("\(pts) lock points").font(.barlow(15, 700)); Spacer(); TierBadge(tierId: t.id) }.card(12)
-            group("Categories · 3 pts each", "Category")
-            group("Apps · 1 pt each", "App")
-            group("Websites · 1 pt each", "Website")
-        } foot: {
-            Button("Save locked apps") { save() }.buttonStyle(.btn(.primary, full: true))
-        }
-    }
-
-    @ViewBuilder private func group(_ title: String, _ kind: String) -> some View {
-        Text(title).eyebrow()
-        ListBox {
-            ForEach(Store.lockable.filter { $0.kind == kind }, id: \.id) { x in
-                Button { draft = draft.contains(x.id) ? draft.filter { $0 != x.id } : draft + [x.id] } label: {
-                    ListRow(x.name, sub: AttributedString("\(x.note.map { "\($0) · " } ?? "")\(x.pts) pt\(x.pts == 1 ? "" : "s")")) {
-                        LrIcon(icon: kind == "Category" ? .grid : kind == "Website" ? .globe : .phone, bg: Color(hex: x.color).opacity(0.13), fg: Color(hex: x.color))
-                    } trailing: { CheckBox(on: draft.contains(x.id)) }
-                }
-                .buttonStyle(.press)
-            }
-        }
-    }
-
-    private func save() {
-        Task {
-            let before = store.data?.settings.lockedApps ?? []
-            let removed = before.filter { !draft.contains($0) }
-            let oldTier = store.tier(store.data ?? store.freshData(TO.now()))
-            let willEnforce = !draft.isEmpty && ((store.data?.settings.enforce ?? false) || before.isEmpty)
-            let newTier = Store.tierForPoints(willEnforce ? Store.points(draft) : 0)
-            var body = "\(draft.count) apps, sites and categories will be locked when your phone time runs out."
-            if newTier.id != oldTier.id { body += "\n\nYour tier changes from **\(oldTier.title)** to **\(newTier.title)**." }
-            if !removed.isEmpty { body += "\n\nUnlocked apps stop counting right away." }
-            if draft.isEmpty && store.data?.settings.enforce == true { body += "\n\n**App limits turn off** because nothing is locked." }
-            if !draft.isEmpty && before.isEmpty { body += "\n\nApp limits turn on." }
-            guard await ui.confirm("Update locked apps?", body, confirm: "Save") else { return }
-            store.setLockedApps(draft)
-            ui.closeSheet(.locked)
-            ui.toast(.win, "Locked apps updated", "You're \(store.wallet.tier.title) now.")
-            ScreenTime.shared.sync()
-        }
-    }
-}
-
-/// The real iPhone block list, chosen with Apple's Screen Time picker.
-struct ScreenTimeAppsSheet: View {
+/// The real iPhone block list: Apple's Screen Time permission, then Apple's app picker. Used by the sheet and onboarding.
+struct ScreenTimeSetupCard: View {
     private var st: ScreenTime { .shared }
-    private var ui: UIState { .shared }
+    private var store: Store { .shared }
     @State private var showPicker = false
 
     var body: some View {
-        SheetFrame("Block apps on this iPhone", tall: true, close: { ui.closeSheet(.screenTimeApps) }) {
-            Text("TimeOut uses Apple's Screen Time to actually block the apps you choose when today's phone time runs out. Apple keeps the list private: TimeOut only sees how many you picked.")
-                .font(.barlow(13)).foregroundStyle(Theme.text2)
-            switch st.status {
-            case .approved:
-                Note(.green, icon: .check, "Screen Time access is on.")
-            case .denied:
-                Note(.red, icon: .alert, "Screen Time access is off. Turn it on for TimeOut in Settings › Screen Time, or tap Allow below.")
-            case .notDetermined:
-                Note(.blue, icon: .info, "Allow Screen Time access so TimeOut can block apps. You approve it with Face ID or your passcode.")
+        let step = st.setupStep
+        VStack(alignment: .leading, spacing: 14) {
+            VStack(spacing: 0) {
+                stepRow(1, "Allow Screen Time", "You approve it with Face ID or your passcode.", done: st.status == .approved, active: step == .allow)
+                HRule()
+                stepRow(2, "Choose the apps to block", st.hasSelection ? st.selectionSummary : "Apple keeps the list private: TimeOut only sees how many you picked.", done: st.hasSelection, active: step == .pick)
+                HRule()
+                stepRow(3, "Limits turn on", "Your chosen apps lock when today's phone time runs out.", done: step == .done, active: step == .turnOn)
             }
-            if st.status == .approved {
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack { Text("Blocked at your limit").foregroundStyle(Theme.text2); Spacer(); Text(st.selectionSummary).font(.barlow(13, 700)) }.font(.barlow(13))
-                    if let pending = st.pendingRemovalSummary {
-                        Note(.warn, icon: .clock, "\(pending) leave the list at midnight. Removals wait a day so a limit can't be dodged.")
-                    }
-                    if st.isShieldActive && !st.isOverrideActive { Note(.red, icon: .lock, "Today's limit is reached: your chosen apps are blocked until midnight.") }
-                    if st.isOverrideActive, let until = st.overrideUntil { Note(.warn, icon: .unlock, "Emergency unlock until \(Fmt.time(TO.ms(until))).") }
-                    if store.data?.settings.enforce != true { Note(.warn, icon: .info, "Enforce app limits is off, so nothing is blocked. Turn it on in Screen time.") }
-                }
-                .card()
+            .background(Theme.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Theme.stroke, lineWidth: 1))
+
+            if st.status == .denied {
+                Note(.warn, icon: .alert, "Screen Time access is off. Tap Allow Screen Time to try again, or turn it on for TimeOut in iPhone Settings › Screen Time.")
             }
-            if let err = st.lastError { FormError(err) }
-        } foot: {
-            if st.status == .approved {
-                Button { st.prepareDraft(); showPicker = true } label: { BtnLabel("Choose apps to block", icon: .lock) }.buttonStyle(.btn(.primary, full: true))
-            } else {
-                Button("Allow Screen Time") { Task { await st.requestAuthorization() } }.buttonStyle(.btn(.primary, full: true))
+            if let err = st.lastError {
+                FormError(err)
+                #if targetEnvironment(simulator)
+                Note(.blue, icon: .info, "Blocking apps needs a real iPhone. The Simulator can't block anything.")
+                #endif
             }
+            if step == .done {
+                Note(.green, icon: .check, "You're set. \(st.selectionSummary) lock when today's \(store.wallet.todayLimit) min run out.")
+            }
+            if let pending = st.pendingRemovalSummary {
+                Note(.warn, icon: .clock, "\(pending) leave the list at midnight. Removals wait a day so a limit can't be dodged.")
+            }
+            if st.isShieldActive && !st.isOverrideActive { Note(.red, icon: .lock, "Today's limit is reached: your chosen apps are blocked until midnight.") }
+            if st.isOverrideActive, let until = st.overrideUntil { Note(.warn, icon: .unlock, "Emergency unlock until \(Fmt.time(TO.ms(until))).") }
+
+            primaryButton(step)
         }
         .familyActivityPicker(isPresented: $showPicker, selection: Binding(get: { st.draft }, set: { st.draft = $0 }))
         .onChange(of: showPicker) { _, open in if !open { st.applyDraft() } }
     }
 
-    private var store: Store { .shared }
+    @ViewBuilder private func primaryButton(_ step: ScreenTime.SetupStep) -> some View {
+        switch step {
+        case .allow:
+            Button("Allow Screen Time") {
+                Task {
+                    await st.requestAuthorization()
+                    // Go straight to the next step, so setup stays one flow.
+                    if st.status == .approved && !st.hasSelection { openPicker() }
+                }
+            }
+            .buttonStyle(.btn(.primary, full: true))
+        case .pick:
+            Button { openPicker() } label: { BtnLabel("Choose apps to block", icon: .lock) }.buttonStyle(.btn(.primary, full: true))
+        case .turnOn:
+            Button("Turn limits on") {
+                store.setEnforce(true)
+                st.sync()
+            }
+            .buttonStyle(.btn(.primary, full: true))
+        case .done:
+            Button { openPicker() } label: { BtnLabel("Change apps", icon: .lock) }.buttonStyle(.btn(.ghost, full: true))
+        }
+    }
+
+    private func openPicker() {
+        st.prepareDraft()
+        showPicker = true
+    }
+
+    private func stepRow(_ n: Int, _ title: String, _ sub: String, done: Bool, active: Bool) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Group {
+                if done { Icon(.check, 15).foregroundStyle(Theme.accentInk) }
+                else { Text("\(n)").font(.display(16, 900)).foregroundStyle(active ? Theme.accentInk : Theme.text2) }
+            }
+            .frame(width: 28, height: 28)
+            .background(done || active ? Theme.accent : Theme.raised, in: Circle())
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title).font(.barlow(15, 700)).foregroundStyle(done || active ? Theme.text : Theme.text2)
+                Text(sub).font(.barlow(12.5)).foregroundStyle(Theme.text2).fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(12)
+    }
+}
+
+/// Setup and the block list, opened from the Home banner and Settings.
+struct ScreenTimeAppsSheet: View {
+    private var ui: UIState { .shared }
+
+    var body: some View {
+        SheetFrame("Locked apps & sites", tall: true, close: { ui.closeSheet(.screenTimeApps) }) {
+            Text("TimeOut uses Apple's Screen Time to actually block the apps you choose when today's phone time runs out. The more you lock, the higher your tier.")
+                .font(.barlow(13)).foregroundStyle(Theme.text2)
+            ScreenTimeSetupCard()
+        }
+    }
 }

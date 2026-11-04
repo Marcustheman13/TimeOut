@@ -319,7 +319,21 @@
       ui.toast({ kind: 'loss', title: 'Couldn\'t log in to the demo account', msg: e.message });
     }
   };
-  A.forgot = () => ui.confirm({ title: 'Reset your password', body: TO.api.online ? 'Password reset emails aren\'t built yet. Log in with the demo account or create a new account.' : 'In this demo, accounts live only in this browser, so there\'s no email reset. Create a new account or log in with the demo account.', confirm: 'OK', cancel: null });
+  A.forgot = async () => {
+    if (!TO.api.configured) {
+      ui.confirm({ title: 'Reset your password', body: 'TimeOut can\'t reach its server right now, so password reset emails can\'t be sent. Try again when you\'re back online.', confirm: 'OK', cancel: null });
+      return;
+    }
+    const email = String(document.getElementById('li-id')?.value || '').trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
+      ui.toast({ kind: 'warn', title: 'Enter your email first', msg: 'Type it above, then tap Forgot password.' });
+      return;
+    }
+    try {
+      await TO.api.sendPasswordReset(email);
+      ui.confirm({ title: 'Check your email', body: `If ${esc(email)} has a TimeOut account, we sent it a link to reset your password. Open it to sign in, then set a new password in <b>Account</b>.`, confirm: 'OK', cancel: null });
+    } catch (e) { ui.toast({ kind: 'loss', title: 'Couldn\'t send the email', msg: e.message }); }
+  };
   A['toggle-pw'] = (el) => {
     const input = document.getElementById(el.dataset.for);
     if (!input) return;

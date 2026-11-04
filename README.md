@@ -192,9 +192,12 @@ All requests and responses are JSON. Errors look like `{ "error": { "code", "mes
 - **Never commit `server/.env`** or paste the database connection string into code, issues or chat. `.gitignore` already blocks `.env`.
 - If you change `schema.sql`, also update `seed.sql` and the ERD, and tell the team to run `npm run db:reset`.
 - After editing anything in `TimeOut - Web/css` or `js`, run `python3 build.py` in that folder if you want the single-file `dist/TimeOut.html` updated.
+- Keep the two apps the same. A rule, wording or screen change in `TimeOut - Web/` needs the matching change in `TimeOut - iOS App/`, and the other way around.
+- Run database changes before merging code that needs them. The live site redeploys from `main` as soon as a pull request merges.
 
 ## What's Still Stored Only in the Browser
 
-Accounts, game challenges, the screen-time wallet, settings and teams are saved in Supabase. Friends, friend requests, clean-day history, and race, prediction and to-do challenges are still saved only on the device (`localStorage` on the web, [`js/state.js`](TimeOut%20-%20Web/js/state.js)).
+Accounts, game challenges, the screen-time wallet, settings, teams, friends and friend requests are saved in Supabase. Daily usage, emergency unlocks, and race and to-do challenges are still saved only on the device (`localStorage` on the web, [`js/state.js`](TimeOut%20-%20Web/js/state.js)).
 To move a feature over: add its tables and RPC functions in Supabase, add a function in `js/api.js` and `API.swift`, and call it from the screen.
-Good next slice: sending a friend request.
+
+**Updating the Supabase database:** [`server/db/apply-all-november-2026.sql`](server/db/apply-all-november-2026.sql) brings a database up to the current code in one paste into the SQL Editor. It keeps existing data and is safe to run twice.

@@ -443,7 +443,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = TimeOut/TimeOut.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
@@ -487,7 +487,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = TimeOut/TimeOut.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
@@ -530,7 +530,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = TimeOutMonitor/TimeOutMonitor.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = TimeOutMonitor/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = TimeOutMonitor;
@@ -560,7 +560,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = TimeOutMonitor/TimeOutMonitor.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = TimeOutMonitor/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = TimeOutMonitor;
@@ -591,7 +591,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = TimeOutShield/TimeOutShield.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = TimeOutShield/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = TimeOutShield;
@@ -621,7 +621,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = TimeOutShield/TimeOutShield.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = TimeOutShield/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = TimeOutShield;

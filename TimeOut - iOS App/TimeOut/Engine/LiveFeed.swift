@@ -517,17 +517,22 @@ final class LiveFeed {
     }
 
     /// Keep old unresolved tickets gradeable after their games fall out of the current scoreboard cache.
-    private func loadOldChallengeGames(_ now: Ms) async -> Bool {
+    func loadOldChallengeGames(_ now: Ms) async -> Bool {
         guard let challenges = Store.shared.data?.challenges else { return false }
         var wanted: [String: (league: String, day: String, ids: Set<String>)] = [:]
         for challenge in challenges where challenge.status == "open" {
             for pick in challenge.picks where pick.result == "pending" {
                 guard let gameId = pick.gameId, let league = pick.league, Self.leagues[league] != nil, byId(gameId) == nil else { continue }
-                let day = TO.dayKey(challenge.placedAt)
-                let key = "\(league)|\(day)"
-                var entry = wanted[key] ?? (league, day, [])
-                entry.ids.insert(gameId)
-                wanted[key] = entry
+                // A challenge can be on tomorrow's game, so look on the game's own day when it's known.
+                // Picks loaded from the server don't carry a start time, so check the next day for those too.
+                let placedDay = TO.dayKey(challenge.placedAt)
+                let days = pick.start.map { [TO.dayKey($0)] } ?? [placedDay, TO.addDays(placedDay, 1)]
+                for day in days {
+                    let key = "\(league)|\(day)"
+                    var entry = wanted[key] ?? (league, day, [])
+                    entry.ids.insert(gameId)
+                    wanted[key] = entry
+                }
             }
         }
         var loaded = false
