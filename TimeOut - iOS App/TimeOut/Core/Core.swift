@@ -283,5 +283,26 @@ struct AppError: Error, LocalizedError {
     var fields: [String: String] = [:]
     var status: Int? = nil
     var changed: [String] = []
+    /// The server's own wording. Never shown to users; the app reads it to recognize specific problems.
+    var debug: String? = nil
     var errorDescription: String? { message }
+    var raw: String { debug ?? message }
+
+    /// Words people should see for any error.
+    static func friendly(_ error: Error) -> String {
+        if let e = error as? AppError { return e.message }
+        if let e = error as? URLError {
+            switch e.code {
+            case .notConnectedToInternet, .networkConnectionLost, .dataNotAllowed:
+                return "You're offline. Check your connection and try again."
+            case .timedOut:
+                return "That took too long. Check your connection and try again."
+            default:
+                return unavailable
+            }
+        }
+        return unavailable
+    }
+
+    static let unavailable = "TimeOut can't reach your account right now. Please try again in a few minutes."
 }

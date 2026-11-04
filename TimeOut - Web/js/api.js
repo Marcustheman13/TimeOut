@@ -18,39 +18,41 @@
   const settling = new Set();
   const isPersistableGamePick = (pick) => pick?.kind === 'game' || (pick?.kind === 'sports' && !!pick.gameId);
 
+  // The server's own wording. Never shown to users; the app reads it to recognize specific problems.
+  const rawText = (error) => String(error?.debug || error?.message || '');
   function isOutOfPredictingMinutes(error) {
-    return /insufficient|not enough|out of (challenging )?(minutes|balance)|challenging minutes/i.test(String(error?.message || ''));
+    return /insufficient|not enough|out of (challenging )?(minutes|balance)|challenging minutes/i.test(rawText(error));
   }
   function isTierSystemRpcUnavailable(error) {
-    const message = String(error?.message || '');
+    const message = rawText(error);
     return /timeout_place_challenge_with_tiers/i.test(message) && /schema cache|function.*(not found|does not exist|could not find)/i.test(message);
   }
   function isTierPerkRpcUnavailable(error) {
-    const message = String(error?.message || '');
+    const message = rawText(error);
     return /timeout_place_challenge_with_perks/i.test(message) && /schema cache|function.*(not found|does not exist|could not find)/i.test(message);
   }
   function isTierPerkLimitError(error) {
-    return /no point-value boosts left|no combo protection left/i.test(String(error?.message || ''));
+    return /no point-value boosts left|no combo protection left/i.test(rawText(error));
   }
   function notifyOutOfPredictingMinutes() {
     if (Date.now() - lastOutOfMinutesAlertAt < 15000 || !TO.ui?.toast) return;
     lastOutOfMinutesAlertAt = Date.now();
-    TO.ui.toast({ kind: 'loss', title: 'Out of pledge minutes', msg: 'Pledges reopen at midnight.' });
+    TO.ui.toast({ kind: 'loss', title: 'Out of pledge minutes', msg: 'Pledges reopen at midnight. Your minutes were returned.' });
   }
   function notifyTierBonusMigrationRequired() {
     if (Date.now() - lastTierBonusMigrationAlertAt < 15000 || !TO.ui?.toast) return;
     lastTierBonusMigrationAlertAt = Date.now();
-    TO.ui.toast({ kind: 'loss', title: 'Tier setup needed in Supabase', msg: 'This Combo Goal was not saved. Run the tier system migration in Supabase SQL Editor, then reload the app.' });
+    TO.ui.toast({ kind: 'loss', title: 'Your pledge wasn\'t saved', msg: 'Your minutes were returned. Please try again in a few minutes.' });
   }
   function notifyTierPerkMigrationRequired() {
     if (Date.now() - lastTierPerkMigrationAlertAt < 15000 || !TO.ui?.toast) return;
     lastTierPerkMigrationAlertAt = Date.now();
-    TO.ui.toast({ kind: 'loss', title: 'Tier perks need Supabase setup', msg: 'This challenge was not saved with its boost or insurance. Run the updated tier system migration, then reload the app.' });
+    TO.ui.toast({ kind: 'loss', title: 'That perk isn\'t available right now', msg: 'Your pledge wasn\'t saved and your minutes were returned. Try it again without the perk.' });
   }
   function notifyTierPerkAlreadyUsed() {
     if (Date.now() - lastTierPerkMigrationAlertAt < 15000 || !TO.ui?.toast) return;
     lastTierPerkMigrationAlertAt = Date.now();
-    TO.ui.toast({ kind: 'warn', title: 'Tier perk already used', msg: 'This boost or insurance was already used on another device.' });
+    TO.ui.toast({ kind: 'warn', title: 'Perk already used', msg: 'You already used this perk on another device. Your pledge wasn\'t saved and your minutes were returned.' });
   }
 
   const config = window.TIMEOUT_SUPABASE || {};
@@ -87,17 +89,26 @@
     if (m.includes('unable to validate email') || m.includes('invalid format') || code === 'email_address_invalid') return err('invalid', 'Enter a valid email address.', 'email');
     if (code === 'weak_password' || m.includes('password should') || m.includes('password is')) return err('invalid', raw, 'password');
     if (m.includes('duplicate key')) return err('taken', 'That\u2019s already taken. Try something else.');
-    if (m.includes('jwt') && m.includes('expired')) return err('bad_token', 'Your session expired. Log in again.');
+    if (m.includes('jwt')) return err('bad_token', 'Your session expired. Log in again.');
+    // Our own database functions explain themselves. Everything else from the database is technical.
+    if (code === 'p0001') {
+      const known = { 'sign in required': 'Your session expired. Log in again.', 'not enough challenge minutes': 'You\'re out of pledge minutes for today. Pledges reopen at midnight.', 'wallet is not set up': TO.unavailableMessage };
+      return new TO.AppError('supabase_error', known[m] || raw, { status, debug: raw, fields: {} });
+    }
+    if (code.startsWith('pgrst') || /^[0-9a-z]{5}$/.test(code) || status >= 500 || /schema cache|relation |column |function |syntax|permission denied|violates|row-level|supabase|postgres|request failed/.test(m)) {
+      return new TO.AppError('supabase_error', TO.unavailableMessage, { status, debug: raw, fields: {} });
+    }
+    if (status === 401 || status === 403) return err('bad_token', 'Your session expired. Log in again.');
     const fields = {};
     if (/username/i.test(raw)) fields.username = raw;
     else if (/email/i.test(raw)) fields.email = raw;
     else if (/password/i.test(raw)) fields.password = raw;
-    return new TO.AppError(status === 409 ? 'taken' : 'supabase_error', raw, { status, fields });
+    return new TO.AppError(status === 409 ? 'taken' : 'supabase_error', raw, { status, fields, debug: raw });
   }
   async function parseResponse(res) {
     const json = await res.json().catch(() => ({}));
     if (!res.ok) {
-      const raw = json.msg || json.message || json.error_description || json.error || `Supabase request failed (${res.status}).`;
+      const raw = json.msg || json.message || json.error_description || json.error || `Request failed (${res.status}).`;
       throw friendlyError(raw, json.error_code || json.code, res.status);
     }
     return json;
@@ -211,10 +222,10 @@
     const baseWalletFields = `balance_minutes,current_day,is_locked,streak`;
     const bonusWalletFields = `${baseWalletFields},tier_bonus_day,tier_bonus_minutes`;
     const walletRequest = rest(`wallets?select=${bonusWalletFields},tier_boosts_by_day,tier_insurance_by_week&user_id=eq.${safeId}&limit=1`).catch((error) => {
-      if (!/tier_boosts_by_day|tier_insurance_by_week|column .*does not exist/i.test(error.message || '')) throw error;
+      if (!/tier_boosts_by_day|tier_insurance_by_week|column .*does not exist/i.test(rawText(error))) throw error;
       hasTierPerkColumns = false;
       return rest(`wallets?select=${bonusWalletFields}&user_id=eq.${safeId}&limit=1`).catch((bonusError) => {
-        if (!/tier_bonus_day|tier_bonus_minutes|column .*does not exist/i.test(bonusError.message || '')) throw bonusError;
+        if (!/tier_bonus_day|tier_bonus_minutes|column .*does not exist/i.test(rawText(bonusError))) throw bonusError;
         hasTierBonusColumns = false;
         return rest(`wallets?select=${baseWalletFields}&user_id=eq.${safeId}&limit=1`);
       });
@@ -230,7 +241,7 @@
       settingsRows = await rest(`user_settings?select=followed_sports,timezone,notifications_enabled,app_preferences&user_id=eq.${safeId}&limit=1`);
       supportsAppPreferences = true;
     } catch (e) {
-      if (!/app_preferences.*does not exist|column .*app_preferences/i.test(e.message || '')) throw e;
+      if (!/app_preferences.*does not exist|column .*app_preferences/i.test(rawText(e))) throw e;
       supportsAppPreferences = false;
       settingsRows = await rest(`user_settings?select=followed_sports,timezone,notifications_enabled&user_id=eq.${safeId}&limit=1`);
     }
@@ -291,7 +302,7 @@
         console.warn('Could not sync TimeOut data to Supabase:', e.message);
         if (Date.now() - lastSyncAlertAt > 15000 && TO.ui?.toast) {
           lastSyncAlertAt = Date.now();
-          TO.ui.toast({ kind: 'loss', title: 'Couldn’t save to Supabase', msg: e.message });
+          TO.ui.toast({ kind: 'warn', title: 'Couldn\'t sync your changes', msg: 'They\'re saved on this device, and TimeOut will try again.' });
         }
       });
     }, Math.max(0, 1500 - (Date.now() - lastSaveAt)));
@@ -377,7 +388,7 @@
               }
             }
             const challengeId = typeof saved === 'string' ? saved : saved.id;
-            if (!challengeId) throw new Error('Supabase did not return the saved challenge ID.');
+            if (!challengeId) throw new TO.AppError('supabase_error', TO.unavailableMessage, { debug: 'No challenge ID came back.' });
             challenge.supabaseId = challengeId;
             challenge.supabaseSynced = false;
             const current = TO.data?.challenges?.find((b) => b.id === challenge.id);
@@ -464,8 +475,8 @@
     try {
       await rest('rpc/timeout_delete_account', { method: 'POST', body: '{}' });
     } catch (e) {
-      if (/timeout_delete_account/i.test(e.message || '') && /schema cache|function.*(not found|does not exist|could not find)/i.test(e.message || '')) {
-        throw new TO.AppError('not_set_up', 'Account deletion isn\'t set up on the server yet. Email the TimeOut team to delete your account.');
+      if (/timeout_delete_account/i.test(rawText(e)) && /schema cache|function.*(not found|does not exist|could not find)/i.test(rawText(e))) {
+        throw new TO.AppError('not_set_up', 'We can\'t delete your account right now. Please try again later, or contact support from the Help page.');
       }
       throw e;
     }
@@ -512,8 +523,8 @@
     try {
       return await rest(`rpc/${name}`, { method: 'POST', signal: AbortSignal.timeout(8000), body: JSON.stringify(body) });
     } catch (e) {
-      if (new RegExp(name, 'i').test(e.message || '') && /schema cache|function.*(not found|does not exist|could not find)/i.test(e.message || '')) {
-        throw new TO.AppError('not_set_up', 'Friends aren\'t set up on the server yet. Run server/db/apply-all-november-2026.sql in Supabase.');
+      if (new RegExp(name, 'i').test(rawText(e)) && /schema cache|function.*(not found|does not exist|could not find)/i.test(rawText(e))) {
+        throw new TO.AppError('not_set_up', 'Friends aren\'t available right now. Please try again in a few minutes.');
       }
       throw e;
     }

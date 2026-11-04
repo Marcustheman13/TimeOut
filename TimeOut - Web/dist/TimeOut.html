@@ -2220,6 +2220,15 @@ window.TO = window.TO || {};
   }
   TO.AppError = AppError;
 
+  TO.unavailableMessage = 'TimeOut can\'t reach your account right now. Please try again in a few minutes.';
+  /** Words people should see for any error. */
+  TO.friendlyMessage = (e) => {
+    if (e instanceof AppError) return e.message;
+    if (!navigator.onLine) return 'You\'re offline. Check your connection and try again.';
+    if (e && (e.name === 'TimeoutError' || e.name === 'AbortError')) return 'That took too long. Check your connection and try again.';
+    return TO.unavailableMessage;
+  };
+
   // ---------- Accounts ----------
   const ACC_KEY = 'timeout.accounts';
   const accounts = () => TO.store.get(ACC_KEY, {});
@@ -4093,39 +4102,41 @@ window.TIMEOUT_SUPABASE = {
   const settling = new Set();
   const isPersistableGamePick = (pick) => pick?.kind === 'game' || (pick?.kind === 'sports' && !!pick.gameId);
 
+  // The server's own wording. Never shown to users; the app reads it to recognize specific problems.
+  const rawText = (error) => String(error?.debug || error?.message || '');
   function isOutOfPredictingMinutes(error) {
-    return /insufficient|not enough|out of (challenging )?(minutes|balance)|challenging minutes/i.test(String(error?.message || ''));
+    return /insufficient|not enough|out of (challenging )?(minutes|balance)|challenging minutes/i.test(rawText(error));
   }
   function isTierSystemRpcUnavailable(error) {
-    const message = String(error?.message || '');
+    const message = rawText(error);
     return /timeout_place_challenge_with_tiers/i.test(message) && /schema cache|function.*(not found|does not exist|could not find)/i.test(message);
   }
   function isTierPerkRpcUnavailable(error) {
-    const message = String(error?.message || '');
+    const message = rawText(error);
     return /timeout_place_challenge_with_perks/i.test(message) && /schema cache|function.*(not found|does not exist|could not find)/i.test(message);
   }
   function isTierPerkLimitError(error) {
-    return /no point-value boosts left|no combo protection left/i.test(String(error?.message || ''));
+    return /no point-value boosts left|no combo protection left/i.test(rawText(error));
   }
   function notifyOutOfPredictingMinutes() {
     if (Date.now() - lastOutOfMinutesAlertAt < 15000 || !TO.ui?.toast) return;
     lastOutOfMinutesAlertAt = Date.now();
-    TO.ui.toast({ kind: 'loss', title: 'Out of pledge minutes', msg: 'Pledges reopen at midnight.' });
+    TO.ui.toast({ kind: 'loss', title: 'Out of pledge minutes', msg: 'Pledges reopen at midnight. Your minutes were returned.' });
   }
   function notifyTierBonusMigrationRequired() {
     if (Date.now() - lastTierBonusMigrationAlertAt < 15000 || !TO.ui?.toast) return;
     lastTierBonusMigrationAlertAt = Date.now();
-    TO.ui.toast({ kind: 'loss', title: 'Tier setup needed in Supabase', msg: 'This Combo Goal was not saved. Run the tier system migration in Supabase SQL Editor, then reload the app.' });
+    TO.ui.toast({ kind: 'loss', title: 'Your pledge wasn\'t saved', msg: 'Your minutes were returned. Please try again in a few minutes.' });
   }
   function notifyTierPerkMigrationRequired() {
     if (Date.now() - lastTierPerkMigrationAlertAt < 15000 || !TO.ui?.toast) return;
     lastTierPerkMigrationAlertAt = Date.now();
-    TO.ui.toast({ kind: 'loss', title: 'Tier perks need Supabase setup', msg: 'This challenge was not saved with its boost or insurance. Run the updated tier system migration, then reload the app.' });
+    TO.ui.toast({ kind: 'loss', title: 'That perk isn\'t available right now', msg: 'Your pledge wasn\'t saved and your minutes were returned. Try it again without the perk.' });
   }
   function notifyTierPerkAlreadyUsed() {
     if (Date.now() - lastTierPerkMigrationAlertAt < 15000 || !TO.ui?.toast) return;
     lastTierPerkMigrationAlertAt = Date.now();
-    TO.ui.toast({ kind: 'warn', title: 'Tier perk already used', msg: 'This boost or insurance was already used on another device.' });
+    TO.ui.toast({ kind: 'warn', title: 'Perk already used', msg: 'You already used this perk on another device. Your pledge wasn\'t saved and your minutes were returned.' });
   }
 
   const config = window.TIMEOUT_SUPABASE || {};
@@ -4162,17 +4173,26 @@ window.TIMEOUT_SUPABASE = {
     if (m.includes('unable to validate email') || m.includes('invalid format') || code === 'email_address_invalid') return err('invalid', 'Enter a valid email address.', 'email');
     if (code === 'weak_password' || m.includes('password should') || m.includes('password is')) return err('invalid', raw, 'password');
     if (m.includes('duplicate key')) return err('taken', 'That\u2019s already taken. Try something else.');
-    if (m.includes('jwt') && m.includes('expired')) return err('bad_token', 'Your session expired. Log in again.');
+    if (m.includes('jwt')) return err('bad_token', 'Your session expired. Log in again.');
+    // Our own database functions explain themselves. Everything else from the database is technical.
+    if (code === 'p0001') {
+      const known = { 'sign in required': 'Your session expired. Log in again.', 'not enough challenge minutes': 'You\'re out of pledge minutes for today. Pledges reopen at midnight.', 'wallet is not set up': TO.unavailableMessage };
+      return new TO.AppError('supabase_error', known[m] || raw, { status, debug: raw, fields: {} });
+    }
+    if (code.startsWith('pgrst') || /^[0-9a-z]{5}$/.test(code) || status >= 500 || /schema cache|relation |column |function |syntax|permission denied|violates|row-level|supabase|postgres|request failed/.test(m)) {
+      return new TO.AppError('supabase_error', TO.unavailableMessage, { status, debug: raw, fields: {} });
+    }
+    if (status === 401 || status === 403) return err('bad_token', 'Your session expired. Log in again.');
     const fields = {};
     if (/username/i.test(raw)) fields.username = raw;
     else if (/email/i.test(raw)) fields.email = raw;
     else if (/password/i.test(raw)) fields.password = raw;
-    return new TO.AppError(status === 409 ? 'taken' : 'supabase_error', raw, { status, fields });
+    return new TO.AppError(status === 409 ? 'taken' : 'supabase_error', raw, { status, fields, debug: raw });
   }
   async function parseResponse(res) {
     const json = await res.json().catch(() => ({}));
     if (!res.ok) {
-      const raw = json.msg || json.message || json.error_description || json.error || `Supabase request failed (${res.status}).`;
+      const raw = json.msg || json.message || json.error_description || json.error || `Request failed (${res.status}).`;
       throw friendlyError(raw, json.error_code || json.code, res.status);
     }
     return json;
@@ -4286,10 +4306,10 @@ window.TIMEOUT_SUPABASE = {
     const baseWalletFields = `balance_minutes,current_day,is_locked,streak`;
     const bonusWalletFields = `${baseWalletFields},tier_bonus_day,tier_bonus_minutes`;
     const walletRequest = rest(`wallets?select=${bonusWalletFields},tier_boosts_by_day,tier_insurance_by_week&user_id=eq.${safeId}&limit=1`).catch((error) => {
-      if (!/tier_boosts_by_day|tier_insurance_by_week|column .*does not exist/i.test(error.message || '')) throw error;
+      if (!/tier_boosts_by_day|tier_insurance_by_week|column .*does not exist/i.test(rawText(error))) throw error;
       hasTierPerkColumns = false;
       return rest(`wallets?select=${bonusWalletFields}&user_id=eq.${safeId}&limit=1`).catch((bonusError) => {
-        if (!/tier_bonus_day|tier_bonus_minutes|column .*does not exist/i.test(bonusError.message || '')) throw bonusError;
+        if (!/tier_bonus_day|tier_bonus_minutes|column .*does not exist/i.test(rawText(bonusError))) throw bonusError;
         hasTierBonusColumns = false;
         return rest(`wallets?select=${baseWalletFields}&user_id=eq.${safeId}&limit=1`);
       });
@@ -4305,7 +4325,7 @@ window.TIMEOUT_SUPABASE = {
       settingsRows = await rest(`user_settings?select=followed_sports,timezone,notifications_enabled,app_preferences&user_id=eq.${safeId}&limit=1`);
       supportsAppPreferences = true;
     } catch (e) {
-      if (!/app_preferences.*does not exist|column .*app_preferences/i.test(e.message || '')) throw e;
+      if (!/app_preferences.*does not exist|column .*app_preferences/i.test(rawText(e))) throw e;
       supportsAppPreferences = false;
       settingsRows = await rest(`user_settings?select=followed_sports,timezone,notifications_enabled&user_id=eq.${safeId}&limit=1`);
     }
@@ -4366,7 +4386,7 @@ window.TIMEOUT_SUPABASE = {
         console.warn('Could not sync TimeOut data to Supabase:', e.message);
         if (Date.now() - lastSyncAlertAt > 15000 && TO.ui?.toast) {
           lastSyncAlertAt = Date.now();
-          TO.ui.toast({ kind: 'loss', title: 'Couldn’t save to Supabase', msg: e.message });
+          TO.ui.toast({ kind: 'warn', title: 'Couldn\'t sync your changes', msg: 'They\'re saved on this device, and TimeOut will try again.' });
         }
       });
     }, Math.max(0, 1500 - (Date.now() - lastSaveAt)));
@@ -4452,7 +4472,7 @@ window.TIMEOUT_SUPABASE = {
               }
             }
             const challengeId = typeof saved === 'string' ? saved : saved.id;
-            if (!challengeId) throw new Error('Supabase did not return the saved challenge ID.');
+            if (!challengeId) throw new TO.AppError('supabase_error', TO.unavailableMessage, { debug: 'No challenge ID came back.' });
             challenge.supabaseId = challengeId;
             challenge.supabaseSynced = false;
             const current = TO.data?.challenges?.find((b) => b.id === challenge.id);
@@ -4539,8 +4559,8 @@ window.TIMEOUT_SUPABASE = {
     try {
       await rest('rpc/timeout_delete_account', { method: 'POST', body: '{}' });
     } catch (e) {
-      if (/timeout_delete_account/i.test(e.message || '') && /schema cache|function.*(not found|does not exist|could not find)/i.test(e.message || '')) {
-        throw new TO.AppError('not_set_up', 'Account deletion isn\'t set up on the server yet. Email the TimeOut team to delete your account.');
+      if (/timeout_delete_account/i.test(rawText(e)) && /schema cache|function.*(not found|does not exist|could not find)/i.test(rawText(e))) {
+        throw new TO.AppError('not_set_up', 'We can\'t delete your account right now. Please try again later, or contact support from the Help page.');
       }
       throw e;
     }
@@ -4587,8 +4607,8 @@ window.TIMEOUT_SUPABASE = {
     try {
       return await rest(`rpc/${name}`, { method: 'POST', signal: AbortSignal.timeout(8000), body: JSON.stringify(body) });
     } catch (e) {
-      if (new RegExp(name, 'i').test(e.message || '') && /schema cache|function.*(not found|does not exist|could not find)/i.test(e.message || '')) {
-        throw new TO.AppError('not_set_up', 'Friends aren\'t set up on the server yet. Run server/db/apply-all-november-2026.sql in Supabase.');
+      if (new RegExp(name, 'i').test(rawText(e)) && /schema cache|function.*(not found|does not exist|could not find)/i.test(rawText(e))) {
+        throw new TO.AppError('not_set_up', 'Friends aren\'t available right now. Please try again in a few minutes.');
       }
       throw e;
     }
@@ -6528,7 +6548,7 @@ window.TIMEOUT_SUPABASE = {
         try {
           friendResult = await TO.api.acceptFriendInvite(p.invite, p.code);
           await TO.app.syncSocial(true);
-        } catch (e) { failure = e.message; }
+        } catch (e) { failure = TO.friendlyMessage(e); }
       } else {
         St.addFriend(p.invite);
         friendResult = 'friends';
@@ -6829,7 +6849,7 @@ window.TIMEOUT_SUPABASE = {
       rerender();
       return true;
     } catch (e) {
-      ui.toast({ kind: 'loss', title: 'Couldn\'t update your friends', msg: e.message });
+      ui.toast({ kind: 'loss', title: 'Couldn\'t update your friends', msg: TO.friendlyMessage(e) });
       return false;
     }
   }
@@ -6840,7 +6860,7 @@ window.TIMEOUT_SUPABASE = {
         const result = await TO.api.sendFriendRequest(u);
         await TO.app.syncSocial(true);
         ui.toast({ kind: 'win', title: result === 'friends' ? `You and @${u} are now friends` : `Friend request sent to @${u}` });
-      } catch (e) { ui.toast({ kind: 'loss', title: 'Couldn\'t send that request', msg: e.message }); }
+      } catch (e) { ui.toast({ kind: 'loss', title: 'Couldn\'t send that request', msg: TO.friendlyMessage(e) }); }
       rerender();
       return;
     }
@@ -7134,7 +7154,7 @@ window.TIMEOUT_SUPABASE = {
   function serverAccountCard(s) {
     const line = (k, v, id) => `<div class="row-layout"><span class="muted">${k}</span><b${id ? ` id="${id}"` : ''}>${esc(String(v))}</b></div>`;
     return `<div class="card stack-s" id="db-account">
-      <div class="row-s">${icon('check', 16)}<b>Connected to Supabase</b></div>
+      <div class="row-s">${icon('check', 16)}<b>Your account is synced</b></div>
       ${line('User ID', s.id)}
       ${line('Member since', TO.fmtDate(Date.parse(s.createdAt)))}
     </div>`;
@@ -7301,8 +7321,8 @@ window.TIMEOUT_SUPABASE = {
       St.updateAccount(patch);
       ui.toast({ kind: 'win', title: 'Account saved' });
     } catch (e) {
-      if (!(e instanceof TO.AppError)) throw e;
       acctErr = e.fields || {};
+      if (!Object.keys(acctErr).length) ui.toast({ kind: 'loss', title: 'Couldn\'t save your changes', msg: TO.friendlyMessage(e) });
     }
     refresh();
   };
@@ -7316,8 +7336,8 @@ window.TIMEOUT_SUPABASE = {
       else St.updateAccount({ currentPassword: document.getElementById('acct-cur').value, newPassword });
       ui.toast({ kind: 'win', title: 'Password updated' });
     } catch (e) {
-      if (!(e instanceof TO.AppError)) throw e;
       acctErr = e.fields || {};
+      if (!Object.keys(acctErr).length) ui.toast({ kind: 'loss', title: 'Couldn\'t update your password', msg: TO.friendlyMessage(e) });
     }
     refresh();
   };
@@ -7329,7 +7349,7 @@ window.TIMEOUT_SUPABASE = {
     if (!(await ui.confirm({ title: 'Delete your account?', body, confirm: 'Delete account', danger: true }))) return;
     if (server) {
       try { await TO.api.deleteAccount(); } catch (e) {
-        ui.toast({ kind: 'loss', title: 'Couldn\'t delete your account', msg: e.message });
+        ui.toast({ kind: 'loss', title: 'Couldn\'t delete your account', msg: TO.friendlyMessage(e) });
         return;
       }
     }
@@ -7371,7 +7391,7 @@ window.TIMEOUT_SUPABASE = {
       ui.toast({ kind: 'win', title: 'Photo updated' });
       refresh();
       TO.app.renderChrome();
-    } catch (e) { ui.toast({ kind: 'loss', title: e.message }); }
+    } catch (e) { ui.toast({ kind: 'loss', title: 'Couldn\'t update your photo', msg: e instanceof TO.AppError ? e.message : 'That image could not be read.' }); }
   };
 
   function refresh() {
@@ -7464,7 +7484,7 @@ window.TIMEOUT_SUPABASE = {
       ${ui.field({ id: 'su-pw', label: 'Password', type: 'password', value: v['su-pw'] || '', err: av.errors.password, hint: 'At least 8 characters', attrs: 'autocomplete="new-password"' })}
       ${ui.field({ id: 'su-pw2', label: 'Confirm password', type: 'password', value: v['su-pw2'] || '', err: av.errors.confirm, attrs: 'autocomplete="new-password"' })}
       <button type="submit" class="btn primary full">Create account</button>
-      <div class="tiny faint" style="text-align:center">${TO.api.configured ? 'Accounts and pledges are saved securely with Supabase.' : 'Offline demo: accounts are saved in this browser, not on a server.'}</div>
+      <div class="tiny faint" style="text-align:center">${TO.api.configured ? 'Your account and pledges are saved securely.' : 'Offline demo: accounts are saved in this browser, not on a server.'}</div>
       <div class="small muted" style="text-align:center">Already have an account? <button type="button" class="link-btn" data-act="auth-go" data-s="login">Log in</button></div>
     </form></div>`;
   }
@@ -7538,9 +7558,8 @@ window.TIMEOUT_SUPABASE = {
       const { user } = await TO.api.login(pending.email, pending.password);
       await finishVerified(user);
     } catch (e) {
-      if (!(e instanceof TO.AppError)) throw e;
-      const unconfirmed = /not confirmed|confirm/i.test(e.message);
-      if (manual) av.formError = unconfirmed ? 'Your email isn\'t confirmed yet. Open the link we sent, then try again.' : e.message;
+      const unconfirmed = e instanceof TO.AppError && /not confirmed|confirm/i.test(e.message);
+      if (manual) av.formError = unconfirmed ? 'Your email isn\'t confirmed yet. Open the link we sent, then try again.' : TO.friendlyMessage(e);
     } finally {
       pending.checking = false;
       if (av.screen === 'verify') render();
@@ -7599,9 +7618,9 @@ window.TIMEOUT_SUPABASE = {
   }
 
   function showError(e) {
-    if (!(e instanceof TO.AppError)) throw e;
+    if (!(e instanceof TO.AppError)) console.error(e);
     Object.assign(av.errors, e.fields || {});
-    av.formError = e.message;
+    av.formError = TO.friendlyMessage(e);
     render();
   }
 
@@ -7619,7 +7638,7 @@ window.TIMEOUT_SUPABASE = {
     ui.toast({
       kind: 'win',
       title: `Logged in as @${user.username}`,
-      msg: 'Your challenges and settings are synced to Supabase.',
+      msg: 'Your challenges and settings are synced.',
     });
   }
 
@@ -7687,8 +7706,7 @@ window.TIMEOUT_SUPABASE = {
       pending.note = `Sent a new link to ${pending.email}.`;
       av.formError = '';
     } catch (e) {
-      if (!(e instanceof TO.AppError)) throw e;
-      av.formError = e.message;
+      av.formError = TO.friendlyMessage(e);
     }
     render();
   };
@@ -7718,7 +7736,7 @@ window.TIMEOUT_SUPABASE = {
     try {
       await TO.api.sendPasswordReset(email);
       ui.confirm({ title: 'Check your email', body: `If ${esc(email)} has a TimeOut account, we sent it a link to reset your password. Open it to sign in, then set a new password in <b>Account</b>.`, confirm: 'OK', cancel: null });
-    } catch (e) { ui.toast({ kind: 'loss', title: 'Couldn\'t send the email', msg: e.message }); }
+    } catch (e) { ui.toast({ kind: 'loss', title: 'Couldn\'t send the email', msg: TO.friendlyMessage(e) }); }
   };
   A['toggle-pw'] = (el) => {
     const input = document.getElementById(el.dataset.for);
@@ -8057,7 +8075,8 @@ window.TIMEOUT_SUPABASE = {
       const user = await TO.api.me();
       St.adoptServerUser(user, await TO.api.loadState());
     } catch (e) {
-      if (!(e instanceof TO.AppError)) throw e;
+      // A dropped connection shouldn't stop the page from opening: keep the session saved on this device.
+      if (!(e instanceof TO.AppError)) { console.warn('Could not reach the server:', e); return; }
       if (e.status === 401) TO.api.clearToken();
       St.logout();
       if (e.status !== 401) ui.toast({ kind: 'loss', title: 'Couldn\'t load your account', msg: e.message });

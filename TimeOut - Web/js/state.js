@@ -86,6 +86,15 @@
   }
   TO.AppError = AppError;
 
+  TO.unavailableMessage = 'TimeOut can\'t reach your account right now. Please try again in a few minutes.';
+  /** Words people should see for any error. */
+  TO.friendlyMessage = (e) => {
+    if (e instanceof AppError) return e.message;
+    if (!navigator.onLine) return 'You\'re offline. Check your connection and try again.';
+    if (e && (e.name === 'TimeoutError' || e.name === 'AbortError')) return 'That took too long. Check your connection and try again.';
+    return TO.unavailableMessage;
+  };
+
   // ---------- Accounts ----------
   const ACC_KEY = 'timeout.accounts';
   const accounts = () => TO.store.get(ACC_KEY, {});

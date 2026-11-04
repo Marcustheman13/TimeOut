@@ -534,7 +534,7 @@ struct AccountSection: View {
             }
             if let server {
                 VStack(alignment: .leading, spacing: 8) {
-                    HStack(spacing: 6) { Icon(.check, 16); Text("Connected to Supabase").font(.barlow(15, 700)) }
+                    HStack(spacing: 6) { Icon(.check, 16); Text("Your account is synced").font(.barlow(15, 700)) }
                     HStack { Text("User ID").foregroundStyle(Theme.text2); Spacer(); Text(server.id).font(.barlow(15, 700)).lineLimit(1).truncationMode(.middle) }
                     HStack { Text("Member since").foregroundStyle(Theme.text2); Spacer(); Text(Fmt.date(LiveFeed.parseDate(server.createdAt) ?? TO.now())).font(.barlow(15, 700)) }
                 }
@@ -581,7 +581,7 @@ struct AccountSection: View {
                     if store.account?.server != nil { try await API.shared.updateProfile(.init(photoUrl: url)) }
                     try store.updateAccount(.init(photo: url))
                     ui.toast(.win, "Photo updated")
-                } catch { ui.toast(.loss, (error as? AppError)?.message ?? error.localizedDescription) }
+                } catch { ui.toast(.loss, "Couldn't update your photo", AppError.friendly(error)) }
             }
         }
     }
@@ -603,7 +603,10 @@ struct AccountSection: View {
                 if store.account?.server != nil { try await API.shared.updateProfile(.init(username: username, email: email)) }
                 try store.updateAccount(.init(username: username, email: email))
                 ui.toast(.win, "Account saved")
-            } catch let e as AppError { errors = e.fields } catch { ui.toast(.loss, error.localizedDescription) }
+            } catch let e as AppError {
+                errors = e.fields
+                if e.fields.isEmpty { ui.toast(.loss, "Couldn't save your changes", e.message) }
+            } catch { ui.toast(.loss, "Couldn't save your changes", AppError.friendly(error)) }
         }
     }
 
@@ -616,7 +619,10 @@ struct AccountSection: View {
                 else { try store.updateAccount(.init(currentPassword: current, newPassword: newPassword)) }
                 current = ""; newPassword = ""
                 ui.toast(.win, "Password updated")
-            } catch let e as AppError { errors = e.fields } catch { ui.toast(.loss, error.localizedDescription) }
+            } catch let e as AppError {
+                errors = e.fields
+                if e.fields.isEmpty { ui.toast(.loss, "Couldn't update your password", e.message) }
+            } catch { ui.toast(.loss, "Couldn't update your password", AppError.friendly(error)) }
         }
     }
 
@@ -631,7 +637,7 @@ struct AccountSection: View {
                 deleting = true
                 defer { deleting = false }
                 do { try await API.shared.deleteAccount() } catch {
-                    ui.toast(.loss, "Couldn't delete your account", (error as? AppError)?.message ?? error.localizedDescription)
+                    ui.toast(.loss, "Couldn't delete your account", AppError.friendly(error))
                     return
                 }
             }

@@ -56,7 +56,7 @@ final class AuthModel {
     }
 
     private func showError(_ e: Error) {
-        guard let e = e as? AppError else { formError = e.localizedDescription; return }
+        guard let e = e as? AppError else { formError = AppError.friendly(e); return }
         errors.merge(e.fields) { _, b in b }
         formError = e.message
     }
@@ -74,7 +74,7 @@ final class AuthModel {
                 Store.shared.adoptServerUser(user, remote: try await API.shared.loadState())
                 reset()
                 AppModel.shared.boot()
-                UIState.shared.toast(.win, "Logged in as @\(user.username)", "Your challenges and settings are synced to Supabase.")
+                UIState.shared.toast(.win, "Logged in as @\(user.username)", "Your challenges and settings are synced.")
             } else {
                 try Store.shared.login(loginEmail, loginPassword)
                 reset()
@@ -146,7 +146,7 @@ final class AuthModel {
         } catch let e as AppError {
             formError = e.message
         } catch {
-            formError = error.localizedDescription
+            formError = AppError.friendly(error)
         }
     }
 
@@ -439,7 +439,7 @@ struct SignupScreen: View {
             FieldView(label: "Confirm password", text: $model.signupConfirm, secure: true, err: model.errors["confirm"], content: .newPassword)
             Button(model.busy ? "Creating account…" : "Create account") { Task { await model.signup() } }
                 .buttonStyle(.btn(.primary, full: true)).disabled(model.busy)
-            Text(API.shared.configured ? "Accounts and pledges are saved securely with Supabase." : "Offline mode: this account is saved on this device only.")
+            Text(API.shared.configured ? "Your account and pledges are saved securely." : "Offline mode: this account is saved on this device only.")
                 .font(.barlow(11.5)).foregroundStyle(Theme.muted).frame(maxWidth: .infinity)
             HStack(spacing: 4) {
                 Text("Already have an account?").foregroundStyle(Theme.text2)

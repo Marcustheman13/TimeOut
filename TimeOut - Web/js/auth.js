@@ -78,7 +78,7 @@
       ${ui.field({ id: 'su-pw', label: 'Password', type: 'password', value: v['su-pw'] || '', err: av.errors.password, hint: 'At least 8 characters', attrs: 'autocomplete="new-password"' })}
       ${ui.field({ id: 'su-pw2', label: 'Confirm password', type: 'password', value: v['su-pw2'] || '', err: av.errors.confirm, attrs: 'autocomplete="new-password"' })}
       <button type="submit" class="btn primary full">Create account</button>
-      <div class="tiny faint" style="text-align:center">${TO.api.configured ? 'Accounts and pledges are saved securely with Supabase.' : 'Offline demo: accounts are saved in this browser, not on a server.'}</div>
+      <div class="tiny faint" style="text-align:center">${TO.api.configured ? 'Your account and pledges are saved securely.' : 'Offline demo: accounts are saved in this browser, not on a server.'}</div>
       <div class="small muted" style="text-align:center">Already have an account? <button type="button" class="link-btn" data-act="auth-go" data-s="login">Log in</button></div>
     </form></div>`;
   }
@@ -152,9 +152,8 @@
       const { user } = await TO.api.login(pending.email, pending.password);
       await finishVerified(user);
     } catch (e) {
-      if (!(e instanceof TO.AppError)) throw e;
-      const unconfirmed = /not confirmed|confirm/i.test(e.message);
-      if (manual) av.formError = unconfirmed ? 'Your email isn\'t confirmed yet. Open the link we sent, then try again.' : e.message;
+      const unconfirmed = e instanceof TO.AppError && /not confirmed|confirm/i.test(e.message);
+      if (manual) av.formError = unconfirmed ? 'Your email isn\'t confirmed yet. Open the link we sent, then try again.' : TO.friendlyMessage(e);
     } finally {
       pending.checking = false;
       if (av.screen === 'verify') render();
@@ -213,9 +212,9 @@
   }
 
   function showError(e) {
-    if (!(e instanceof TO.AppError)) throw e;
+    if (!(e instanceof TO.AppError)) console.error(e);
     Object.assign(av.errors, e.fields || {});
-    av.formError = e.message;
+    av.formError = TO.friendlyMessage(e);
     render();
   }
 
@@ -233,7 +232,7 @@
     ui.toast({
       kind: 'win',
       title: `Logged in as @${user.username}`,
-      msg: 'Your challenges and settings are synced to Supabase.',
+      msg: 'Your challenges and settings are synced.',
     });
   }
 
@@ -301,8 +300,7 @@
       pending.note = `Sent a new link to ${pending.email}.`;
       av.formError = '';
     } catch (e) {
-      if (!(e instanceof TO.AppError)) throw e;
-      av.formError = e.message;
+      av.formError = TO.friendlyMessage(e);
     }
     render();
   };
@@ -332,7 +330,7 @@
     try {
       await TO.api.sendPasswordReset(email);
       ui.confirm({ title: 'Check your email', body: `If ${esc(email)} has a TimeOut account, we sent it a link to reset your password. Open it to sign in, then set a new password in <b>Account</b>.`, confirm: 'OK', cancel: null });
-    } catch (e) { ui.toast({ kind: 'loss', title: 'Couldn\'t send the email', msg: e.message }); }
+    } catch (e) { ui.toast({ kind: 'loss', title: 'Couldn\'t send the email', msg: TO.friendlyMessage(e) }); }
   };
   A['toggle-pw'] = (el) => {
     const input = document.getElementById(el.dataset.for);

@@ -303,7 +303,8 @@
       const user = await TO.api.me();
       St.adoptServerUser(user, await TO.api.loadState());
     } catch (e) {
-      if (!(e instanceof TO.AppError)) throw e;
+      // A dropped connection shouldn't stop the page from opening: keep the session saved on this device.
+      if (!(e instanceof TO.AppError)) { console.warn('Could not reach the server:', e); return; }
       if (e.status === 401) TO.api.clearToken();
       St.logout();
       if (e.status !== 401) ui.toast({ kind: 'loss', title: 'Couldn\'t load your account', msg: e.message });

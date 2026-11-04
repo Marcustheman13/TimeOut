@@ -89,7 +89,7 @@
         try {
           friendResult = await TO.api.acceptFriendInvite(p.invite, p.code);
           await TO.app.syncSocial(true);
-        } catch (e) { failure = e.message; }
+        } catch (e) { failure = TO.friendlyMessage(e); }
       } else {
         St.addFriend(p.invite);
         friendResult = 'friends';
@@ -390,7 +390,7 @@
       rerender();
       return true;
     } catch (e) {
-      ui.toast({ kind: 'loss', title: 'Couldn\'t update your friends', msg: e.message });
+      ui.toast({ kind: 'loss', title: 'Couldn\'t update your friends', msg: TO.friendlyMessage(e) });
       return false;
     }
   }
@@ -401,7 +401,7 @@
         const result = await TO.api.sendFriendRequest(u);
         await TO.app.syncSocial(true);
         ui.toast({ kind: 'win', title: result === 'friends' ? `You and @${u} are now friends` : `Friend request sent to @${u}` });
-      } catch (e) { ui.toast({ kind: 'loss', title: 'Couldn\'t send that request', msg: e.message }); }
+      } catch (e) { ui.toast({ kind: 'loss', title: 'Couldn\'t send that request', msg: TO.friendlyMessage(e) }); }
       rerender();
       return;
     }
