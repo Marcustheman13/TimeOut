@@ -190,7 +190,7 @@
   /** For actions that need a connection (placing pledges). False, with a toast, when offline. */
   TO.net.guard = () => {
     if (TO.net.online()) return true;
-    ui.toast({ kind: 'loss', title: 'No internet connection', msg: 'Challenging is paused until you\'re back online.' });
+    ui.toast({ kind: 'loss', title: 'No internet connection', msg: 'New pledges pause until you\'re back online.' });
     return false;
   };
 

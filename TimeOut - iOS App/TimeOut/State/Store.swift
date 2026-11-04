@@ -29,7 +29,7 @@ struct SlipPick: Hashable {
     var ref: String
 }
 
-struct SharedPick: Hashable { var label: String; var matchup: String; var price: Int; var pledgeMinutes: Int }
+struct SharedPick: Codable, Hashable { var label: String; var matchup: String; var price: Int; var pledgeMinutes: Int }
 
 struct Standing: Hashable { var username: String; var me: Bool; var net: Int; var w: Int; var l: Int; var hidden: Bool; var photo: String; var tier: String }
 
@@ -76,9 +76,9 @@ final class Store {
 
     static func tierPerks(_ t: Tier) -> [String] {
         var list: [String] = []
-        if t.bonus > 0 { list.append("+\(t.bonus) challenge min a day") }
-        if t.boosts > 0 { list.append("\(t.boosts) point-value boost\(t.boosts == 1 ? "" : "s") a day (+10% winnings)") }
-        if t.insurance > 0 { list.append("Combo protection once a week") }
+        if t.bonus > 0 { list.append("+\(t.bonus) pledge min a day") }
+        if t.boosts > 0 { list.append("\(t.boosts) allowance boost\(t.boosts == 1 ? "" : "s") a day (+10% earned minutes)") }
+        if t.insurance > 0 { list.append("Miss-one protection once a week") }
         return list.isEmpty ? ["Lock apps to earn perks"] : list
     }
     static func tierById(_ id: String) -> Tier { tiers.first { $0.id == id } ?? tiers[0] }
@@ -149,8 +149,7 @@ final class Store {
     private func read<T: Decodable>(_ type: T.Type, _ name: String) -> T? {
         guard var raw = try? Data(contentsOf: dir.appendingPathComponent(name)) else { return nil }
         if let obj = try? JSONSerialization.jsonObject(with: raw),
-           let migrated = Self.renameSavedTerms(obj),
-           let data = try? JSONSerialization.data(withJSONObject: migrated) {
+           let data = try? JSONSerialization.data(withJSONObject: Self.renameSavedTerms(obj)) {
             raw = data
         }
         return try? JSONDecoder().decode(T.self, from: raw)
@@ -296,6 +295,18 @@ final class Store {
                     if let saved = byKey[k] {
                         var combined = b
                         if combined.supabaseId == nil { combined.supabaseId = saved.supabaseId }
+                        // Another device already resolved it: the server's result beats a local copy that is still open.
+                        if b.status == "open" && saved.status != "open" {
+                            combined.status = saved.status
+                            combined.reward = saved.reward
+                            combined.resolvedAt = saved.resolvedAt
+                            combined.supabaseSynced = true
+                            for i in combined.picks.indices {
+                                if let match = saved.picks.first(where: { $0.gameId == combined.picks[i].gameId && $0.market == combined.picks[i].market && $0.side == combined.picks[i].side }) {
+                                    combined.picks[i].result = match.result
+                                }
+                            }
+                        }
                         byKey[k] = combined
                     } else { byKey[k] = b }
                 }
@@ -311,15 +322,19 @@ final class Store {
                 for s in sports where !unique.contains(s) { unique.append(s) }
                 if !unique.isEmpty { prefs["sports"] = unique }
                 merged.settings = Self.settings(from: prefs) ?? cached.settings
-                if let server = remote.wallet, !hasUnsynced {
-                    // Supabase owns the balance; streak and daily ledgers stay local.
-                    var w = cached.wallet
-                    w.dayKey = server.dayKey
+                // The new day starts here on the device. The server's wallet only moves to a new day when a
+                // challenge is placed, so a lagging server day must never pull this wallet back: that would close
+                // the same day again and bump the streak on every sync.
+                let today = TO.dayKey()
+                rollover(&merged, TO.now())
+                if let server = remote.wallet, !hasUnsynced, server.dayKey == today {
+                    // Supabase owns today's balance; streak and daily ledgers stay local.
+                    var w = merged.wallet
                     w.lockedOut = server.lockedOut
                     for (day, n) in server.boostsByDay ?? [:] { w.boostsByDay[day] = max(n, w.boostsByDay[day] ?? 0) }
                     for (week, n) in server.insuranceByWeek ?? [:] { w.insuranceByWeek[week] = max(n, w.insuranceByWeek[week] ?? 0) }
                     // The server may not have credited today's local tier bonus yet; keep it visible.
-                    let localBonus = cached.wallet.bonusDay == server.dayKey ? cached.wallet.bonusGranted : 0
+                    let localBonus = w.bonusDay == server.dayKey ? w.bonusGranted : 0
                     let serverBonus = server.bonusDay == server.dayKey ? (server.bonusGranted ?? 0) : 0
                     let uncredited = max(localBonus - serverBonus, 0)
                     w.balance = server.balance + uncredited
@@ -337,14 +352,16 @@ final class Store {
                     merged.settings = s
                 }
                 if let server = remote.wallet {
-                    merged.wallet.dayKey = server.dayKey
-                    merged.wallet.balance = server.balance
-                    merged.wallet.lockedOut = server.lockedOut
                     merged.wallet.streakDays = server.streakDays
-                    merged.wallet.bonusDay = server.bonusDay
-                    merged.wallet.bonusGranted = server.bonusGranted ?? 0
                     merged.wallet.boostsByDay = server.boostsByDay ?? [:]
                     merged.wallet.insuranceByWeek = server.insuranceByWeek ?? [:]
+                    // A wallet from an earlier day has nothing to say about today's balance.
+                    if server.dayKey == TO.dayKey() {
+                        merged.wallet.balance = server.balance
+                        merged.wallet.lockedOut = server.lockedOut
+                        merged.wallet.bonusDay = server.bonusDay
+                        merged.wallet.bonusGranted = server.bonusGranted ?? 0
+                    }
                 }
             }
             storeData(id, merged)
@@ -460,16 +477,24 @@ final class Store {
         // Rebuild the daily challenge-result ledger from resolved challenges (server wallets don't store it).
         var resolvedNet: [String: Int] = [:]
         for challenge in d.challenges where challenge.status != "open" {
-            resolvedNet[challenge.dayKey, default: 0] += challenge.reward - challenge.pledgeMinutes
+            resolvedNet[Self.creditDay(challenge), default: 0] += challenge.reward - challenge.pledgeMinutes
         }
-        for (k, v) in resolvedNet { d.wallet.netByDay[k] = v }
-        if d.settings.lockedApps.isEmpty { d.settings.enforce = false } // nothing to block, so limits can't be on
+        d.wallet.netByDay = resolvedNet
+        if d.settings.lockedApps.isEmpty && d.settings.deviceLockPoints <= 0 { d.settings.enforce = false } // nothing to block, so limits can't be on
         return d
     }
 
     // MARK: Wallet
 
-    func lockPoints(_ d: UserData) -> Int { d.settings.enforce ? Self.points(d.settings.lockedApps) : 0 }
+    /// The day a result counts for. The next day's limit moves, so a challenge on a later game pays when that game ends.
+    /// To-do combos belong to the day they were due.
+    static func creditDay(_ challenge: Challenge) -> String {
+        if challenge.kind == "todo" { return challenge.dayKey }
+        return challenge.resolvedAt.map { TO.dayKey($0) } ?? challenge.dayKey
+    }
+
+    /// Lock points: the higher of the app list and the real Screen Time picks made on an iPhone.
+    func lockPoints(_ d: UserData) -> Int { d.settings.enforce ? max(Self.points(d.settings.lockedApps), d.settings.deviceLockPoints) : 0 }
     func tier(_ d: UserData) -> Tier { Self.tierForPoints(lockPoints(d)) }
 
     /// Phone time allowed on a day: 60 + the day before's results − emergency penalties (never below the user's floor).
@@ -611,6 +636,18 @@ final class Store {
         save()
     }
 
+    /// The real Screen Time picks changed on this iPhone. Picking something switches limits on.
+    func setDeviceLocks(points: Int) {
+        guard var d = data else { return }
+        let had = d.settings.deviceLockPoints > 0
+        d.settings.deviceLockPoints = points
+        if points > 0 && !had { d.settings.enforce = true }
+        if points <= 0 && d.settings.lockedApps.isEmpty { d.settings.enforce = false }
+        grantTierBonus(&d)
+        data = d
+        save()
+    }
+
     func setEnforce(_ on: Bool) {
         guard var d = data else { return }
         d.settings.enforce = on
@@ -624,6 +661,13 @@ final class Store {
         fn(&d.settings)
         data = d
         save()
+    }
+
+    func setFeedLive(_ on: Bool) {
+        guard var d = data else { return }
+        d.feedLive = on
+        data = d
+        saveQuiet()
     }
 
     func setFeedFilter(_ f: String) {
@@ -661,25 +705,27 @@ final class Store {
 
     /// Places a challenge from challenge-slip picks. Each pick carries the price the user accepted.
     @discardableResult
-    func placeChallenge(picks: [SlipPick], pledgeMinutes: Int?, boost: Bool, insure: Bool, now: Ms = TO.now()) throws -> Challenge {
+    func placeChallenge(picks slipPicks: [SlipPick], pledgeMinutes: Int?, boost: Bool, insure: Bool, now: Ms = TO.now()) throws -> Challenge {
         guard var d = data else { throw AppError(code: "session", message: "Log in again.") }
         rollover(&d, now)
-        if picks.isEmpty { throw AppError(code: "empty", message: "Add a pick to your challenge slip.") }
-        if picks.count > Rules.maxPicks { throw AppError(code: "too_many", message: "Combos can have up to \(Rules.maxPicks) picks.") }
+        if slipPicks.isEmpty { throw AppError(code: "empty", message: "Add a pick to your challenge commitment.") }
+        if slipPicks.count > Rules.maxMatchupPicks { throw AppError(code: "too_many", message: "Combo Goals can include up to \(Rules.maxMatchupPicks) matchup choices.") }
         var changed: [String] = []
         var picks: [Pick] = []
-        for p in picks {
+        for p in slipPicks {
             guard let cur = Feed.currentSelection(p.selId, now), let sel = cur.sel, cur.open else {
                 throw AppError(code: "closed", message: "One of your picks is no longer available. Remove it to continue.")
             }
             if sel.price != p.price || sel.line != p.line { changed.append(p.selId) }
             picks.append(pickFromSelection(sel, now))
         }
-        if !changed.isEmpty { throw AppError(code: "value_changed", message: "The point values changed. Review the new point value and confirm again.", changed: changed) }
+        let matchups = picks.compactMap(\.gameId)
+        if Set(matchups).count != matchups.count { throw AppError(code: "duplicate_matchup", message: "Choose only one target from each matchup.") }
+        if !changed.isEmpty { throw AppError(code: "value_changed", message: "A challenge target changed. Review it and confirm again.", changed: changed) }
         if picks.contains(where: { $0.kind == "race" }) && picks.count != 1 {
             throw AppError(code: "race_single", message: "Virtual race picks can only be placed as a single challenge.")
         }
-        if d.wallet.lockedOut || d.wallet.balance <= 0 { throw AppError(code: "locked", message: "You're out of challenge minutes for today. Challenges reopen at midnight.") }
+        if d.wallet.lockedOut || d.wallet.balance <= 0 { throw AppError(code: "locked", message: "You're out of pledge minutes for today. Pledges reopen at midnight.") }
         guard let pledgeMinutes, pledgeMinutes >= 1 else { throw AppError(code: "pledge", message: "Enter a pledge of at least 1 minute.") }
         if pledgeMinutes > d.wallet.balance {
             throw AppError(code: "not_enough", message: "Not enough screentime. You have \(d.wallet.balance) min left to challenge today.")
@@ -735,7 +781,7 @@ final class Store {
         let dec = won.reduce(1.0) { $0 * PointValueMath.decimal($1.price) }
         var reward = jsRoundInt(Double(challenge.pledgeMinutes) * dec)
         reward = challenge.pledgeMinutes + jsRoundInt(Double(reward - challenge.pledgeMinutes) * challenge.multiplier)
-        return ("won", reward, false)
+        return ("won", min(reward, Rules.maxAllowedMinutes), false)
     }
 
     private func finishIfDone(_ d: inout UserData, _ i: Int, _ now: Ms) -> Challenge? {
@@ -746,7 +792,7 @@ final class Store {
         d.challenges[i].insurancePaid = res.insurancePaid
         d.challenges[i].resolvedAt = now
         let challenge = d.challenges[i]
-        d.wallet.netByDay[challenge.dayKey, default: 0] += challenge.reward - challenge.pledgeMinutes
+        d.wallet.netByDay[Self.creditDay(challenge), default: 0] += challenge.reward - challenge.pledgeMinutes
         // Voids and pushes return the pledge; wins and losses only affect the next day's limit.
         if challenge.dayKey == d.wallet.dayKey && (challenge.status == "void" || challenge.status == "tie") { d.wallet.balance += challenge.reward }
         return challenge
@@ -818,7 +864,15 @@ final class Store {
 
     static func sameUser(_ a: String?, _ b: String?) -> Bool { (a ?? "").lowercased() == (b ?? "").lowercased() }
 
+    /// Real accounts get real people only. Demo profiles are for offline mode, where there is no server to find anyone on.
+    var usesServerSocial: Bool { account?.server != nil }
+
     func person(_ username: String) -> Person? {
+        if usesServerSocial {
+            guard let p = data?.socialProfiles[username.lowercased()] else { return nil }
+            return Person(username: p.username, name: p.name, photo: p.photo ?? TO.initialsAvatar(p.username), w: p.w, l: p.l, net: p.net,
+                          tier: p.tier, streak: p.streak, share: p.share, remote: true)
+        }
         if let fake = Self.people.first(where: { $0.username.lowercased() == username.lowercased() }) { return fake }
         guard let acc = findAccountByUsername(username) else { return nil }
         let d = acc.id == account?.id ? (data ?? freshData(TO.now())) : migrate(loadData(acc.id) ?? freshData(TO.now()))
@@ -831,6 +885,7 @@ final class Store {
     /// Open picks a friend has shared (demo friends pick from the live board).
     func sharedPicks(_ p: Person, _ now: Ms = TO.now()) -> [SharedPick] {
         guard p.share.challenges else { return [] }
+        if p.remote { return data?.socialProfiles[p.username.lowercased()]?.picks ?? [] }
         if p.local {
             return p.openChallenges.prefix(3).map { b in
                 SharedPick(label: b.picks.map(\.label).joined(separator: " + "), matchup: b.picks.count > 1 ? "\(b.picks.count)-pick combo" : (b.picks.first?.matchup ?? ""),
@@ -855,7 +910,7 @@ final class Store {
     func searchPeople(_ query: String) -> [Person] {
         var q = query.trimmingCharacters(in: .whitespaces).lowercased()
         if q.hasPrefix("@") { q.removeFirst() }
-        guard !q.isEmpty, let me = account?.username.lowercased() else { return [] }
+        guard !q.isEmpty, let me = account?.username.lowercased(), !usesServerSocial else { return [] }
         let locals = accountsById.values.filter { $0.username.lowercased() != me }
             .map { Person(username: $0.username, name: $0.username, photo: $0.photo, local: true) }
         return (Self.people + locals).filter { p in
@@ -1003,6 +1058,9 @@ final class Store {
         let lastDay = TO.dayKey(min(now, end - 1))
         let rows: [Standing] = t.members.map { u in
             let mine = Self.sameUser(u, me.username)
+            if !mine, let r = myData.teamResults[t.id]?.first(where: { Self.sameUser($0.username, u) }) {
+                return Standing(username: u, me: false, net: r.net, w: r.w, l: r.l, hidden: r.hidden, photo: r.photo ?? TO.initialsAvatar(u), tier: r.tier)
+            }
             let p = mine ? nil : person(u)
             // A username that isn't a demo profile or an account on this device still belongs on the roster.
             if !mine && p == nil {
@@ -1252,6 +1310,47 @@ final class Store {
             data = d2
         }
         if changed { saveQuiet() }
+        // Real results for everyone on each roster, for the team's dates.
+        for team in data?.teams ?? [] where team.shareKey != nil && team.remote == true {
+            if let rows = await API.shared.teamStandings(team.id, key: team.shareKey!) { setTeamResults(team.id, rows) }
+        }
+    }
+
+    // MARK: Server friends
+
+    struct SocialChanges { var newRequests: [String] = []; var newFriends: [String] = [] }
+
+    /// Replaces this device's friends and requests with what the server says, and reports what's new since last time.
+    @discardableResult
+    func applySocial(_ state: API.SocialState) -> SocialChanges {
+        guard var d = data, usesServerSocial else { return SocialChanges() }
+        var changes = SocialChanges()
+        let friendsBefore = Set(d.friends.map { $0.lowercased() })
+        let requestsBefore = Set(d.requestsIn.compactMap { $0.from?.lowercased() })
+        // The first sync after this update isn't news: it just brings the account up to date.
+        if d.socialSynced {
+            changes.newRequests = state.requestsIn.map(\.username).filter { !requestsBefore.contains($0.lowercased()) }
+            changes.newFriends = state.friends.map(\.username).filter { !friendsBefore.contains($0.lowercased()) }
+        }
+        d.friends = state.friends.map(\.username)
+        d.socialProfiles = Dictionary(state.friends.map { ($0.username.lowercased(), $0) }, uniquingKeysWith: { a, _ in a })
+        for r in state.requestsIn + state.requestsOut where d.socialProfiles[r.username.lowercased()] == nil {
+            d.socialProfiles[r.username.lowercased()] = SocialProfile(username: r.username, name: r.name, photo: r.photo,
+                                                                     share: PrivacySettings(record: false, minutes: false, challenges: false))
+        }
+        d.requestsIn = state.requestsIn.map { FriendRequest(id: $0.id, from: $0.username, at: $0.at) }
+        d.requestsOut = state.requestsOut.map { FriendRequest(id: $0.id, to: $0.username, at: $0.at) }
+        d.socialSynced = true
+        data = d
+        saveQuiet()
+        return changes
+    }
+
+    func setTeamResults(_ id: String, _ rows: [TeamStanding]) {
+        guard var d = data else { return }
+        d.teamResults[id] = rows
+        data = d
+        saveQuiet()
     }
 
     // MARK: Leaderboard
@@ -1273,14 +1372,9 @@ final class Store {
         }.map(\.element)
     }
 
-    func completeOnboarding(sports: [String], locks: [String]?) {
+    func completeOnboarding(sports: [String]) {
         guard var d = data else { return }
         d.settings.sports = Sim.leagueOrder.filter { sports.contains($0) }
-        if let locks {
-            let hadLocks = !d.settings.lockedApps.isEmpty
-            d.settings.lockedApps = locks
-            d.settings.enforce = !locks.isEmpty && (d.settings.enforce || !hadLocks)
-        }
         d.onboarded = true
         grantTierBonus(&d)
         data = d

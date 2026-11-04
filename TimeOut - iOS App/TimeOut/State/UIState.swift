@@ -25,7 +25,7 @@ final class Net {
     /// For actions that need a connection (placing challenges). False, with a toast, when offline.
     func guardOnline() -> Bool {
         if online { return true }
-        UIState.shared.toast(.loss, "No internet connection", "Challenging is paused until you're back online.")
+        UIState.shared.toast(.loss, "No internet connection", "New pledges pause until you're back online.")
         return false
     }
 }
@@ -41,11 +41,11 @@ struct Toast: Identifiable, Equatable {
 
 /// Bottom sheets (the web demo's `ui.sheet`).
 enum SheetKind: Hashable {
-    case slip, share(String), how, locked, profile(String), team(String), teamNew, teamHow, invite, screenTimeApps
+    case slip, share(String), how, profile(String), team(String), teamNew, teamHow, invite, screenTimeApps
 
     var tall: Bool {
         switch self {
-        case .locked, .team, .teamNew, .screenTimeApps: return true
+        case .team, .teamNew, .screenTimeApps: return true
         default: return false
         }
     }

@@ -6,6 +6,7 @@ struct TimeOutApp: App {
 
     init() {
         Theme.registerFonts()
+        Notifier.shared.install()
     }
 
     var body: some Scene {

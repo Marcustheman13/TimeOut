@@ -28,6 +28,9 @@ nonisolated enum ScreenTimeShared {
     static let recordKey = "st.record"
     static let enforcedDaysKey = "st.enforcedDays"
     static let reachedDaysKey = "st.reachedDays"
+    /// When to warn, and whether to, read by the monitor while the app is closed.
+    static let lowWarnKey = "st.lowWarn"
+    static let notifyLowKey = "st.notifyLow"
     static let usedEventPrefix = "staketime.used."
 
     static var defaults: UserDefaults { UserDefaults(suiteName: appGroup) ?? .standard }
@@ -40,10 +43,11 @@ nonisolated enum ScreenTimeShared {
     }
 
     /// Usage checkpoints: every 5 minutes, then every minute in the last 5.
-    static func checkpoints(for limit: Int) -> [Int] {
+    static func checkpoints(for limit: Int, lowWarn: Int) -> [Int] {
         guard limit > 1 else { return [] }
         var marks = Set(stride(from: 5, to: limit, by: 5))
         for minute in max(1, limit - 5)..<limit { marks.insert(minute) }
+        if limit - lowWarn >= 1 { marks.insert(limit - lowWarn) }
         return marks.sorted()
     }
 }
@@ -59,7 +63,7 @@ extension DeviceActivityEvent.Name {
 
 /// Turns the wallet's daily phone-time limit into a real Screen Time limit on the apps the user picks.
 ///
-/// The web demo only simulates locked apps. Here "Enforce app limits" registers a Device Activity schedule:
+/// The website can't block anything. Here "Enforce app limits" registers a Device Activity schedule:
 /// the TimeOutMonitor extension records usage, blocks the chosen apps at today's limit, and re-registers at midnight.
 /// Adding apps blocks them right away; removing apps waits until midnight so a limit can't be dodged mid-day.
 @Observable
@@ -107,6 +111,20 @@ final class ScreenTime {
 
     var isOverrideActive: Bool { (overrideUntil ?? .distantPast) > .now }
 
+    /// How far along setup is, for the Home banner and the setup sheet.
+    enum SetupStep: Equatable { case allow, pick, turnOn, done }
+
+    var setupStep: SetupStep {
+        if status != .approved { return .allow }
+        if !hasSelection { return .pick }
+        return (Store.shared.data?.settings.enforce ?? false) ? .done : .turnOn
+    }
+
+    /// Lock points for the tier: apps and sites are 1, whole categories 3 (same as the list on the website).
+    private var selectionPoints: Int {
+        selection.applicationTokens.count + selection.webDomainTokens.count + selection.categoryTokens.count * 3
+    }
+
     // MARK: Authorization
 
     private func refreshStatus() {
@@ -134,7 +152,7 @@ final class ScreenTime {
             try await AuthorizationCenter.shared.requestAuthorization(for: .individual)
             lastError = nil
         } catch {
-            lastError = "Screen Time access wasn't granted: \(error.localizedDescription)"
+            lastError = "Screen Time access wasn't granted, so TimeOut can't block apps yet. Tap Allow Screen Time to try again."
         }
         refreshStatus()
         sync()
@@ -150,17 +168,18 @@ final class ScreenTime {
         defaults.set([todayKey: wl.todayLimit, tomorrowKey: wl.tomorrowLimit], forKey: ScreenTimeShared.limitsKey)
         let st = Store.shared.myStats
         defaults.set("\(st.w)-\(st.l)", forKey: ScreenTimeShared.recordKey)
+        let settings = data.settings
+        defaults.set(settings.lowWarn, forKey: ScreenTimeShared.lowWarnKey)
+        defaults.set(settings.notify.lowTime, forKey: ScreenTimeShared.notifyLowKey)
         promotePendingIfDue(today: todayKey)
         pruneUsage(today: todayKey)
         refreshStatus()
+        if hasSelection && settings.deviceLockPoints != selectionPoints { Store.shared.setDeviceLocks(points: selectionPoints) }
         if isEnforcing && usedToday > 0 { Store.shared.setUsage(usedToday) }
 
         guard isEnforcing else {
             if defaults.string(forKey: ScreenTimeShared.registeredKey) != nil {
-                center.stopMonitoring([.timeOutDaily, .timeOutOverride])
-                store.clearAllSettings()
-                defaults.removeObject(forKey: ScreenTimeShared.registeredKey)
-                defaults.removeObject(forKey: ScreenTimeShared.limitReachedKey)
+                stopEnforcing()
             }
             return
         }
@@ -174,18 +193,20 @@ final class ScreenTime {
         }
 
         let version = defaults.integer(forKey: ScreenTimeShared.selectionVersionKey)
-        let signature = "\(todayKey)|\(wl.todayLimit)|\(version)"
+        let signature = "\(todayKey)|\(wl.todayLimit)|\(version)|\(settings.lowWarn)"
         guard defaults.string(forKey: ScreenTimeShared.registeredKey) != signature else { return }
 
-        // The limit changed (new day, a resolved challenge, an unlock, or new apps). Lift the block and re-measure:
+        // The limit changed (new day, a resolved challenge, an unlock, or new apps). Re-measure:
         // `includesPastActivity` counts earlier usage, so events re-fire if the user is already over.
-        if !isOverrideActive { store.clearAllSettings() }
+        // Keep the block in place when they are known to be over the new limit, so it can't flicker open.
+        let stillOver = usedToday >= wl.todayLimit
+        if !isOverrideActive && !stillOver { store.clearAllSettings() }
         defaults.removeObject(forKey: ScreenTimeShared.limitReachedKey)
         isShieldActive = false
         defaults.set(signature, forKey: ScreenTimeShared.registeredKey)
         do {
-            try startDailyMonitoring(limit: wl.todayLimit)
-            if wl.todayLimit <= 0 { markLimitReached(today: todayKey) }
+            try startDailyMonitoring(limit: wl.todayLimit, lowWarn: settings.lowWarn)
+            if wl.todayLimit <= 0 || stillOver { markLimitReached(today: todayKey) }
             lastError = nil
         } catch {
             lastError = "Couldn't start the screen time limit: \(error.localizedDescription)"
@@ -193,14 +214,34 @@ final class ScreenTime {
         }
     }
 
-    private func startDailyMonitoring(limit: Int) throws {
+    private func stopEnforcing() {
+        center.stopMonitoring([.timeOutDaily, .timeOutOverride])
+        store.clearAllSettings()
+        defaults.removeObject(forKey: ScreenTimeShared.registeredKey)
+        defaults.removeObject(forKey: ScreenTimeShared.limitReachedKey)
+        defaults.removeObject(forKey: ScreenTimeShared.overrideUntilKey)
+        isShieldActive = false
+        overrideUntil = nil
+    }
+
+    /// Logging out or deleting the account must never leave apps blocked with no way to manage them.
+    func accountGone() {
+        stopEnforcing()
+        defaults.removeObject(forKey: ScreenTimeShared.selectionKey)
+        defaults.removeObject(forKey: ScreenTimeShared.limitsKey)
+        defaults.removeObject(forKey: ScreenTimeShared.usageKey)
+        cancelPendingRemoval()
+        selection = FamilyActivitySelection()
+    }
+
+    private func startDailyMonitoring(limit: Int, lowWarn: Int) throws {
         center.stopMonitoring([.timeOutDaily])
         let schedule = DeviceActivitySchedule(intervalStart: DateComponents(hour: 0, minute: 0),
                                               intervalEnd: DateComponents(hour: 23, minute: 59, second: 59), repeats: true)
         var events: [DeviceActivityEvent.Name: DeviceActivityEvent] = [:]
         if limit > 0 {
             events[.timeOutLimit] = event(minutes: limit)
-            for minute in ScreenTimeShared.checkpoints(for: limit) {
+            for minute in ScreenTimeShared.checkpoints(for: limit, lowWarn: lowWarn) {
                 events[DeviceActivityEvent.Name(ScreenTimeShared.usedEventPrefix + String(minute))] = event(minutes: minute)
             }
         }
@@ -222,6 +263,8 @@ final class ScreenTime {
     private func applyShield() {
         store.shield.applications = selection.applicationTokens.isEmpty ? nil : selection.applicationTokens
         store.shield.applicationCategories = selection.categoryTokens.isEmpty ? nil : .specific(selection.categoryTokens)
+        // Without this, a blocked category still opens in Safari.
+        store.shield.webDomainCategories = selection.categoryTokens.isEmpty ? nil : .specific(selection.categoryTokens)
         store.shield.webDomains = selection.webDomainTokens.isEmpty ? nil : selection.webDomainTokens
     }
 
@@ -236,7 +279,7 @@ final class ScreenTime {
 
     /// Lifts the block for the emergency unlock window. The monitor puts it back when the window ends.
     func emergencyUnlock(now: Date = .now) {
-        guard isEnforcing else { return }
+        guard isEnforcing, overrideUntil.map({ $0 <= now }) ?? true else { return }
         let end = now.addingTimeInterval(TimeInterval(Rules.overrideMinutes * 60) + 30)
         let parts: Set<Calendar.Component> = [.year, .month, .day, .hour, .minute, .second]
         let schedule = DeviceActivitySchedule(intervalStart: Calendar.current.dateComponents(parts, from: now),
@@ -281,6 +324,8 @@ final class ScreenTime {
             save(next, key: ScreenTimeShared.pendingSelectionKey)
             defaults.set(TO.addDays(TO.dayKey(TO.ms(now)), 1), forKey: ScreenTimeShared.pendingDayKey)
         }
+        // Picking apps is what turns real limits on, and it sets the tier.
+        Store.shared.setDeviceLocks(points: selectionPoints)
         sync()
     }
 
@@ -302,8 +347,11 @@ final class ScreenTime {
             defaults.removeObject(forKey: ScreenTimeShared.pendingSelectionKey)
             defaults.removeObject(forKey: ScreenTimeShared.pendingDayKey)
         }
-        selection = Self.decode(defaults.data(forKey: ScreenTimeShared.selectionKey)) ?? FamilyActivitySelection()
-        pendingSelection = Self.decode(defaults.data(forKey: ScreenTimeShared.pendingSelectionKey))
+        // This runs every few seconds: only touch the observed values when they really changed.
+        let saved = Self.decode(defaults.data(forKey: ScreenTimeShared.selectionKey)) ?? FamilyActivitySelection()
+        if !Self.sameItems(saved, selection) { selection = saved }
+        let pending = Self.decode(defaults.data(forKey: ScreenTimeShared.pendingSelectionKey))
+        if (pending == nil) != (pendingSelection == nil) || (pending.map { p in pendingSelection.map { Self.sameItems(p, $0) } ?? false } == false) { pendingSelection = pending }
     }
 
     private func save(_ value: FamilyActivitySelection, key: String) {

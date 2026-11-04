@@ -23,7 +23,6 @@ final class AuthModel {
     // Onboarding
     var step = 1
     var sports: [String] = []
-    var locks: [String] = []
     // Verify email: the password stays in memory only, so this screen can log in by itself once the email is confirmed.
     var verifyEmail = ""
     @ObservationIgnored var verifyPassword = ""
@@ -54,7 +53,6 @@ final class AuthModel {
         screen = .onboard
         step = 1
         sports = Store.shared.data?.settings.sports ?? Sim.realLeagues
-        locks = []
     }
 
     private func showError(_ e: Error) {
@@ -211,10 +209,10 @@ final class AuthModel {
     // MARK: Onboarding
 
     func finishOnboarding(skip: Bool) {
-        Store.shared.completeOnboarding(sports: sports, locks: skip ? nil : locks)
+        Store.shared.completeOnboarding(sports: sports)
         AppModel.shared.boot()
         UIState.shared.toast(.win, "Welcome to TimeOut, @\(Store.shared.account?.username ?? "")",
-                             "You have \(Store.shared.data?.wallet.balance ?? Rules.daily) challenge minutes today. Tap any point value to start.")
+                             "You have \(Store.shared.data?.wallet.balance ?? Rules.daily) pledge minutes today. Choose a matchup challenge to start.")
     }
 }
 
@@ -225,6 +223,7 @@ enum Auth {
             guard await UIState.shared.confirm("Log out?", "Your challenges and settings stay saved on this device.", confirm: "Log out") else { return }
             Slip.shared.clear()
             if API.shared.configured { await API.shared.logout() }
+            ScreenTime.shared.accountGone()
             Store.shared.logout()
             AppModel.shared.boot()
         }
@@ -293,10 +292,10 @@ struct WelcomeScreen: View {
                 Spacer(minLength: 0)
                 BrandIcon(size: 64).padding(.bottom, 4)
                 Wordmark(size: 64).lineLimit(1).minimumScaleFactor(0.6)
-                Text("Challenge your screen time, not your money.").font(.display(26, 700)).foregroundStyle(Theme.text).frame(maxWidth: 230, alignment: .leading)
+                Text("Build healthier screen-time habits with sports challenges.").font(.display(26, 700)).foregroundStyle(Theme.text).frame(maxWidth: 230, alignment: .leading)
                 VStack(alignment: .leading, spacing: 10) {
-                    point(.hourglass, "60 challenge minutes a day. Win and you get more phone time tomorrow.")
-                    point(.radio, "Live scores and point value for NFL, NBA, MLB, NHL, college football and soccer.")
+                    point(.hourglass, "60 pledge minutes a day. Successful challenges add phone time tomorrow.")
+                    point(.radio, "Live scores and matchup targets for NFL, NBA, MLB, NHL, college football and soccer.")
                     point(.users, "Compare screen-time records and compete on teams.")
                 }
                 .padding(.top, 8)
@@ -440,7 +439,7 @@ struct SignupScreen: View {
             FieldView(label: "Confirm password", text: $model.signupConfirm, secure: true, err: model.errors["confirm"], content: .newPassword)
             Button(model.busy ? "Creating account…" : "Create account") { Task { await model.signup() } }
                 .buttonStyle(.btn(.primary, full: true)).disabled(model.busy)
-            Text(API.shared.configured ? "Accounts and challenges are saved securely with Supabase." : "Offline mode: this account is saved on this device only.")
+            Text(API.shared.configured ? "Accounts and pledges are saved securely with Supabase." : "Offline mode: this account is saved on this device only.")
                 .font(.barlow(11.5)).foregroundStyle(Theme.muted).frame(maxWidth: .infinity)
             HStack(spacing: 4) {
                 Text("Already have an account?").foregroundStyle(Theme.text2)
@@ -548,9 +547,9 @@ struct OnboardScreen: View {
     private var stepOne: some View {
         VStack(alignment: .leading, spacing: 18) {
             Text("Here's the deal, @\(Store.shared.account?.username ?? "")").font(.display(36, 900))
-            HowCard(n: 1, title: "You get 60 challenge minutes a day", text: "They reset every night at midnight.")
-            HowCard(n: 2, title: "You pledge tomorrow's phone time", text: "Win and tomorrow's limit goes up. Lose and it goes down.")
-            HowCard(n: 3, title: "No money, ever", text: "Not now, not later. Challenge screen time and build a clean streak.")
+            HowCard(n: 1, title: "You get 60 pledge minutes a day", text: "They reset every night at midnight.")
+            HowCard(n: 2, title: "You commit tomorrow's phone time", text: "Meet a challenge and tomorrow's limit goes up. Miss it and it goes down.")
+            HowCard(n: 3, title: "No money, ever", text: "Not now, not later. Commit screen time and build a clean streak.")
         }
     }
 
@@ -573,23 +572,11 @@ struct OnboardScreen: View {
         }
     }
 
+    /// The real thing: Apple's Screen Time permission and app picker, not a list of names.
     private var stepThree: some View {
-        let pts = Store.points(model.locks)
-        return VStack(alignment: .leading, spacing: 18) {
-            AuthTitle(title: "Lock your time-wasters", sub: "When today's phone time runs out, these apps lock. Lock more to reach a higher tier with bonus minutes and point-value boosts.")
-            HStack { Text("\(pts) lock points").font(.barlow(15, 700)); Spacer(); TierBadge(tierId: Store.tierForPoints(pts).id) }.card(12)
-            ListBox {
-                ForEach(Store.lockable.filter { $0.kind != "Website" }, id: \.id) { x in
-                    Button {
-                        model.locks = model.locks.contains(x.id) ? model.locks.filter { $0 != x.id } : model.locks + [x.id]
-                    } label: {
-                        ListRow(x.name, sub: AttributedString("\(x.kind) · \(x.pts) pt\(x.pts == 1 ? "" : "s")")) {
-                            LrIcon(icon: x.kind == "Category" ? .grid : .phone, bg: Color(hex: x.color).opacity(0.13), fg: Color(hex: x.color))
-                        } trailing: { CheckBox(on: model.locks.contains(x.id)) }
-                    }
-                    .buttonStyle(.press)
-                }
-            }
+        VStack(alignment: .leading, spacing: 18) {
+            AuthTitle(title: "Lock your time-wasters", sub: "When today's phone time runs out, these apps lock. Lock more to reach a higher tier with bonus minutes and allowance boosts.")
+            ScreenTimeSetupCard()
         }
     }
 }

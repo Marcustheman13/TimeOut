@@ -32,24 +32,6 @@ struct TeamBadge: View {
     }
 }
 
-/// `.gc-live-logo`: the raised disc with a logo used on live/ESPN game cards.
-struct LiveLogo: View {
-    var team: Team
-    var body: some View {
-        ZStack {
-            Circle().fill(Theme.raised)
-            Text(team.abbr).font(.barlow(9, 900)).foregroundStyle(Theme.text).lineLimit(1).minimumScaleFactor(0.6)
-            if let logo = team.logo, let url = URL(string: logo) {
-                AsyncImage(url: url) { phase in
-                    if let image = phase.image { ZStack { Circle().fill(Theme.raised); image.resizable().scaledToFit() } }
-                }
-            }
-        }
-        .frame(width: 27, height: 27)
-        .clipShape(Circle())
-    }
-}
-
 struct TierBadge: View {
     var tierId: String
     var sm = false
@@ -551,70 +533,48 @@ struct Countdown: View {
     }
 }
 
-// MARK: - Point value button
+// MARK: - Challenge choice button
 
-/// One point-value button. Tapping adds or removes the pick on the challenge slip.
-struct PointValueButton: View {
+/// One matchup choice. Tapping adds or removes it from the daily commitment.
+struct ChallengeChoiceButton: View {
     var sel: Selection
     var suspended = false
-    var move: Int?
     var big = false
     var label: String?
-    var compact = false
 
     var body: some View {
         let on = Slip.shared.has(sel.id)
-        let ln: String? = sel.market == "margin" ? PointValueMath.fmtLine(sel.line ?? 0)
-            : sel.market == "total" ? "\(sel.side == "higher" ? "O" : "U") \(PointValueMath.fmtLine(sel.line ?? 0, signed: false))" : nil
+        let line = sel.line ?? 0
+        let ln: String? = sel.market == "margin" ? (line < 0 ? "Win by \(Int(abs(line).rounded(.up)))+" : "Stay within \(Int(line.rounded(.down)))")
+            : sel.market == "total" ? "Total Score \(sel.side == "higher" ? "Higher" : "Lower") \(PointValueMath.fmtLine(line, signed: false))" : nil
+        let target = PointValueMath.multiplierText(sel.price)
         Button { Slip.shared.toggle(sel.id) } label: {
             VStack(spacing: 1) {
                 if suspended {
                     Icon(.lock, 14).foregroundStyle(Theme.muted)
                 } else {
                     if big, let label {
-                        Text(label).font(.barlow(compact ? 10 : 12, 700)).foregroundStyle(on ? Theme.accentInk : Theme.text2).lineLimit(1).truncationMode(.tail)
+                        Text(label).font(.barlow(12, 700)).foregroundStyle(on ? Theme.accentInk : Theme.text2)
+                            .multilineTextAlignment(.center).lineLimit(2).minimumScaleFactor(0.85)
                     }
-                    if let ln { Text(ln).font(.barlow(compact ? 11 : 12.5, 700)).foregroundStyle(on ? Theme.accentInk : Theme.text) }
-                    HStack(spacing: 2) {
-                        if let move, move != 0 {
-                            Text(move > 0 ? "▲" : "▼").font(.system(size: 8)).foregroundStyle(on ? Theme.accentInk : move > 0 ? Theme.accent : Theme.loss)
-                        }
-                        Text(PointValueMath.fmt(sel.price))
-                            .font(.barlow(compact ? 12 : (ln == nil && !(big && label != nil) ? 15 : 13.5), 800))
-                            .monospacedDigit()
-                            .foregroundStyle(on ? Theme.accentInk : Theme.accent)
-                    }
+                    if let ln { Text(ln).font(.barlow(12.5, 700)).foregroundStyle(on ? Theme.accentInk : Theme.text).lineLimit(1).minimumScaleFactor(0.8) }
+                    Text(target)
+                        .font(.barlow(ln == nil && !(big && label != nil) ? 15 : 13.5, 800))
+                        .monospacedDigit()
+                        .foregroundStyle(on ? Theme.accentInk : Theme.accent)
                 }
             }
-            .padding(.horizontal, 4)
+            .padding(6)
             .frame(maxWidth: .infinity)
-            .frame(height: compact ? 48 : big ? 56 : 46)
-            .background(on ? Theme.accent : Theme.raised, in: RoundedRectangle(cornerRadius: compact ? 8 : 10, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: compact ? 8 : 10, style: .continuous).strokeBorder(on ? .clear : Theme.stroke, lineWidth: 1))
+            .frame(minHeight: big ? 58 : 46)
+            .background(on ? Theme.accent : Theme.raised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(on ? .clear : Theme.stroke, lineWidth: 1))
             .opacity(suspended ? 0.55 : 1)
         }
         .buttonStyle(.press)
         .disabled(suspended)
-        .accessibilityLabel("\(label ?? "") \(ln ?? "") \(PointValueMath.fmt(sel.price))\(suspended ? " suspended" : "")")
+        .accessibilityLabel("\(label ?? "") \(ln ?? "") \(target)\(suspended ? " unavailable" : "")")
         .accessibilityAddTraits(on ? .isSelected : [])
-    }
-}
-
-/// A disabled point-value button for a market with no line ("N/A" / "—").
-struct UnavailablePointValue: View {
-    var label: String
-    var text: String
-    var compact = false
-    var body: some View {
-        VStack(spacing: 1) {
-            Text(label).font(.barlow(compact ? 10 : 12, 700)).foregroundStyle(Theme.text2).lineLimit(1)
-            Text(text).font(.barlow(compact ? 12 : 13.5, 800)).foregroundStyle(Theme.muted)
-        }
-        .frame(maxWidth: .infinity).frame(height: compact ? 48 : 56)
-        .background(Theme.raised, in: RoundedRectangle(cornerRadius: compact ? 8 : 10, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: compact ? 8 : 10, style: .continuous).strokeBorder(Theme.stroke, lineWidth: 1))
-        .opacity(0.55)
-        .accessibilityLabel("\(label) unavailable")
     }
 }
 
@@ -677,6 +637,20 @@ enum Clipboard {
     static func copy(_ text: String) -> Bool {
         UIPasteboard.general.string = text
         return true
+    }
+}
+
+/// The iPhone share sheet (Messages, AirDrop, Copy…) for a link.
+enum NativeShare {
+    static func present(_ text: String) {
+        guard let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first(where: { $0.activationState == .foregroundActive }),
+              var top = scene.keyWindow?.rootViewController else { return }
+        while let next = top.presentedViewController { top = next }
+        let item: Any = URL(string: text) ?? text
+        let controller = UIActivityViewController(activityItems: [item], applicationActivities: nil)
+        controller.popoverPresentationController?.sourceView = top.view
+        controller.popoverPresentationController?.sourceRect = CGRect(x: top.view.bounds.midX, y: top.view.bounds.midY, width: 0, height: 0)
+        top.present(controller, animated: true)
     }
 }
 

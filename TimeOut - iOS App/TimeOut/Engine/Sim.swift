@@ -334,6 +334,28 @@ enum Sim {
         }
     }
 
+    /// A readable pick from what the server stores, for challenges placed on another device.
+    static func pickLabel(market: String, side: String, line: Double?, matchup: String) -> String {
+        let teams = matchup.components(separatedBy: " @ ")
+        let team = side == "away" ? teams.first : side == "home" && teams.count > 1 ? teams.last : nil
+        switch market {
+        case "winner": return team.map { "\($0) to win" } ?? "Draw"
+        case "margin": return "\(team ?? "") \(PointValueMath.fmtLine(line ?? 0))"
+        case "total": return "Combined score \(side == "higher" ? "above" : "below") \(PointValueMath.fmtLine(line ?? 0, signed: false))"
+        default: return matchup
+        }
+    }
+
+    static func marketTitle(_ market: String) -> String {
+        switch market {
+        case "winner": return "Winner"
+        case "margin": return "Margin"
+        case "total": return "Total"
+        case "race": return "Race winner"
+        default: return market.capitalized
+        }
+    }
+
     static func marketLabel(_ sel: Selection, _ g: Game?) -> String {
         switch sel.market {
         case "race": return "Race winner"

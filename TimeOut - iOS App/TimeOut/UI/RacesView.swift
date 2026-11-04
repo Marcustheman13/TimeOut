@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Virtual Racing: an animated 5-horse race. Tap a price to challenge with the regular slip, or start a race to watch.
+/// Virtual Racing: an animated 5-horse race. Choose a target to pledge with the regular commitment, or start a race to watch.
 struct RacesView: View {
     var embedded = false
     private var races: Races { .shared }
@@ -10,7 +10,7 @@ struct RacesView: View {
         let race = races.current
         let latest = races.latest
         let stack = VStack(spacing: 14) {
-                PageHead(title: "Virtual Racing", text: "Pick a winner and pledge screen-time minutes using your regular challenge slip.")
+                PageHead(title: "Virtual Racing", text: "Pick a winner and pledge screen-time minutes using your regular Daily Commitment.")
                     .padding(.bottom, -6)
                 TimelineView(.animation(paused: race.status != "running")) { ctx in
                     let now = TO.ms(ctx.date)
@@ -49,8 +49,8 @@ struct RacesView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
                         VStack(alignment: .leading, spacing: 3) {
-                            Text("Field point value").font(.barlow(17, 700))
-                            Text("Tap a price to open your standard screen-time challenge slip.").font(.barlow(13)).foregroundStyle(Theme.text2)
+                            Text("Field challenge targets").font(.barlow(17, 700))
+                            Text("Choose a target to open your standard Daily Commitment.").font(.barlow(13)).foregroundStyle(Theme.text2)
                         }
                         Spacer()
                         Tag("5 runners")
@@ -71,13 +71,13 @@ struct RacesView: View {
                                     }
                                 }
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                                PointValueButton(sel: races.selection(race, runner), suspended: race.status != "open", big: true, label: runner.name)
+                                ChallengeChoiceButton(sel: races.selection(race, runner), suspended: race.status != "open", big: true, label: runner.name)
                                     .frame(width: 106)
                             }
                             .padding(.vertical, 10)
                         }
                     }
-                    Note(.blue, icon: .info, "Lock in a challenge to start the race with your pick, or start it now to watch without a challenge. Challenges use your regular screen-time balance.")
+                    Note(.blue, icon: .info, "Lock in pledge to start the race with your pick, or start it now to watch without a pledge. Pledges use your available screen-time minutes.")
                 }
                 .card()
                 .gutter()
@@ -113,7 +113,7 @@ struct RacesView: View {
             let h = races.horse(leader)
             return "#\(h.number) \(h.name) is driving for the lead."
         default:
-            return races.latest == nil ? "Welcome to Silicon Downs. Select a horse to add it to your challenge slip." : "The previous race is official. Place your next screen-time challenge."
+            return races.latest == nil ? "Welcome to Silicon Downs. Select a horse to add it to your Daily Commitment." : "The previous race is official. Start your next screen-time pledge."
         }
     }
 }

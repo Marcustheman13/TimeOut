@@ -8,15 +8,17 @@
   const view = { tab: 'board', query: '', remote: [], searching: false, searchSeq: 0 };
 
   // Invite links stay on this page so they open the app (phone or computer view).
-  // ?invite=username is the friend link. ?join=username is accepted too, so another
-  // share-link change can use either name. A team link adds team, teamName, start, end, and key.
-  function friendLink(username = TO.account.username) {
+  // ?invite=username&code=... is the friend link; the code makes it a two-way yes. ?join=username is accepted too,
+  // so another share-link change can use either name. A team link adds team, teamName, start, end, and key.
+  function friendLink(username = TO.account.username, code = null) {
     const url = new URL(`${location.origin}${location.pathname}`);
     url.searchParams.set('invite', username);
+    if (code) url.searchParams.set('code', code);
     return url.toString();
   }
-  function teamLink(team) {
-    const url = new URL(friendLink(team.owner || TO.account.username));
+  function teamLink(team, code = null) {
+    // The code belongs to the person sharing, so the link has to name that person too.
+    const url = new URL(friendLink(code ? TO.account.username : (team.owner || TO.account.username), code));
     url.searchParams.set('team', team.id);
     url.searchParams.set('teamName', team.name);
     url.searchParams.set('start', team.start);
@@ -24,27 +26,41 @@
     if (team.shareKey) url.searchParams.set('key', team.shareKey);
     return url.toString();
   }
-  const inviteLink = () => friendLink();
+  const myCode = async () => (TO.api.myInviteCode ? TO.api.myInviteCode() : null);
+  const inviteLink = async () => friendLink(TO.account.username, await myCode());
 
+  /** The system share sheet where there is one, otherwise the clipboard. */
+  async function shareOrCopy(link, title, copiedTitle) {
+    if (navigator.share) {
+      try { await navigator.share({ title, url: link }); return; } catch (e) { if (e && e.name === 'AbortError') return; }
+    }
+    const ok = await ui.copy(link);
+    ui.toast({ kind: ok ? 'win' : 'info', title: ok ? copiedTitle : title, msg: ok ? link : `Copy this: ${link}`, ms: 5000 });
+  }
+
+  // Kept in localStorage, not sessionStorage: a new account confirms its email in a new tab, and the invite has to survive that.
   const INVITE_KEY = 'timeout.invite';
-  function readInvite() {
-    try { return JSON.parse(sessionStorage.getItem(INVITE_KEY) || 'null'); } catch (e) { return null; }
-  }
-  function clearInvite() {
-    try { sessionStorage.removeItem(INVITE_KEY); } catch (e) { /* private mode */ }
-  }
+  const readInvite = () => TO.store.get(INVITE_KEY, null);
+  const clearInvite = () => TO.store.del(INVITE_KEY);
   function captureInvite() {
     const q = new URLSearchParams(location.search);
     const invite = String(q.get('invite') || q.get('join') || '').replace(/^@/, '').trim();
     const team = String(q.get('team') || '').trim();
     if (!invite && !team) return null;
-    const pending = { invite, team, teamName: q.get('teamName') || '', start: q.get('start') || '', end: q.get('end') || '', key: q.get('key') || '' };
-    try { sessionStorage.setItem(INVITE_KEY, JSON.stringify(pending)); } catch (e) { /* keep going */ }
-    ['invite', 'join', 'team', 'teamName', 'start', 'end', 'key'].forEach((k) => q.delete(k));
+    const pending = { invite, team, teamName: q.get('teamName') || '', start: q.get('start') || '', end: q.get('end') || '', key: q.get('key') || '', code: q.get('code') || '' };
+    TO.store.set(INVITE_KEY, pending);
+    ['invite', 'join', 'team', 'teamName', 'start', 'end', 'key', 'code'].forEach((k) => q.delete(k));
     const next = `${location.pathname}${q.toString() ? `?${q}` : ''}${location.hash}`;
     history.replaceState(null, '', next);
     return pending;
   }
+  /** On an iPhone with the app, the same invite opens there. */
+  function appLink(p) {
+    const params = new URLSearchParams();
+    for (const k of ['invite', 'team', 'teamName', 'start', 'end', 'key', 'code']) if (p[k]) params.set(k, p[k]);
+    return `timeout://invite?${params}`;
+  }
+  const onIPhone = () => /iPhone|iPad|iPod/.test(navigator.userAgent);
   function offerInvite() {
     const p = readInvite();
     if (!p || !TO.account || !TO.data || !TO.data.onboarded) return;
@@ -60,14 +76,25 @@
         body: joining
           ? `<p class="sub" style="margin-top:0">${who} invited you to <b style="color:var(--text)">${esc(p.teamName)}</b>${p.start && p.end ? `, ${esc(TO.fmtDate(TO.dayStart(p.start)))} – ${esc(TO.fmtDate(TO.dayStart(p.end)))}` : ''}. Joining also adds them as a friend. It is still screen time, not money.</p>`
           : `<p class="sub" style="margin-top:0">${who} sent you their TimeOut link. Add them as a friend to compare screen time without putting money on the games.</p>`,
-        foot: `<button class="btn primary full" data-act="invite-accept">${joining ? 'Add friend and join' : 'Add friend'}</button><button class="btn quiet sm" data-act="invite-dismiss">Not now</button>`,
+        foot: `<button class="btn primary full" data-act="invite-accept">${joining ? 'Add friend and join' : 'Add friend'}</button>${onIPhone() ? `<a class="btn ghost full" href="${esc(appLink(p))}">Open in the TimeOut app</a>` : ''}<button class="btn quiet sm" data-act="invite-dismiss">Not now</button>`,
       }),
     });
   }
-  function acceptInvite() {
+  async function acceptInvite() {
     const p = readInvite();
     if (!p) return;
-    if (p.invite && !St.sameUser(p.invite, TO.account.username)) St.addFriend(p.invite);
+    let friendResult = null, failure = null;
+    if (p.invite && !St.sameUser(p.invite, TO.account.username)) {
+      if (St.usesServerSocial()) {
+        try {
+          friendResult = await TO.api.acceptFriendInvite(p.invite, p.code);
+          await TO.app.syncSocial(true);
+        } catch (e) { failure = e.message; }
+      } else {
+        St.addFriend(p.invite);
+        friendResult = 'friends';
+      }
+    }
     let team = null;
     if (p.team && p.teamName && p.start && p.end) {
       try { team = St.joinTeam({ id: p.team, name: p.teamName, start: p.start, end: p.end, owner: p.invite, shareKey: /^[a-f0-9]{32}$/.test(p.key) ? p.key : null, members: p.invite ? [p.invite] : [] }); }
@@ -79,10 +106,14 @@
     clearInvite();
     ui.closeSheet('invite');
     if (team) view.tab = 'teams';
+    else if (friendResult === 'requested') view.tab = 'requests';
     else if (p.invite) view.tab = 'board';
     TO.app.tab = 'social';
     TO.app.render();
-    ui.toast({ kind: 'win', title: team ? `You joined ${team.name}` : `You and @${p.invite} are now friends` });
+    if (failure) ui.toast({ kind: 'loss', title: `Couldn't add @${p.invite}`, msg: failure });
+    else if (team) ui.toast({ kind: 'win', title: `You joined ${team.name}` });
+    else if (friendResult === 'requested') ui.toast({ kind: 'win', title: `Friend request sent to @${p.invite}`, msg: 'That link has expired, so they\'ll need to accept.' });
+    else ui.toast({ kind: 'win', title: `You and @${p.invite} are now friends` });
   }
   TO.invites = { capture: captureInvite, offer: offerInvite, friendLink, teamLink };
 
@@ -147,7 +178,7 @@
     const results = peopleForQuery(q);
     if (!results.length) {
       if (view.searching) return `<div class="note">${icon('search', 16)}<div><b style="color:var(--text)">Searching usernames…</b></div></div>`;
-      return `<div class="note">${icon('search', 16)}<div><b style="color:var(--text)">No one found with the username "${esc(q)}".</b><div style="margin-top:3px">They might not be on TimeOut yet. Send them your invite link instead.</div><button class="btn xs primary" style="margin-top:8px" data-act="copy-invite">${icon('link', 14)} Copy invite link</button></div></div>`;
+      return `<div class="note">${icon('search', 16)}<div><b style="color:var(--text)">No one found with the username "${esc(q)}".</b><div style="margin-top:3px">They might not be on TimeOut yet. Send them your invite link instead.</div><button class="btn xs primary" style="margin-top:8px" data-act="share-invite">${icon('share', 14)} Share invite link</button></div></div>`;
     }
     return `<div class="list">${results.map((p) => {
       const rel = St.relation(p.username);
@@ -165,13 +196,13 @@
       <h2 style="margin:0;font-size:17px">Find friends</h2>
       <div class="input-wrap"><input class="input" id="social-search" placeholder="Search by username" value="${esc(view.query)}" autocomplete="off" autocapitalize="off" spellcheck="false"><span class="icon-btn" style="pointer-events:none">${icon('search', 18)}</span></div>
       <div id="search-results" class="stack-s">${searchResults()}</div>
-      <div class="row-layout small" style="margin-top:2px"><span class="muted ellipsis">Or share your invite link</span><button class="btn xs ghost" data-act="copy-invite">${icon('link', 14)} Copy link</button></div>
+      <div class="row-layout small" style="margin-top:2px"><span class="muted ellipsis">Or send your invite link</span><span class="row-s"><button class="btn xs primary" data-act="share-invite">${icon('share', 14)} Share</button><button class="btn xs ghost" data-act="copy-invite">${icon('link', 14)} Copy</button></span></div>
     </div>`;
   }
 
   function leaderboard() {
     if (!TO.data.friends.length) {
-      return `<div class="empty">${icon('users', 40)}<h3>Keep up with your friends</h3><p>Compare screen-time records and build teams that compete for a week or a season. Add your first friend to get started.</p><button class="btn primary" data-act="copy-invite">${icon('link', 16)} Invite a friend</button><button class="btn quiet sm" data-act="focus-search">Search usernames instead</button></div>`;
+      return `<div class="empty">${icon('users', 40)}<h3>Keep up with your friends</h3><p>Compare screen-time records and build teams that compete for a week or a season. Add your first friend to get started.</p><button class="btn primary" data-act="share-invite">${icon('share', 16)} Invite a friend</button><button class="btn quiet sm" data-act="focus-search">Search usernames instead</button></div>`;
     }
     const rows = St.leaderboard();
     return `<div class="stack-s pad"><div class="row-layout"><span class="eyebrow">Leaderboard · minutes won or lost</span><button class="link-btn tiny" data-act="settings" data-section="privacy">What friends see</button></div>
@@ -277,7 +308,7 @@
           title: isMe ? 'Your profile' : `@${esc(username)}`,
           body: `<div class="row" style="gap:14px">${ui.avatar(isMe ? TO.account.photo : p.photo, 'xl')}<div><div style="font-size:20px;font-weight:800">${isMe ? `@${esc(username)}` : esc(p.name)}</div>${isMe ? '' : `<div class="muted small">@${esc(username)}</div>`}<div class="row-s" style="margin-top:8px">${ui.tierBadge(tierId, true)}${streak ? `<span class="tiny bold yellow row-s">${icon('flame', 12)}${streak}-day streak</span>` : ''}</div></div></div>
             ${showAll ? `<div class="record-big">${stat('Record', rec, share.record)}${stat('Minutes won/lost', `<span class="${net > 0 ? 'green' : net < 0 ? 'red' : ''}">${TO.signed(net)}</span>`, share.minutes)}${stat('Clean streak', `${streak}d`, true)}</div>` : `<div class="note">${icon('lock', 16)}<span>Add @${esc(username)} as a friend to see their stats.</span></div>`}
-            ${!isMe && showAll ? (share.challenges ? `<div class="stack-s"><div class="eyebrow">Active challenges they're sharing</div>${picks.length ? picks.map((k) => `<div class="card tight row-layout"><div><b>${esc(k.label)}</b><div class="small muted">${esc(k.matchup)}</div></div><div style="text-align:right"><div class="display green" style="font-size:18px">${TO.multiplierText(k.price)}</div><div class="tiny faint">${k.pledgeMinutes} min</div></div></div>`).join('') : '<div class="small muted">No active challenges right now.</div>'}</div>` : `<div class="small muted">${esc(p.name)} keeps their active challenges private.</div>`) : ''}
+            ${!isMe && showAll ? (share.challenges ? `<div class="stack-s"><div class="eyebrow">Active challenges they're sharing</div>${picks.length ? picks.map((k) => `<div class="card tight row-layout"><div><b>${esc(k.label)}</b><div class="small muted">${esc(k.matchup)}</div></div><div style="text-align:right"><div class="display green" style="font-size:16px">${TO.multiplierText(k.price)}</div><div class="tiny faint">${k.pledgeMinutes} min</div></div></div>`).join('') : '<div class="small muted">No active challenges right now.</div>'}</div>` : `<div class="small muted">${esc(p.name)} keeps their active challenges private.</div>`) : ''}
             ${isMe ? `<button class="btn ghost sm" data-act="settings" data-section="privacy">${icon('eye', 16)} Choose what friends can see</button>` : ''}`,
           foot: isMe ? '' : actions,
         };
@@ -303,7 +334,7 @@
             <div class="list">${rows.map((r, i) => `<div class="lb-row ${r.me ? 'me' : ''}"><span class="rk">${r.hidden ? '–' : i + 1}</span>${ui.avatar(r.photo)}<span><span class="nm">${r.me ? 'You' : `@${esc(r.username)}`}</span><span class="sub">${r.w}-${r.l} during this team</span></span><span class="val">${r.hidden ? '<span class="faint" style="font-size:14px">Private</span>' : `<span class="${r.net > 0 ? 'green' : r.net < 0 ? 'red' : ''}">${TO.signed(r.net)}</span><small>min</small>`}</span></div>`).join('')}</div>
             <div class="tiny faint">Standings count screen-time challenges placed between the start and end dates. Friend challenges don't count.</div>
             ${invitable.length ? `<div class="field"><span class="label">Invite more friends</span><div class="pick-friends">${invitable.map((u) => { const p = personFor(u); return p ? `<button class="pick-friend" data-act="team-invite" data-id="${t.id}" data-u="${esc(u)}"><img src="${esc(p.photo)}" alt="">${icon('plus', 14)} ${esc(u)}</button>` : ''; }).join('')}</div></div>` : ''}`,
-          foot: `<button class="btn ghost sm" data-act="copy-team" data-id="${t.id}">${icon('link', 16)} Copy team link</button><button class="btn quiet sm" data-act="team-leave" data-id="${t.id}">Leave team</button>`,
+          foot: `<div class="row-s"><button class="btn primary sm grow" data-act="share-team" data-id="${t.id}">${icon('share', 16)} Share team link</button><button class="btn ghost sm" data-act="copy-team" data-id="${t.id}">${icon('link', 16)} Copy</button></div><button class="btn quiet sm" data-act="team-leave" data-id="${t.id}">Leave team</button>`,
         };
       },
     });
@@ -333,7 +364,7 @@
         title: 'Create a team',
         body: `${ui.field({ id: 'team-name', label: 'Team name', value: draft.name, placeholder: 'Sunday Squad', err: draft.errors.name, attrs: 'maxlength="30"' })}
           <div class="row" style="align-items:flex-start">${`<div class="grow">${ui.field({ id: 'team-start', label: 'Start date', type: 'date', value: draft.start, err: draft.errors.start })}</div><div class="grow">${ui.field({ id: 'team-end', label: 'End date', type: 'date', value: draft.end, err: draft.errors.end })}</div>`}</div>
-          <div class="field"><span class="label">Invite friends</span>${TO.data.friends.length ? `<div class="pick-friends">${TO.data.friends.map((u) => { const p = St.person(u); return p ? `<button class="pick-friend ${draft.members.includes(u) ? 'on' : ''}" data-act="team-pick" data-u="${esc(u)}"><img src="${esc(p.photo)}" alt="">${esc(u)}</button>` : ''; }).join('')}</div>` : '<div class="note">No friends yet. You can still create the team and invite people later.</div>'}${draft.errors.members ? `<div class="err">${esc(draft.errors.members)}</div>` : ''}</div>`,
+          <div class="field"><span class="label">Invite friends</span>${TO.data.friends.length ? `<div class="pick-friends">${TO.data.friends.map((u) => { const p = personFor(u); return p ? `<button class="pick-friend ${draft.members.includes(u) ? 'on' : ''}" data-act="team-pick" data-u="${esc(u)}"><img src="${esc(p.photo)}" alt="">${esc(u)}</button>` : ''; }).join('')}</div>` : '<div class="note">No friends yet. You can still create the team and invite people later.</div>'}${draft.errors.members ? `<div class="err">${esc(draft.errors.members)}</div>` : ''}</div>`,
         foot: `<button class="btn primary full" data-act="team-create">Create team</button>`,
       }),
     });
@@ -341,39 +372,76 @@
 
   // ---------- Actions ----------
   const A = TO.actions;
-  A['social-tab'] = (el) => { view.tab = el.dataset.t; TO.app.render(); if (view.tab === 'teams') St.refreshTeams(); };
+  A['social-tab'] = (el) => { view.tab = el.dataset.t; TO.app.render(); if (view.tab === 'teams') St.refreshTeams(); else TO.app.syncSocial(); };
   A.profile = (el) => profile(el.dataset.u);
   A['copy-invite'] = async () => {
-    const ok = await ui.copy(inviteLink());
-    ui.toast({ kind: ok ? 'win' : 'info', title: ok ? 'Invite link copied' : 'Your invite link', msg: ok ? inviteLink() : `Copy this: ${inviteLink()}`, ms: 5000 });
+    const link = await inviteLink();
+    const ok = await ui.copy(link);
+    ui.toast({ kind: ok ? 'win' : 'info', title: ok ? 'Invite link copied' : 'Your invite link', msg: ok ? link : `Copy this: ${link}`, ms: 5000 });
   };
+  A['share-invite'] = async () => shareOrCopy(await inviteLink(), 'Join me on TimeOut', 'Invite link copied');
   A['focus-search'] = () => { const i = document.getElementById('social-search'); if (i) i.focus(); };
-  A['add-friend'] = (el) => {
+  /** Runs a friend action on the server and refreshes, or uses this browser's accounts in offline mode. */
+  async function perform(server, offline) {
+    if (!St.usesServerSocial()) { offline(); rerender(); return true; }
+    try {
+      await server();
+      await TO.app.syncSocial(true);
+      rerender();
+      return true;
+    } catch (e) {
+      ui.toast({ kind: 'loss', title: 'Couldn\'t update your friends', msg: e.message });
+      return false;
+    }
+  }
+  A['add-friend'] = async (el) => {
     const u = el.dataset.u;
+    if (St.usesServerSocial()) {
+      try {
+        const result = await TO.api.sendFriendRequest(u);
+        await TO.app.syncSocial(true);
+        ui.toast({ kind: 'win', title: result === 'friends' ? `You and @${u} are now friends` : `Friend request sent to @${u}` });
+      } catch (e) { ui.toast({ kind: 'loss', title: 'Couldn\'t send that request', msg: e.message }); }
+      rerender();
+      return;
+    }
     const rel = St.relation(u);
     St.sendFriendRequest(u);
     ui.toast({ kind: 'win', title: rel === 'incoming' ? `You and @${u} are now friends` : `Friend request sent to @${u}` });
     rerender();
   };
-  A['cancel-request'] = (el) => { St.cancelFriendRequest(el.dataset.u); rerender(); };
-  A['resend-request'] = (el) => {
+  A['cancel-request'] = (el) => perform(() => TO.api.cancelFriendRequest(el.dataset.u), () => St.cancelFriendRequest(el.dataset.u));
+  A['resend-request'] = async (el) => {
+    const u = el.dataset.u;
+    if (St.usesServerSocial()) {
+      if (await perform(() => TO.api.sendFriendRequest(u))) ui.toast({ kind: 'win', title: `Request sent again to @${u}`, msg: 'You can send another one in an hour.' });
+      return;
+    }
     try {
-      St.resendFriendRequest(el.dataset.u);
-      ui.toast({ kind: 'win', title: `Request sent again to @${el.dataset.u}`, msg: 'You can send another one in an hour.' });
+      St.resendFriendRequest(u);
+      ui.toast({ kind: 'win', title: `Request sent again to @${u}`, msg: 'You can send another one in an hour.' });
     } catch (e) {
       if (!(e instanceof TO.AppError)) throw e;
       ui.toast({ kind: 'warn', title: 'Not yet', msg: e.message });
     }
     rerender();
   };
-  A['accept-fr'] = (el) => { const r = TO.data.requestsIn.find((x) => x.id === el.dataset.id); St.acceptFriendRequest(el.dataset.id); if (r) ui.toast({ kind: 'win', title: `You and @${r.from} are now friends` }); TO.app.render(); };
-  A['decline-fr'] = (el) => { St.declineFriendRequest(el.dataset.id); TO.app.render(); };
+  A['accept-fr'] = async (el) => {
+    const r = TO.data.requestsIn.find((x) => x.id === el.dataset.id);
+    if (!r) return;
+    if (await perform(() => TO.api.answerFriendRequest(r.from, true), () => St.acceptFriendRequest(el.dataset.id))) ui.toast({ kind: 'win', title: `You and @${r.from} are now friends` });
+  };
+  A['decline-fr'] = (el) => {
+    const r = TO.data.requestsIn.find((x) => x.id === el.dataset.id);
+    if (r) perform(() => TO.api.answerFriendRequest(r.from, false), () => St.declineFriendRequest(el.dataset.id));
+  };
   A['remove-friend'] = async (el) => {
     const u = el.dataset.u;
     if (!(await ui.confirm({ title: `Remove @${esc(u)}?`, body: 'You can add them again later.', confirm: 'Remove', danger: true }))) return;
-    St.removeFriend(u);
-    ui.closeSheet('profile');
-    TO.app.render();
+    if (await perform(() => TO.api.removeFriend(u), () => St.removeFriend(u))) {
+      ui.closeSheet('profile');
+      TO.app.render();
+    }
   };
   A['goto-social'] = () => { ui.closeAllSheets(); ui.closeAllPages(); TO.app.go('social'); };
   A.team = (el) => { teamSheet(el.dataset.id); St.refreshTeams(); };
@@ -410,9 +478,15 @@
     const t = TO.data.teams.find((x) => x.id === el.dataset.id);
     if (!t) return;
     St.ensureTeamKey(t);
-    const link = teamLink(t);
+    const link = teamLink(t, await myCode());
     const ok = await ui.copy(link);
     ui.toast({ kind: ok ? 'win' : 'info', title: ok ? 'Team link copied' : 'Team link', msg: ok ? link : `Copy this: ${link}`, ms: 5000 });
+  };
+  A['share-team'] = async (el) => {
+    const t = TO.data.teams.find((x) => x.id === el.dataset.id);
+    if (!t) return;
+    St.ensureTeamKey(t);
+    shareOrCopy(teamLink(t, await myCode()), `Join ${t.name} on TimeOut`, 'Team link copied');
   };
   A['invite-accept'] = () => acceptInvite();
   A['invite-dismiss'] = () => { clearInvite(); ui.closeSheet('invite'); };

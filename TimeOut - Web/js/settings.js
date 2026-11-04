@@ -25,7 +25,7 @@
     wrap.style.cssText = 'position:absolute;inset:0';
     const item = (key, sub) => `<button class="dn" data-act="settings" data-section="${key}">${icon(SECTIONS[key].icon, 20)}${SECTIONS[key].title}${sub ? `<span class="sub">${sub}</span>` : ''}</button>`;
     wrap.innerHTML = `<div class="scrim" data-act="close-drawer"></div><aside class="drawer" aria-label="Menu">
-      <div class="drawer-head">${ui.avatar(TO.account.photo, 'lg')}<div class="grow" style="min-width:0"><b class="ellipsis" style="display:block;font-size:17px">@${esc(TO.account.username)}</b><div class="small muted ellipsis">${esc(TO.account.email)}</div>${TO.account.server ? `<div class="tiny faint ellipsis">Login #${TO.account.server.loginCount} · from the database</div>` : ''}<div style="margin-top:6px">${ui.tierBadge(wl.tier.id, true)}</div></div></div>
+      <div class="drawer-head">${ui.avatar(TO.account.photo, 'lg')}<div class="grow" style="min-width:0"><b class="ellipsis" style="display:block;font-size:17px">@${esc(TO.account.username)}</b><div class="small muted ellipsis">${esc(TO.account.email)}</div><div style="margin-top:6px">${ui.tierBadge(wl.tier.id, true)}</div></div></div>
       <nav>
         ${item('screentime', `${wl.phoneLeft} min left`)}
         ${item('sports')}
@@ -89,7 +89,7 @@
       <div class="stack-s">
         <div class="eyebrow">Controls</div>
         <div class="list">
-          ${listRow('shield', 'Enforce app limits', s.lockedApps.length ? 'Blocks your locked apps when today\'s phone time runs out' : '<span class="yellow">Lock at least one app or site below to turn this on</span>', ui.switchEl('set-enforce', s.enforce && s.lockedApps.length > 0, 'data-change="set-enforce"'), 'for="set-enforce"')}
+          ${listRow('shield', 'Enforce app limits', s.lockedApps.length || s.deviceLockPoints > 0 ? 'Blocks your locked apps when today\'s phone time runs out' : '<span class="yellow">Lock at least one app or site below to turn this on</span>', ui.switchEl('set-enforce', s.enforce && (s.lockedApps.length > 0 || s.deviceLockPoints > 0), 'data-change="set-enforce"'), 'for="set-enforce"')}
           <button class="list-row" data-act="locked-apps"><span class="lr-icon">${icon('lock', 17)}</span><span class="lr-main"><div class="lr-title">Locked apps & sites</div><div class="lr-sub">${s.lockedApps.length} locked · ${St.lockPoints()} lock points</div></span>${icon('chevR', 18, 'chev')}</button>
           <div class="list-row" style="flex-wrap:wrap"><span class="lr-icon">${icon('clock', 17)}</span><span class="lr-main"><div class="lr-title">Minimum phone time per day</div><div class="lr-sub">Losses can't push your limit below this</div></span><div class="seg" style="width:100%;margin-top:4px">${[0, 15, 30].map((v) => `<button class="${s.minLimit === v ? 'on' : ''}" data-act="set-minlimit" data-v="${v}">${v ? `${v} min` : 'None'}</button>`).join('')}</div></div>
           <div class="list-row" style="flex-wrap:wrap"><span class="lr-icon">${icon('bell', 17)}</span><span class="lr-main"><div class="lr-title">Warn me when phone time is low</div><div class="lr-sub">Shows a heads-up before apps lock</div></span><div class="seg" style="width:100%;margin-top:4px">${[5, 10, 15].map((v) => `<button class="${s.lowWarn === v ? 'on' : ''}" data-act="set-lowwarn" data-v="${v}">${v} min left</button>`).join('')}</div></div>
@@ -117,8 +117,8 @@
       </div>
       <div class="card stack-s">
         <div class="row-layout"><div class="row-s">${icon('flame', 20, wl.streak ? 'yellow' : 'faint')}<b style="font-size:16px">${wl.streak ? `${wl.streak}-day clean streak` : 'No clean streak yet'}</b></div>${wl.multiplier > 1 ? `<span class="tag green" style="height:24px;font-size:12px">Wins ${St.fmtMult(wl.multiplier)}</span>` : ''}</div>
-        ${ms ? `<div class="bar"><i style="width:${(wl.streak / ms.days) * 100}%;background:var(--warn)"></i></div><div class="small muted bold">${ms.days - wl.streak} more clean day${ms.days - wl.streak === 1 ? '' : 's'} for ${St.fmtMult(ms.mult)} winnings.</div>` : '<div class="small green bold">Max multiplier reached. Keep it going.</div>'}
-        <div class="small muted">A clean day means limits were on, you stayed under your phone time, and you didn't use an emergency unlock. Winnings get ×1.1 at 3 days and ×1.25 at 7. An emergency unlock resets the streak.</div>
+        ${ms ? `<div class="bar"><i style="width:${(wl.streak / ms.days) * 100}%;background:var(--warn)"></i></div><div class="small muted bold">${ms.days - wl.streak} more clean day${ms.days - wl.streak === 1 ? '' : 's'} for ${St.fmtMult(ms.mult)} earned minutes.</div>` : '<div class="small green bold">Max multiplier reached. Keep it going.</div>'}
+        <div class="small muted">A clean day means limits were on, you stayed under your phone time, and you didn't use an emergency unlock. Earned minutes get ×1.1 at 3 days and ×1.25 at 7. An emergency unlock resets the streak.</div>
       </div>`;
   }
 
@@ -132,7 +132,7 @@
   function notifications() {
     const n = TO.data.settings.notify;
     const row = (k, t, sub, ic) => listRow(ic, t, sub, ui.switchEl(`nt-${k}`, n[k], `data-change="set-notify" data-k="${k}"`), `for="nt-${k}"`);
-    return `<div class="small muted">In the demo these show as banners at the top of the screen.</div><div class="list">
+    return `<div class="small muted">These show as banners at the top of the screen while TimeOut is open. The iPhone app also sends real notifications when it's closed.</div><div class="list">
       ${row('resolved', 'Challenge results', 'When a matchup challenge is completed', 'target')}
       ${row('friends', 'Friend requests', 'When someone adds or accepts you', 'userPlus')}
       ${row('lowTime', 'Low phone time', 'Before your locked apps close', 'phone')}
@@ -145,7 +145,7 @@
     return `<div class="small muted">Friends only see what you turn on here. Anything off shows as "Private" to them.</div><div class="list">
       ${row('record', 'My record', 'Wins and losses', 'chart')}
       ${row('minutes', 'Minutes won or lost', 'Your leaderboard number', 'hourglass')}
-      ${row('challenges', 'My open challenges', 'Picks you currently have open', 'ticket')}
+      ${row('challenges', 'My active challenges', 'Picks you currently have open', 'target')}
     </div>`;
   }
 
@@ -178,7 +178,7 @@
           ${ui.field({ id: 'acct-new', label: 'New password', type: 'password', err: acctErr.newPassword, hint: 'At least 8 characters' })}
           <button class="btn ghost" data-act="acct-pw">Update password</button>
         </div>
-        <div class="stack-s"><button class="btn ghost" data-act="logout">${icon('logout', 18)} Log out</button></div>`;
+        <div class="stack-s"><button class="btn ghost" data-act="logout">${icon('logout', 18)} Log out</button><button class="btn quiet" style="color:var(--loss)" data-act="acct-delete">Delete account</button></div>`;
     }
     return `<div class="photo-pick"><label class="ph" for="acct-photo" style="cursor:pointer"><img src="${esc(a.photo)}" alt="Profile photo"><span class="cam">${icon('camera', 15)}</span></label><div><b>Profile photo</b><div class="small muted">Tap the photo to change it.</div></div><input type="file" id="acct-photo" accept="image/*" class="sr" data-change="acct-photo"></div>
       <div class="card stack">
@@ -244,7 +244,7 @@
         const group = (kind) => St.LOCKABLE.filter((x) => x.kind === kind).map((x) => `<button class="list-row" data-act="lock-toggle" data-id="${x.id}"><span class="lr-icon" style="background:${x.color}22;color:${x.color}">${icon(kind === 'Category' ? 'grid' : kind === 'Website' ? 'globe' : 'phone', 17)}</span><span class="lr-main"><div class="lr-title">${esc(x.name)}</div><div class="lr-sub">${x.note ? `${esc(x.note)} · ` : ''}${x.pts} pt${x.pts === 1 ? '' : 's'}</div></span><span class="checkbox ${lockDraft.includes(x.id) ? 'on' : ''}">${icon('check', 15)}</span></button>`).join('');
         return {
           title: 'Locked apps & sites',
-          body: `<div class="small muted">These are the apps TimeOut blocks when your phone time runs out. The more you lock, the higher your tier.</div>
+          body: `<div class="small muted">These are the apps TimeOut blocks when your phone time runs out. The more you lock, the higher your tier. A browser can't block apps, so the real block happens in the TimeOut iPhone app.</div>
             <div class="card tight row-layout"><span class="bold">${pts} lock points</span>${ui.tierBadge(t.id)}</div>
             <div class="eyebrow">Categories · 3 pts each</div><div class="list">${group('Category')}</div>
             <div class="eyebrow">Apps · 1 pt each</div><div class="list">${group('App')}</div>
@@ -344,7 +344,17 @@
     refresh();
   };
   A['acct-delete'] = async () => {
-    if (!(await ui.confirm({ title: 'Delete your account?', body: 'This removes your account, challenges and friends from this device. It can\'t be undone.', confirm: 'Delete account', danger: true }))) return;
+    const server = !!TO.account.server;
+    const body = server
+      ? 'This permanently deletes your TimeOut account, challenges, wallet and settings from TimeOut\'s servers and this device, and takes you off your teams. It can\'t be undone.'
+      : 'This removes your account, challenges and friends from this device. It can\'t be undone.';
+    if (!(await ui.confirm({ title: 'Delete your account?', body, confirm: 'Delete account', danger: true }))) return;
+    if (server) {
+      try { await TO.api.deleteAccount(); } catch (e) {
+        ui.toast({ kind: 'loss', title: 'Couldn\'t delete your account', msg: e.message });
+        return;
+      }
+    }
     St.deleteAccount();
     TO.comboGoalBuilder.clear();
     TO.app.boot();
@@ -354,7 +364,7 @@
   C['set-enforce'] = async (el) => {
     const want = el.checked;
     el.checked = !want;
-    if (want && !TO.data.settings.lockedApps.length) {
+    if (want && !TO.data.settings.lockedApps.length && !(TO.data.settings.deviceLockPoints > 0)) {
       const pick = await ui.confirm({ title: 'Lock an app first', body: 'App limits need at least one locked app, site or category to block. Choose what TimeOut locks when your phone time runs out, and limits turn on with it.', confirm: 'Choose apps', cancel: 'Not now' });
       if (pick) lockedAppsSheet();
       return;

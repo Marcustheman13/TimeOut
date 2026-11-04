@@ -15,7 +15,7 @@ Screen Time APIs do nothing in the Simulator.
 |---|---|---|
 | `TimeOut` | `com.marcuswilliams.staketime` | The app |
 | `TimeOutMonitor` | `com.marcuswilliams.staketime.ScreenTimeMonitor` | Device Activity Monitor extension |
-| `TimeOutShield` | `com.marcuswilliams.staketime.PledgeTimeShield` | Custom lock screen |
+| `TimeOutShield` | `com.marcuswilliams.staketime.StakeTimeShield` | Custom lock screen |
 
 The bundle IDs keep their original names on purpose, so the Family Controls entitlement and App Group
 (`group.marcuswilliams.staketime`) stay valid. All three targets have the **Family Controls** and **App Groups**
@@ -24,13 +24,12 @@ capabilities in their `.entitlements` files.
 ## 2. Run it
 
 1. Plug in your iPhone, pick it as the run destination, press **Run**.
-2. Lock at least one app in **Menu → Screen time → Locked apps & sites** (this is the same list as the web
-   demo and decides your tier). **Enforce app limits** turns on with it.
-3. **Menu → Screen time → Block apps on this iPhone** → **Allow Screen Time** → approve with Face ID/passcode.
-4. Tap **Choose apps to block** and pick the real apps or categories (e.g. Social, Games, Entertainment).
+2. Tap the **Set up Screen Time** banner at the top of Home (or **Menu → Screen time → Locked apps & sites**).
+3. Tap **Allow Screen Time** and approve with Face ID/passcode. Apple's app picker opens right after.
+4. Pick the real apps or categories (e.g. Social, Games, Entertainment). Limits turn on by themselves and the banner goes away.
 
 From then on the apps you picked are blocked when today's phone time runs out. Usage on them counts toward
-"Phone time left" on Home.
+"Phone time left" on Home, and your picks set your tier: apps and sites are 1 point, whole categories 3.
 
 ## 3. Test it
 
@@ -52,7 +51,9 @@ The app writes both today's and tomorrow's limit on every refresh, so at midnigh
 switch to the new limit even if the app hasn't been opened.
 
 Removing apps from the block list waits until midnight while limits are running, so a limit can't be
-dodged halfway through the day. Adding apps blocks them right away.
+dodged halfway through the day. Adding apps blocks them right away. Limits also can't be switched off while
+they are blocking apps: that takes an emergency unlock, or waiting for midnight. Logging out or deleting the
+account lifts every block and clears the app list.
 
 Background resolution is best-effort: iOS decides when to wake the app (usually within an hour or two,
 less often in Low Power Mode, and never if the user swipes TimeOut away in the app switcher or turns off

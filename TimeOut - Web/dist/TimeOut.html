@@ -385,6 +385,14 @@ label.list-row { cursor: pointer; }
 .mini-challenge .t { font-weight: 800; font-size: 14px; }
 
 .filterbar { position: sticky; top: 0; z-index: 4; background: var(--bg); padding: 10px 0; }
+.live-tile { margin: 10px 16px 0; height: 30px; padding: 0 10px; display: inline-flex; align-items: center; gap: 6px; border: 1px solid rgba(255, 59, 74, 0.55); border-radius: 8px; background: rgba(255, 59, 74, 0.13); color: var(--live); font-size: 13px; font-weight: 800; }
+.live-tile i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.live-tile .n { font-size: 12px; opacity: 0.8; font-variant-numeric: tabular-nums; }
+.live-tile.on { background: var(--live); border-color: transparent; color: #fff; }
+.setup-banner { margin: 4px 16px 0; padding: 14px; display: grid; gap: 10px; border: 1px solid rgba(34, 214, 110, 0.4); border-radius: 16px; background: linear-gradient(135deg, rgba(34, 214, 110, 0.17), rgba(34, 214, 110, 0.06)); }
+.setup-banner b { display: block; font-size: 16px; font-weight: 800; }
+.setup-banner p { margin: 2px 0 0; font-size: 13px; color: var(--text-2); }
+.setup-banner .sb-icon { width: 38px; height: 38px; flex: none; display: grid; place-items: center; border-radius: 11px; background: var(--accent); color: var(--accent-ink); }
 .cfb-select-label { display: block; margin: 9px 16px 4px; color: var(--muted); font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; }
 .cfb-select { display: block; width: calc(100% - 32px); height: 38px; margin: 0 16px; padding: 0 10px; color: var(--text); background: var(--surface); border: 1px solid var(--stroke); border-radius: 10px; font: inherit; font-weight: 700; }
 .league-head { display: flex; align-items: center; gap: 8px; padding: 6px 16px 0; }
@@ -2158,9 +2166,9 @@ window.TO = window.TO || {};
   ];
   const tierPerks = (t) => {
     const list = [];
-    if (t.bonus) list.push(`+${t.bonus} challenge min a day`);
-    if (t.boosts) list.push(`${t.boosts} point-value boost${t.boosts === 1 ? '' : 's'} a day (+10% winnings)`);
-    if (t.insurance) list.push('Combo Goal insurance once a week');
+    if (t.bonus) list.push(`+${t.bonus} pledge min a day`);
+    if (t.boosts) list.push(`${t.boosts} allowance boost${t.boosts === 1 ? '' : 's'} a day (+10% earned minutes)`);
+    if (t.insurance) list.push('Miss-one protection once a week');
     return list.length ? list : ['Lock apps to earn perks'];
   };
   const tierById = (id) => TIERS.find((t) => t.id === id) || TIERS[0];
@@ -2280,7 +2288,16 @@ window.TO = window.TO || {};
         for (const challenge of cached.challenges || []) {
           const key = challenge.supabaseId ? `db:${challenge.supabaseId}` : `id:${challenge.id}`;
           const saved = mergedChallenges.get(key);
-          mergedChallenges.set(key, saved ? Object.assign({}, saved, challenge) : challenge);
+          const combined = saved ? Object.assign({}, saved, challenge) : challenge;
+          // Another device already resolved it: the server's result beats a local copy that is still open.
+          if (saved && challenge.status === 'open' && saved.status !== 'open') {
+            Object.assign(combined, { status: saved.status, reward: saved.reward, resolvedAt: saved.resolvedAt, supabaseSynced: true });
+            combined.picks = (challenge.picks || []).map((pick) => {
+              const match = (saved.picks || []).find((p) => p.gameId === pick.gameId && p.market === pick.market && p.side === pick.side);
+              return match ? { ...pick, result: match.result } : pick;
+            });
+          }
+          mergedChallenges.set(key, combined);
         }
         const hasUnsyncedChallenges = (cached.challenges || []).some((challenge) => challenge.kind === 'sports' && !challenge.supabaseId);
         const remoteHasPreferences = remoteState.appPreferencesReady && Object.keys(remoteState.settings || {}).length > 1;
@@ -2293,7 +2310,10 @@ window.TO = window.TO || {};
         ].filter((league) => S.REAL_LEAGUES.includes(league));
         if (savedSports.length) preferences.sports = [...new Set(savedSports)];
         remoteState = Object.assign({}, cached, remoteState, { challenges: [...mergedChallenges.values()], settings: preferences });
-        if (hasUnsyncedChallenges || !remoteState.wallet) remoteState.wallet = cached.wallet;
+        // The new day starts on the device. The server's wallet only moves to a new day when a challenge is
+        // placed, so a lagging server day must never pull this wallet back: that would close the same day
+        // again and bump the streak on every sync.
+        if (hasUnsyncedChallenges || !remoteState.wallet || remoteState.wallet.dayKey !== TO.dayKey()) remoteState.wallet = cached.wallet;
         else if (cached.wallet) {
           // Supabase currently owns the balance fields, while clean-day history is local-only.
           // Keep those local streak and usage ledgers when refreshing the server wallet.
@@ -2323,6 +2343,10 @@ window.TO = window.TO || {};
             remoteState.wallet.bonusGranted = Math.max(localBonus, serverBonus);
           }
         }
+      }
+      else if (remoteState.wallet && remoteState.wallet.dayKey !== TO.dayKey()) {
+        // A wallet from an earlier day has nothing to say about today's balance.
+        Object.assign(remoteState.wallet, { dayKey: TO.dayKey(), balance: RULES.daily, lockedOut: false, bonusDay: null, bonusGranted: 0 });
       }
       delete remoteState.appPreferencesReady;
       TO.store.set(dataKey(id), remoteState);
@@ -2428,12 +2452,17 @@ window.TO = window.TO || {};
         lowWarn: 10,
         notify: { resolved: true, friends: true, lowTime: true },
         privacy: { record: true, minutes: true, challenges: true },
+        deviceLockPoints: 0, // lock points from real Screen Time picks in the iPhone app
       },
       onboarded: false,
       friends: [],
       requestsIn: [],
       requestsOut: [],
       teams: [],
+      feedLive: false, // the Home "Live games only" switch; it works with whichever sport is picked
+      socialProfiles: {}, // friends' shared stats and team results, cached from the server
+      teamResults: {},
+      socialSynced: false,
     };
   }
 
@@ -2473,6 +2502,13 @@ window.TO = window.TO || {};
     return d;
   }
 
+  /** The day a result counts for. The next day's limit moves, so a challenge on a later game pays when that game ends.
+   *  To-do combos belong to the day they were due. */
+  function creditDay(challenge) {
+    if (challenge.kind !== 'todo' && challenge.resolvedAt) return TO.dayKey(Number(challenge.resolvedAt));
+    return challenge.dayKey || (Number.isFinite(Number(challenge.placedAt)) ? TO.dayKey(Number(challenge.placedAt)) : null);
+  }
+
   function migrate(d) {
     renameSavedTerms(d);
     const f = freshData(TO.now());
@@ -2490,12 +2526,14 @@ window.TO = window.TO || {};
     const resolvedNetByDay = {};
     for (const challenge of d.challenges || []) {
       if (challenge.status === 'open') continue;
-      const day = challenge.dayKey || (Number.isFinite(Number(challenge.placedAt)) ? TO.dayKey(Number(challenge.placedAt)) : null);
+      const day = creditDay(challenge);
       if (!day) continue;
       resolvedNetByDay[day] = (resolvedNetByDay[day] || 0) + (Number(challenge.reward || 0) - Number(challenge.pledgeMinutes || 0));
     }
-    Object.assign(d.wallet.netByDay, resolvedNetByDay);
-    if (!d.settings.lockedApps.length) d.settings.enforce = false; // nothing to block, so limits can't be on
+    d.wallet.netByDay = resolvedNetByDay;
+    if (!d.settings.lockedApps.length && !(d.settings.deviceLockPoints > 0)) d.settings.enforce = false; // nothing to block, so limits can't be on
+    // "Live" used to be one of the sport chips.
+    if (d.feedFilter === 'live') { d.feedFilter = 'all'; d.feedLive = true; }
     delete d.challengesIn;
     if (d.settings.notify) delete d.settings.notify.challenges;
     return d;
@@ -2514,7 +2552,8 @@ window.TO = window.TO || {};
 
   function lockPoints(d = TO.data) {
     if (!d.settings.enforce) return 0;
-    return d.settings.lockedApps.reduce((sum, id) => sum + ((LOCKABLE.find((x) => x.id === id) || {}).pts || 0), 0);
+    const listed = d.settings.lockedApps.reduce((sum, id) => sum + ((LOCKABLE.find((x) => x.id === id) || {}).pts || 0), 0);
+    return Math.max(listed, Number(d.settings.deviceLockPoints) || 0); // the higher of this list and the real picks on an iPhone
   }
   const tier = (d = TO.data) => tierForPoints(lockPoints(d));
 
@@ -2638,7 +2677,7 @@ window.TO = window.TO || {};
     const hadLocks = TO.data.settings.lockedApps.length > 0;
     o[parts[0]] = value;
     // App limits need something to block: they switch off with the last locked app and back on with the first.
-    if (path === 'lockedApps') TO.data.settings.enforce = value.length > 0 && (TO.data.settings.enforce || !hadLocks);
+    if (path === 'lockedApps') TO.data.settings.enforce = (value.length > 0 && (TO.data.settings.enforce || !hadLocks)) || (TO.data.settings.enforce && TO.data.settings.deviceLockPoints > 0);
     if (path === 'lockedApps' || path === 'enforce') grantTierBonus();
     save();
   }
@@ -2683,7 +2722,7 @@ window.TO = window.TO || {};
     });
     const matchupIds = built.map((pick) => pick.gameId).filter(Boolean);
     if (new Set(matchupIds).size !== matchupIds.length) throw new AppError('duplicate_matchup', 'Choose only one target from each matchup.');
-    if (changed.length) throw new AppError('value_changed', 'The point values changed. Review the new point value and confirm again.', { changed });
+    if (changed.length) throw new AppError('value_changed', 'A challenge target changed. Review it and confirm again.', { changed });
     if (built.some((pick) => pick.kind === 'race') && built.length !== 1) {
       throw new AppError('race_single', 'Virtual race picks can only be placed as a single challenge.');
     }
@@ -2791,7 +2830,8 @@ window.TO = window.TO || {};
     challenge.insurancePaid = !!res.insurancePaid;
     challenge.resolvedAt = now;
     const w = W();
-    w.netByDay[challenge.dayKey] = (w.netByDay[challenge.dayKey] || 0) + (challenge.reward - challenge.pledgeMinutes);
+    const day = creditDay(challenge);
+    w.netByDay[day] = (w.netByDay[day] || 0) + (challenge.reward - challenge.pledgeMinutes);
     // Voids and pushes return the pledge; wins and losses only affect the next day's limit.
     if (challenge.dayKey === w.dayKey && (challenge.status === 'void' || challenge.status === 'tie')) w.balance += challenge.reward;
     return challenge;
@@ -2852,7 +2892,14 @@ window.TO = window.TO || {};
   const myStats = () => statsFor(TO.data.challenges);
 
   // ---------- People & friends ----------
+  // Real accounts get real people only. Demo profiles are for offline mode, where there is no server to find anyone on.
+  const usesServerSocial = () => !!(TO.account && TO.account.server);
+
   function person(username) {
+    if (usesServerSocial()) {
+      const p = (TO.data.socialProfiles || {})[String(username).toLowerCase()];
+      return p ? { ...p, photo: p.photo || TO.initialsAvatar(p.username), remote: true } : null;
+    }
     const fake = PEOPLE.find((p) => p.username.toLowerCase() === String(username).toLowerCase());
     if (fake) return fake;
     const acc = findAccountByUsername(username);
@@ -2866,6 +2913,7 @@ window.TO = window.TO || {};
   /** Open picks a friend has shared (fake friends pick from the live board). */
   function sharedPicks(p, now = TO.now()) {
     if (!p || !p.share.challenges) return [];
+    if (p.remote) return p.picks || [];
     if (p.local) return (p.openChallenges || []).slice(0, 3).map((b) => ({ label: b.picks.map((l) => l.label).join(' + '), matchup: b.picks.length > 1 ? `${b.picks.length}-pick Combo Goal` : b.picks[0].matchup, price: b.american, pledgeMinutes: b.pledgeMinutes }));
     const games = S.board(now).filter((g) => (g.state === 'live' || g.state === 'scheduled') && !g.simulated);
     const rand = TO.rng(`${p.username}-${Math.floor(now / S.SLOT)}`);
@@ -2884,7 +2932,7 @@ window.TO = window.TO || {};
 
   function searchPeople(query) {
     const q = String(query || '').trim().toLowerCase().replace(/^@/, '');
-    if (!q) return [];
+    if (!q || usesServerSocial()) return [];
     const me = TO.account.username.toLowerCase();
     const locals = Object.values(accounts()).filter((a) => a.username.toLowerCase() !== me).map((a) => ({ username: a.username, name: a.username, photo: a.photo, local: true }));
     return [...PEOPLE, ...locals].filter((p) => {
@@ -2967,6 +3015,31 @@ window.TO = window.TO || {};
   const RESEND_WAIT = TO.HOUR;
   const resendWait = (req, now = TO.now()) => Math.max(0, req.at + RESEND_WAIT - now);
 
+  /** Replaces this browser's friends and requests with what the server says, and reports what's new since last time. */
+  function applySocial(state) {
+    const d = TO.data;
+    if (!d || !usesServerSocial() || !state) return { newRequests: [], newFriends: [] };
+    const friendsBefore = new Set(d.friends.map((u) => String(u).toLowerCase()));
+    const requestsBefore = new Set(d.requestsIn.map((r) => String(r.from).toLowerCase()));
+    // The first sync isn't news: it just brings the account up to date.
+    const changes = d.socialSynced ? {
+      newRequests: state.requestsIn.map((r) => r.username).filter((u) => !requestsBefore.has(u.toLowerCase())),
+      newFriends: state.friends.map((f) => f.username).filter((u) => !friendsBefore.has(u.toLowerCase())),
+    } : { newRequests: [], newFriends: [] };
+    d.friends = state.friends.map((f) => f.username);
+    d.socialProfiles = {};
+    for (const f of state.friends) d.socialProfiles[f.username.toLowerCase()] = f;
+    for (const r of [...state.requestsIn, ...state.requestsOut]) {
+      const key = r.username.toLowerCase();
+      if (!d.socialProfiles[key]) d.socialProfiles[key] = { username: r.username, name: r.name, photo: r.photo, w: 0, l: 0, net: 0, tier: 'rookie', streak: 0, share: { record: false, minutes: false, challenges: false }, picks: [] };
+    }
+    d.requestsIn = state.requestsIn.map((r) => ({ id: r.id, from: r.username, at: r.at }));
+    d.requestsOut = state.requestsOut.map((r) => ({ id: r.id, to: r.username, at: r.at }));
+    d.socialSynced = true;
+    saveQuiet();
+    return changes;
+  }
+
   function resendFriendRequest(username, now = TO.now()) {
     const req = TO.data.requestsOut.find((r) => r.to === username);
     if (!req) return false;
@@ -3020,6 +3093,8 @@ window.TO = window.TO || {};
     const lastDay = TO.dayKey(Math.min(now, end - 1));
     return t.members.map((u) => {
       const mine = sameUser(u, TO.account.username);
+      const result = !mine && ((TO.data.teamResults || {})[t.id] || []).find((r) => sameUser(r.username, u));
+      if (result) return { username: u, me: false, net: result.net, w: result.w, l: result.l, hidden: !!result.hidden, photo: result.photo || TO.initialsAvatar(u), tier: result.tier || 'rookie' };
       const p = mine ? null : person(u);
       // A username from search that isn't a demo profile or an account on this device
       // still belongs on the roster. Don't borrow the current user's record for them.
@@ -3263,12 +3338,19 @@ window.TO = window.TO || {};
         const kept = TO.data.teams.filter((t) => t.shareKey || !t.remote || seen.has(t.id));
         if (kept.length !== TO.data.teams.length) { TO.data.teams = kept; changed = true; }
       }
-      if (changed) {
-        saveQuiet();
-        if (TO.app) TO.app.render();
-        if (TO.ui && TO.ui.sheetOpen && TO.ui.sheetOpen('team')) TO.ui.refreshSheet('team');
-      }
-      return changed;
+      // Real results for everyone on each roster, for the team's dates.
+      const standings = TO.data && TO.api.teamStandings ? TO.data.teams.filter((t) => t.shareKey && t.remote).map(async (team) => {
+        const rows = await TO.api.teamStandings(team.id, team.shareKey);
+        if (rows && TO.data) { TO.data.teamResults[team.id] = rows; changed = true; }
+      }) : [];
+      return Promise.all(standings).then(() => {
+        if (changed) {
+          saveQuiet();
+          if (TO.app) TO.app.render();
+          if (TO.ui && TO.ui.sheetOpen && TO.ui.sheetOpen('team')) TO.ui.refreshSheet('team');
+        }
+        return changed;
+      });
     }).catch(() => false);
   }
 
@@ -3408,7 +3490,7 @@ window.TO = window.TO || {};
     submitPledge, placeTodoCombo, completeTodo, resolve, outcome, combine, pickFromSelection,
     myStats, statsFor, person, sharedPicks, searchPeople, relation,
     sendFriendRequest, addFriend, acceptFriendRequest, declineFriendRequest, cancelFriendRequest, resendFriendRequest, resendWait, removeFriend,
-    socialTick,
+    socialTick, usesServerSocial, applySocial,
     teamStatus, teamStandings, createTeam, leaveTeam, inviteToTeam, joinTeam, refreshTeams, ensureTeamKey, sameUser, leaderboard,
     ensureDemoAccount, loginDemo, resetMyData, seedDemoData,
   };
@@ -3677,10 +3759,14 @@ window.TO = window.TO || {};
       if (challenge.status !== 'open') continue;
       for (const pick of challenge.picks || []) {
         if (pick.result !== 'pending' || !pick.gameId || !LEAGUES[pick.league] || byId(pick.gameId)) continue;
-        const day = TO.dayKey(challenge.placedAt);
-        const key = `${pick.league}|${day}`;
-        if (!wantedByGroup.has(key)) wantedByGroup.set(key, { league: pick.league, day, ids: new Set() });
-        wantedByGroup.get(key).ids.add(String(pick.gameId));
+        // A challenge can be on tomorrow's game, so look on the game's own day when it's known.
+        // Picks loaded from the server don't carry a start time, so check the next day for those too.
+        const placedDay = TO.dayKey(challenge.placedAt);
+        for (const day of pick.start ? [TO.dayKey(pick.start)] : [placedDay, TO.addDays(placedDay, 1)]) {
+          const key = `${pick.league}|${day}`;
+          if (!wantedByGroup.has(key)) wantedByGroup.set(key, { league: pick.league, day, ids: new Set() });
+          wantedByGroup.get(key).ids.add(String(pick.gameId));
+        }
       }
     }
     const jobs = [...wantedByGroup.values()];
@@ -4171,6 +4257,17 @@ window.TIMEOUT_SUPABASE = {
     const state = await api.loadState();
     return { user, state };
   };
+  /** A readable pick from what the server stores, for challenges placed on another device. */
+  function pickLabel(market, side, line, matchup) {
+    const teams = String(matchup || '').split(' @ ');
+    const team = side === 'away' ? teams[0] : side === 'home' && teams.length > 1 ? teams[teams.length - 1] : null;
+    if (market === 'winner') return team ? `${team} to win` : 'Draw';
+    if (market === 'margin') return `${team || ''} ${TO.pointValue.fmtLine(Number(line || 0))}`;
+    if (market === 'total') return `Combined score ${side === 'higher' ? 'above' : 'below'} ${TO.pointValue.fmtLine(Number(line || 0), false)}`;
+    return matchup || '';
+  }
+  const marketTitle = (market) => ({ winner: 'Winner', margin: 'Margin', total: 'Total', race: 'Race winner' }[market] || market);
+
   api.me = async () => {
     await ensureFreshSession();
     const res = await fetch(`${config.url}/auth/v1/user`, { headers: authHeaders(true) });
@@ -4212,13 +4309,14 @@ window.TIMEOUT_SUPABASE = {
       supportsAppPreferences = false;
       settingsRows = await rest(`user_settings?select=followed_sports,timezone,notifications_enabled&user_id=eq.${safeId}&limit=1`);
     }
-    const status = { pending: 'open', won: 'won', lost: 'lost', pushed: 'tie', voided: 'void', cancelled: 'void' };
-    const result = { pending: 'pending', win: 'won', loss: 'lost', push: 'tie', void: 'void' };
+    // "pushed" and "push" are the previous database labels.
+    const status = { pending: 'open', won: 'won', lost: 'lost', tied: 'tie', pushed: 'tie', voided: 'void', cancelled: 'void' };
+    const result = { pending: 'pending', win: 'won', loss: 'lost', tie: 'tie', push: 'tie', void: 'void' };
     const challenges = challengeRows.map((row) => {
       const picks = (row.challenge_picks || []).map((pick) => ({
         selId: `${pick.espn_event_id}|${pick.market}|${pick.side}`, kind: 'game', gameId: pick.espn_event_id, league: pick.league, market: pick.market, side: pick.side,
-        line: pick.line == null ? null : Number(pick.line), price: Number(pick.accepted_value), label: `${pick.market} · ${pick.side}${pick.line == null ? '' : ` ${pick.line}`}`,
-        marketLabel: pick.market, matchup: pick.matchup, result: result[pick.result] || 'pending', final: null,
+        line: pick.line == null ? null : Number(pick.line), price: Number(pick.accepted_value), label: pickLabel(pick.market, pick.side, pick.line, pick.matchup),
+        marketLabel: marketTitle(pick.market), matchup: pick.matchup, result: result[pick.result] || 'pending', final: null,
       }));
       const decimal = Number(row.combined_value);
       const placedAt = Date.parse(row.placed_at);
@@ -4252,6 +4350,9 @@ window.TIMEOUT_SUPABASE = {
       ...(settings ? { settings: remotePreferences, appPreferencesReady: supportsAppPreferences } : {}),
     };
   };
+  let syncedStreak = null;
+  let inviteCode = null;
+
   api.queueStateSave = (data) => {
     if (!api.configured || !token()) return;
     pendingState = JSON.parse(JSON.stringify(data));
@@ -4372,6 +4473,12 @@ window.TIMEOUT_SUPABASE = {
           } finally { settling.delete(challenge.supabaseId); }
         }
       }
+      // Friends see this streak. The app works it out on the device, so the server needs telling.
+      const streak = Number(data.wallet?.streakDays || 0);
+      if (syncedStreak !== streak) {
+        await rest('rpc/timeout_set_streak', { method: 'POST', signal: AbortSignal.timeout(4000), body: JSON.stringify({ p_streak: streak }) }).catch(() => {});
+        syncedStreak = streak;
+      }
       lastSaveAt = Date.now();
       api.syncError = null;
     } catch (e) {
@@ -4423,6 +4530,91 @@ window.TIMEOUT_SUPABASE = {
     }
     api.clearToken();
     lastSettingsSnapshot = '';
+    inviteCode = null;
+    syncedStreak = null;
+  };
+
+  /** Permanently deletes the signed-in account and its data (server/db/supabase-delete-account.sql). */
+  api.deleteAccount = async () => {
+    try {
+      await rest('rpc/timeout_delete_account', { method: 'POST', body: '{}' });
+    } catch (e) {
+      if (/timeout_delete_account/i.test(e.message || '') && /schema cache|function.*(not found|does not exist|could not find)/i.test(e.message || '')) {
+        throw new TO.AppError('not_set_up', 'Account deletion isn\'t set up on the server yet. Email the TimeOut team to delete your account.');
+      }
+      throw e;
+    }
+    pendingState = null;
+    api.clearToken();
+    lastSettingsSnapshot = '';
+    inviteCode = null;
+  };
+
+  /** Emails a password-reset link. Opening it signs the person in here, where Account can set a new password. */
+  api.sendPasswordReset = async (email) => {
+    const res = await fetch(`${config.url}/auth/v1/recover?redirect_to=${encodeURIComponent(`${location.origin}${location.pathname}`)}`, {
+      method: 'POST', headers: authHeaders(false), body: JSON.stringify({ email: String(email).trim() }),
+    });
+    await parseResponse(res);
+  };
+
+  // ---------- Friends ----------
+  /** Friends and requests from the server. Null when it can't be reached or doesn't have the friends update yet. */
+  api.socialState = async () => {
+    if (!api.configured || !token()) return null;
+    try {
+      const json = await rest('rpc/timeout_social_state', { method: 'POST', signal: AbortSignal.timeout(6000), body: '{}' });
+      if (!json || !Array.isArray(json.friends)) return null;
+      const request = (r) => ({ id: String(r.id), username: r.username, name: r.name || r.username, photo: r.photo || null, at: Date.parse(r.at) || TO.now() });
+      return {
+        friends: json.friends.filter((f) => f && f.username).map((f) => ({
+          username: f.username, name: f.name || f.username, photo: f.photo || null, w: Number(f.w || 0), l: Number(f.l || 0), net: Number(f.net || 0),
+          tier: f.tier || 'rookie', streak: Number(f.streak || 0), share: f.share || { record: false, minutes: false, challenges: false },
+          picks: (f.picks || []).map((c) => {
+            const legs = c.picks || [];
+            return { label: legs.map((k) => pickLabel(k.market, k.side, k.line, k.matchup)).join(' + '), matchup: legs.length > 1 ? `${legs.length}-pick Combo Goal` : (legs[0]?.matchup || ''),
+              price: TO.pointValue.fromDecimal(Number(c.combinedValue || 1)), pledgeMinutes: Number(c.pledgeMinutes || 0) };
+          }),
+        })),
+        requestsIn: (json.requestsIn || []).map(request),
+        requestsOut: (json.requestsOut || []).map(request),
+      };
+    } catch (e) { return null; }
+  };
+
+  /** Runs one friends function. Turns "the database doesn't have it yet" into a sentence people can act on. */
+  async function friendCall(name, body) {
+    try {
+      return await rest(`rpc/${name}`, { method: 'POST', signal: AbortSignal.timeout(8000), body: JSON.stringify(body) });
+    } catch (e) {
+      if (new RegExp(name, 'i').test(e.message || '') && /schema cache|function.*(not found|does not exist|could not find)/i.test(e.message || '')) {
+        throw new TO.AppError('not_set_up', 'Friends aren\'t set up on the server yet. Run server/db/apply-all-november-2026.sql in Supabase.');
+      }
+      throw e;
+    }
+  }
+  /** 'requested', or 'friends' when they had already asked you. */
+  api.sendFriendRequest = (username) => friendCall('timeout_send_friend_request', { p_username: username });
+  api.answerFriendRequest = (username, accept) => friendCall('timeout_answer_friend_request', { p_username: username, p_accept: accept });
+  api.cancelFriendRequest = (username) => friendCall('timeout_cancel_friend_request', { p_username: username });
+  api.removeFriend = (username) => friendCall('timeout_remove_friend', { p_username: username });
+  /** 'friends', 'requested' (no valid code, so it is an ordinary request) or 'self'. */
+  api.acceptFriendInvite = (username, code) => friendCall('timeout_accept_friend_invite', { p_username: username, p_code: code || '' });
+  /** The secret for this account's invite links. Null when the server can't provide one; the link then sends a request. */
+  api.myInviteCode = async () => {
+    if (inviteCode) return inviteCode;
+    if (!api.configured || !token()) return null;
+    try {
+      inviteCode = await rest('rpc/timeout_my_invite_code', { method: 'POST', signal: AbortSignal.timeout(4000), body: '{}' });
+      return typeof inviteCode === 'string' ? inviteCode : null;
+    } catch (e) { return null; }
+  };
+  api.teamStandings = async (id, key) => {
+    if (!api.configured || !token()) return null;
+    try {
+      const rows = await rest('rpc/timeout_team_standings', { method: 'POST', signal: AbortSignal.timeout(4000), body: JSON.stringify({ p_id: id, p_key: key }) });
+      return Array.isArray(rows) ? rows.filter((r) => r && r.username) : null;
+    } catch (e) { return null; }
   };
 
   /** Usernames that match a query, from Supabase profiles (when signed in) and this app's API.
@@ -4442,10 +4634,16 @@ window.TIMEOUT_SUPABASE = {
     if (api.configured && token()) {
       tasks.push((async () => {
         try {
-          const like = safe.replace(/[_\\*]/g, (ch) => `\\${ch}`);
-          const rows = await rest(`profiles?select=username,display_name,avatar_url&username=ilike.*${encodeURIComponent(like)}*&limit=8`, { signal: AbortSignal.timeout(4000) });
-          if (Array.isArray(rows)) for (const r of rows) add(r.username, r.display_name, r.avatar_url);
-        } catch (e) { /* RLS or a slow network: local results still show */ }
+          const rows = await rest('rpc/timeout_search_users', { method: 'POST', signal: AbortSignal.timeout(4000), body: JSON.stringify({ p_query: safe }) });
+          if (Array.isArray(rows)) for (const r of rows) add(r.username, r.name, r.photo);
+        } catch (searchError) {
+          // A database without the friends update: read profiles directly.
+          try {
+            const like = safe.replace(/[_\\*]/g, (ch) => `\\${ch}`);
+            const rows = await rest(`profiles?select=username,display_name,avatar_url&username=ilike.*${encodeURIComponent(like)}*&limit=8`, { signal: AbortSignal.timeout(4000) });
+            if (Array.isArray(rows)) for (const r of rows) add(r.username, r.display_name, r.avatar_url);
+          } catch (e) { /* RLS or a slow network: local results still show */ }
+        }
       })());
     }
     tasks.push((async () => {
@@ -4735,7 +4933,7 @@ window.TIMEOUT_SUPABASE = {
   /** For actions that need a connection (placing pledges). False, with a toast, when offline. */
   TO.net.guard = () => {
     if (TO.net.online()) return true;
-    ui.toast({ kind: 'loss', title: 'No internet connection', msg: 'Challenging is paused until you\'re back online.' });
+    ui.toast({ kind: 'loss', title: 'No internet connection', msg: 'New pledges pause until you\'re back online.' });
     return false;
   };
 
@@ -4952,7 +5150,7 @@ window.TIMEOUT_SUPABASE = {
       <div class="commitment-summary">
         <div class="row-layout small"><span>Committed Today</span><b>${n.valid ? pledgeMinutes : 0} min</b></div>
         <div class="row-layout small"><span>Combined Target</span><b class="green">${n.targetMultiplier.toFixed(2)}x</b></div>
-        <div class="row-layout small"><span>Tomorrow's Projected Allowance</span><b class="green">${n.valid ? n.targetMinutes : 0} min</b></div>
+        <div class="row-layout small"><span>Tomorrow's Projected Allowance</span><b class="green">${wl.tomorrowLimit + (n.valid ? n.winnings : 0)} min</b></div>
         ${n.capApplied ? '<span class="tag yellow">Max Daily Cap Applied (120m max)</span>' : ''}
       </div>
       <div class="outcomes">
@@ -4960,6 +5158,7 @@ window.TIMEOUT_SUPABASE = {
         <div class="l"><span>If a challenge is missed</span><b>−${n.valid ? pledgeMinutes : 0} min</b><span>from tomorrow's phone time</span></div>
       </div>
       <div class="row-layout small"><span class="muted">Available today after pledge</span><b class="num">${n.valid ? after : wl.balance} of ${wl.balance} min</b></div>
+      ${n.mult > 1 ? `<div class="row-layout small"><span class="muted">Earned-minutes multiplier${commitment.boost ? ' (streak + boost)' : ' (clean streak)'}</span><b class="green">${TO.state.fmtMult(+n.mult.toFixed(3))}</b></div>` : ''}
       ${commitment.error ? `<div class="form-error">${esc(commitment.error)}</div>` : ''}`;
   }
 
@@ -4970,7 +5169,7 @@ window.TIMEOUT_SUPABASE = {
     if (st.closed) return `<button class="btn primary full" disabled>Remove unavailable picks to continue</button>`;
     if (st.changed) return `<button class="btn warn full" data-act="commitment-accept">Accept updated target</button>`;
     const n = numbers();
-    if (n.wl.lockedOut || n.wl.balance <= 0) return `<button class="btn full" disabled>${icon('lock', 18)} Challenging locked until midnight</button>`;
+    if (n.wl.lockedOut || n.wl.balance <= 0) return `<button class="btn full" disabled>${icon('lock', 18)} New pledges resume at midnight</button>`;
     return `<button class="btn primary full" data-act="commitment-place" ${n.valid ? '' : 'disabled'}>${commitment.selectedPicks.length > 1 ? `Lock In ${commitment.selectedPicks.length}-Pick Combo Goal (${n.pledgeMinutes}m)` : `Confirm ${n.pledgeMinutes}m Pledge`}</button>${more}`;
   }
 
@@ -5108,7 +5307,7 @@ window.TIMEOUT_SUPABASE = {
     } catch (e) {
       if (!(e instanceof TO.AppError)) throw e;
       commitment.error = e.code === 'value_changed' ? null : e.message;
-      if (e.code === 'value_changed') ui.toast({ kind: 'warn', title: 'Challenge target changed', msg: 'Review the new point value and confirm again.' });
+      if (e.code === 'value_changed') ui.toast({ kind: 'warn', title: 'Challenge target changed', msg: 'Review the new target and confirm again.' });
       ui.refreshSheet('commitment');
     }
   };
@@ -5389,12 +5588,15 @@ window.TIMEOUT_SUPABASE = {
 
   const followed = () => TO.data.settings.sports?.length ? TO.data.settings.sports : S.REAL_LEAGUES;
   const offDay = () => TO.store.get('timeout.offDay', false);
-  const activeFilter = () => ['pred', 'todo', 'sim'].includes(TO.data.feedFilter) ? 'all' : (TO.data.feedFilter || 'all');
+  const activeFilter = () => ['pred', 'todo', 'sim', 'live'].includes(TO.data.feedFilter) ? 'all' : (TO.data.feedFilter || 'all');
+  // The Live switch on its own line. It narrows whichever sport is picked.
+  const liveOnly = () => !!TO.data.feedLive;
+  const filterName = () => { const f = activeFilter(); return f === 'all' ? 'all sports' : f === 'ncaaf' ? 'College Football' : S.LEAGUES[f].short; };
   const sportsOnly = (challenge) => challenge.kind === 'race' || (challenge.kind === 'sports' && challenge.picks.every((pick) => pick.gameId && S.game(pick.gameId)?.league !== 'sim'));
 
   // Which day the board shows: 0 = today, 1 = tomorrow. Live games are always today.
   let feedDay = 0;
-  const activeDay = () => (activeFilter() === 'live' ? 0 : feedDay);
+  const activeDay = () => (liveOnly() ? 0 : feedDay);
 
   function boardGames(day = activeDay(), peek = false) {
     return S.board(TO.now(), { offDay: offDay(), day, peek, leagues: S.LEAGUE_ORDER.filter((l) => l !== 'sim' && followed().includes(l)) }).filter((g) => !g.simulated && g.league !== 'sim');
@@ -5409,7 +5611,7 @@ window.TIMEOUT_SUPABASE = {
 
   /** Today and tomorrow. Counts are games still to be played that day, in the sports being shown. */
   function dayBar() {
-    if (activeFilter() === 'live' || TO.live.offline) return '';
+    if (liveOnly() || TO.live.offline) return '';
     const f = activeFilter();
     const chips = [];
     for (let i = 0; i <= TO.live.days; i++) {
@@ -5510,17 +5712,21 @@ window.TIMEOUT_SUPABASE = {
   // ---------- Filters ----------
   function filterBar(games) {
     const f = activeFilter();
-    const live = games.filter((g) => g.state === 'live').length;
+    const on = liveOnly();
+    // With Live on, each sport's number is how many games it has live right now.
+    const today = boardGames(0, true);
+    const liveNow = today.filter((g) => g.state === 'live' && (f === 'all' || g.league === f)).length;
     const chip = (key, label, n, ic) => `<button class="chip ${f === key ? 'on' : ''}" data-act="filter" data-f="${key}">${ic ? icon(ic, 14) : ''}${esc(label)}${n ? `<span class="n">${n}</span>` : ''}</button>`;
-    const chips = [chip('live', 'Live', live, 'radio'), chip('all', 'All', 0, 'grid')];
+    const chips = [chip('all', 'All', 0, 'grid')];
     for (const l of S.LEAGUE_ORDER) {
       if (l === 'sim' || !followed().includes(l)) continue;
-      const n = games.filter((g) => g.league === l && g.state !== 'final').length;
+      const n = on ? today.filter((g) => g.league === l && g.state === 'live').length : games.filter((g) => g.league === l && g.state !== 'final').length;
       chips.push(chip(l, l === 'ncaaf' ? 'College Football' : S.LEAGUES[l].short === 'SIM' ? 'Sim League' : S.LEAGUES[l].short, n));
     }
     chips.push(`<button class="chip dashed" data-act="settings" data-section="sports">${icon('sliders', 14)}Edit</button>`);
     const cfb = (f === 'ncaaf' || f === 'all') && !TO.live.offline ? `<label class="cfb-select-label" for="cfb-group">College Football</label><select id="cfb-group" class="cfb-select" aria-label="College football conference">${TO.live.groups.map(([id, name]) => `<option value="${id}" ${TO.live.selectedGroup() === id ? 'selected' : ''}>${esc(name)}</option>`).join('')}</select>` : '';
-    return `<div class="filterbar"><div class="hscroll" data-hkey="filters">${chips.join('')}</div>${dayBar()}${cfb}</div>`;
+    const liveTile = `<button class="live-tile ${on ? 'on' : ''}" data-act="feed-live" aria-pressed="${on}" aria-label="Live games only, ${liveNow} live now in ${esc(filterName())}"><i></i>Live${liveNow ? `<span class="n">${liveNow}</span>` : ''}</button>`;
+    return `<div class="filterbar"><div class="hscroll" data-hkey="filters">${chips.join('')}</div>${liveTile}${dayBar()}${cfb}</div>`;
   }
 
   // ---------- Game card ----------
@@ -5557,10 +5763,10 @@ window.TIMEOUT_SUPABASE = {
         <button class="matchup-team" data-act="open-game" data-id="${g.id}">${ui.teamBadge(g.home, 30)}<span>${esc(g.home.name)}</span>${g.state === 'live' ? `<b>${g.homeScore}</b>` : ''}</button>
       </div><div class="matchup-time">${statusLine}</div>
       <div class="challenge-tabs" role="tablist" aria-label="Challenge type">${tabs.map(([key,label]) => `<button role="tab" aria-selected="${current?.[0] === key}" class="${current?.[0] === key ? 'on' : ''}" data-act="challenge-tab" data-game="${esc(g.id)}" data-market="${key}">${label}</button>`).join('')}</div>
-      <div class="challenge-choices">${choices.map((sel) => ui.challengeChoiceButton(sel, { suspended: false, big: true, label: choiceLabel(sel) })).join('')}</div>`;
+      ${tabs.length ? `<div class="challenge-choices">${choices.map((sel) => ui.challengeChoiceButton(sel, { suspended: false, big: true, label: choiceLabel(sel) })).join('')}</div>` : '<div class="tiny faint" style="margin-top:6px">Challenge targets are not available for this game yet.</div>'}`;
     } else {
-      const row = (team, score, won) => `<button class="gc-team" style="width:100%" data-act="open-game" data-id="${g.id}">${ui.teamBadge(team)}<span class="nm" style="${won ? '' : 'color:var(--text-2)'}">${esc(team.name)}</span>${g.state === 'final' ? `<span class="sc ${won ? '' : 'trail'}">${score}</span>` : ''}</button>`;
-      body = row(g.away, g.awayScore, g.awayScore > g.homeScore) + row(g.home, g.homeScore, g.homeScore > g.awayScore);
+      const row = (team, score, won) => `<button class="gc-team" style="width:100%" data-act="open-game" data-id="${g.id}">${ui.teamBadge(team)}<span class="nm" style="${won ? '' : 'color:var(--text-2)'}">${esc(team.name)}</span>${g.state === 'final' || g.state === 'live' ? `<span class="sc ${won ? '' : 'trail'}">${score}</span>` : ''}</button>`;
+      body = row(g.away, g.awayScore, g.awayScore >= g.homeScore) + row(g.home, g.homeScore, g.homeScore >= g.awayScore);
       if (g.state === 'postponed') body += `<div class="note warn" style="margin-top:6px">${icon('info', 15)}<span>This game was postponed. Any related pledge will be returned.</span></div>`;
     }
     const status = `${ui.gameStatus(g)}${o.suspended && g.state === 'live' ? `<span class="tag">${icon('lock', 10)} Challenges closed</span>` : ''}`;
@@ -5575,15 +5781,16 @@ window.TIMEOUT_SUPABASE = {
     const day = activeDay();
     const when = day === 0 ? 'today' : day === 1 ? 'tomorrow' : `on ${dayLabel(day)}`;
     const loading = day > 0 && TO.live.upcomingLoading;
-    const title = f === 'live' ? 'No live games right now' : loading ? 'Loading the schedule…' : `Sorry, no games are happening for this sport ${when}.`;
-    const next = f !== 'live' && !loading ? Array.from({ length: TO.live.days + 1 }, (_, i) => i).find((i) => i !== day && boardGames(i, true).some((g) => f === 'all' || g.league === f)) : null;
+    const isLive = liveOnly();
+    const title = isLive ? (f === 'all' ? 'No live games right now' : `No live ${esc(filterName())} games right now`) : loading ? 'Loading the schedule…' : `Sorry, no games are happening for this sport ${when}.`;
+    const next = !isLive && !loading ? Array.from({ length: TO.live.days + 1 }, (_, i) => i).find((i) => i !== day && boardGames(i, true).some((g) => f === 'all' || g.league === f)) : null;
     if (TO.live.failed) {
       return `<div class="empty">${icon('alert', 40)}<h3>Sports couldn’t load</h3><p>Check your connection and try again.</p><button class="btn primary" data-act="refresh-live">Try again</button></div>`;
     }
     return `<div class="empty">
       ${icon(loading ? 'clock' : 'target', 40)}
       <h3>${title}</h3>
-      ${f === 'live' ? '<p>Check back when a game is underway.</p>' : ''}
+      ${isLive ? '<p>Check back when a game is underway.</p><button class="btn primary" data-act="feed-live-off">Show all games</button>' : ''}
       ${next != null ? `<button class="btn primary" data-act="feed-day" data-day="${next}">See games ${next === 1 ? 'tomorrow' : `on ${esc(dayLabel(next))}`}</button>` : ''}
     </div>`;
   }
@@ -5596,9 +5803,8 @@ window.TIMEOUT_SUPABASE = {
 
   function feed(games) {
     const f = activeFilter();
-    let list = games;
-    if (f === 'live') list = games.filter((g) => g.state === 'live');
-    else if (f !== 'all') list = games.filter((g) => g.league === f);
+    let list = f === 'all' ? games : games.filter((g) => g.league === f);
+    if (liveOnly()) list = list.filter((g) => g.state === 'live');
     if (!list.length && f !== 'pred' && f !== 'todo') return emptyBoard(f);
     if (f === 'all') {
       const groups = S.LEAGUE_ORDER.filter((l) => l !== 'sim' && list.some((g) => g.league === l)).map((l) => {
@@ -5610,6 +5816,19 @@ window.TIMEOUT_SUPABASE = {
     return list.map(gameCard).join('');
   }
 
+  /** The big prompt at the top of Home until app limits are set up. A browser can't block apps, so the real block is in the iPhone app. */
+  function setupBanner() {
+    const s = TO.data.settings;
+    const hasLocks = s.lockedApps.length > 0 || s.deviceLockPoints > 0;
+    if (s.enforce && hasLocks) return '';
+    const title = hasLocks ? 'App limits are off' : 'Set up your app limits';
+    const text = hasLocks
+      ? 'Your apps won\'t lock when your phone time runs out, and your tier stays at Rookie.'
+      : 'Choose the apps TimeOut locks when your phone time runs out. It takes about 30 seconds. Real blocking happens in the TimeOut iPhone app.';
+    const action = hasLocks ? 'Turn limits back on' : 'Choose apps';
+    return `<div class="setup-banner"><div class="row" style="align-items:flex-start"><span class="sb-icon">${icon('shield', 20)}</span><div class="grow"><b>${title}</b><p>${text}</p></div></div><button class="btn primary full" data-act="${hasLocks ? 'setup-limits-on' : 'locked-apps'}">${action}</button></div>`;
+  }
+
   function render() {
     const wl = TO.state.wallet();
     const games = boardGames();
@@ -5617,6 +5836,7 @@ window.TIMEOUT_SUPABASE = {
       ? `<button class="app-lock" data-act="settings" data-section="screentime">${icon('phone', 22, 'red')}<span class="grow"><b class="red">Your locked apps are blocked</b><div class="small muted">You've used all ${wl.todayLimit} min of today's phone time. Emergency unlocks are in Settings.</div></span>${icon('chevR', 16)}</button>`
       : '';
     return `<div class="stack home" style="padding-top:2px">
+      ${setupBanner()}
       ${walletCard(wl)}
       ${lock}
       ${statusStrip(wl)}
@@ -5674,6 +5894,17 @@ window.TIMEOUT_SUPABASE = {
     if (fb && v.scrollTop > fb.offsetTop) v.scrollTop = fb.offsetTop;
   };
   A.filter = (el) => { TO.data.feedFilter = el.dataset.f; TO.state.save(); TO.app.render(); const v = document.getElementById('view'); const fb = v.querySelector('.filterbar'); if (fb && v.scrollTop > fb.offsetTop) v.scrollTop = fb.offsetTop; };
+  const setLive = (on) => {
+    TO.data.feedLive = on;
+    TO.state.save();
+    TO.app.render();
+    const v = document.getElementById('view');
+    const fb = v && v.querySelector('.filterbar');
+    if (fb && v.scrollTop > fb.offsetTop) v.scrollTop = fb.offsetTop;
+  };
+  A['feed-live'] = () => setLive(!liveOnly());
+  A['feed-live-off'] = () => setLive(false);
+  A['setup-limits-on'] = () => { TO.state.setSetting('enforce', true); TO.app.render(); };
   A['refresh-live'] = () => TO.live.refresh(TO.now(), true);
   A['go-sim'] = () => {
     if (!followed().includes('sim')) TO.state.setSetting('sports', [...followed(), 'sim']);
@@ -5818,7 +6049,8 @@ window.TIMEOUT_SUPABASE = {
 
   const view = { tab: 'open', filter: 'all' };
 
-  const toWin = (b) => Math.round((Math.round(b.pledgeMinutes * b.decimal) - b.pledgeMinutes) * (b.multiplier || 1));
+  // Minutes a win would add, after the 120-minute cap.
+  const toWin = (b) => Math.max(0, Math.min(b.pledgeMinutes + Math.round((Math.round(b.pledgeMinutes * b.decimal) - b.pledgeMinutes) * (b.multiplier || 1)), TO.MAX_ALLOWED_MINUTES) - b.pledgeMinutes);
   const challengeTitle = (b) => (b.kind === 'todo' ? `To-do Combo Goal · ${b.picks.length} task${b.picks.length === 1 ? '' : 's'}` : b.picks.length > 1 ? `${b.picks.length}-pick Combo Goal` : b.picks[0].label);
 
   function pickStanding(pick) {
@@ -5881,7 +6113,7 @@ window.TIMEOUT_SUPABASE = {
     if (pick.result !== 'pending' || pick.kind === 'todo') return '';
     const cur = S.currentSelection(pick.selId);
     if (!cur || !cur.sel) return '';
-    if (!cur.open) return `<span class="tag">Challenging closed</span>`;
+    if (!cur.open) return `<span class="tag">Challenges closed</span>`;
     if (cur.sel.price === pick.price && cur.sel.line === pick.line) return `<span class="tag">Target now ${TO.multiplierText(cur.sel.price)}</span>`;
     const improved = TO.convertPointValueToMultiplier(cur.sel.price) > TO.convertPointValueToMultiplier(pick.price);
     return `<span class="tag ${improved ? 'green' : 'red'}">Target now ${TO.multiplierText(cur.sel.price)}</span>`;
@@ -5927,7 +6159,7 @@ window.TIMEOUT_SUPABASE = {
     if (pledge.status === 'won') result = `<span class="display green" style="font-size:22px">+${pledge.reward - pledge.pledgeMinutes} min</span>`;
     else if (pledge.status === 'lost') result = `<span class="display red" style="font-size:22px">−${pledge.pledgeMinutes} min</span>`;
     else result = `<span class="small bold muted">${pledge.insurancePaid ? 'Miss-one protection returned your minutes' : 'Committed minutes returned'} · ${pledge.pledgeMinutes} min</span>`;
-    const picks = pledge.picks.map((l) => `<div class="pick"><span class="pick-dot ${l.result}">${icon({ won: 'check', lost: 'x' }[l.result] || 'minus', 12)}</span><div class="grow"><div class="lt">${esc(l.label)} <span class="faint" style="font-weight:600">${TO.pointValue.fmt(l.price)}</span></div><div class="lm">${esc(l.kind === 'todo' ? l.marketLabel : l.matchup)}${l.final ? ` · <b>${esc(l.final)}</b>` : ''}</div></div></div>`).join('');
+    const picks = pledge.picks.map((l) => `<div class="pick"><span class="pick-dot ${l.result}">${icon({ won: 'check', lost: 'x' }[l.result] || 'minus', 12)}</span><div class="grow"><div class="lt">${esc(l.label)} <span class="faint" style="font-weight:600">${TO.multiplierText(l.price)}</span></div><div class="lm">${esc(l.kind === 'todo' ? l.marketLabel : l.matchup)}${l.final ? ` · <b>${esc(l.final)}</b>` : ''}</div></div></div>`).join('');
     const why = pledge.status === 'void' ? `<div class="note warn">${icon('info', 15)}<span>${pledge.kind === 'todo' ? '' : 'The game was postponed or cancelled, so your committed minutes were returned.'}</span></div>` : '';
     return `<div class="card pledge-card">
       <div class="pledge-top"><div class="grow"><div class="row-s" style="margin-bottom:4px">${ui.statusPill(pledge.status)}${single ? '' : `<span class="tag">${pledge.kind === 'todo' ? 'To-do' : 'Combo Goal'}</span>`}</div><div class="t">${esc(challengeTitle(pledge))}</div></div><div style="text-align:right"><div class="multiplier" style="font-size:16px">${TO.multiplierText(TO.pointValue.fromDecimal(pledge.decimal))}</div>${result}</div></div>
@@ -6048,9 +6280,10 @@ window.TIMEOUT_SUPABASE = {
     ctx.strokeStyle = '#283141'; ctx.lineWidth = 3; ctx.stroke();
 
     let y = 340;
-    const single = pledge.picks.length === 1 && pledge.picks[0].kind === 'game';
+    const single = pledge.picks.length === 1 && pledge.picks[0].kind === 'game' && !!S.game(pledge.picks[0].gameId);
     if (single) {
       const g = S.game(pledge.picks[0].gameId);
+      if (!g) return null;
       const disc = (team, cx) => {
         ctx.beginPath(); ctx.arc(cx, y + 90, 90, 0, Math.PI * 2); ctx.fillStyle = team.color; ctx.fill();
         ctx.lineWidth = 6; ctx.strokeStyle = 'rgba(255,255,255,0.15)'; ctx.stroke();
@@ -6078,7 +6311,7 @@ window.TIMEOUT_SUPABASE = {
         ctx.font = `600 28px ${B}`; ctx.fillStyle = '#8c96a8';
         y = wrapText(ctx, `${l.marketLabel} · ${l.matchup}`, 110, y + 76, W - 360, 34, 2);
         ctx.font = `900 50px ${D}`; ctx.fillStyle = '#22d66e'; ctx.textAlign = 'right';
-        ctx.fillText(TO.pointValue.fmt(l.price), W - 110, y - 60);
+        ctx.fillText(`${TO.convertPointValueToMultiplier(l.price).toFixed(2).replace(/0+$/, '').replace(/\.$/, '')}x`, W - 110, y - 60);
         ctx.textAlign = 'left';
         y += 30;
       }
@@ -6091,12 +6324,12 @@ window.TIMEOUT_SUPABASE = {
       ctx.font = `700 26px ${B}`; ctx.fillStyle = '#8c96a8'; ctx.fillText(label, x, by + 20);
       ctx.font = `900 76px ${D}`; ctx.fillStyle = color; ctx.fillText(value, x, by + 100);
     };
-    col('VALUE', TO.pointValue.fmt(pledge.american), 110, '#f2f5f9');
+    col('TARGET', `${Number(pledge.decimal).toFixed(2).replace(/0+$/, '').replace(/\.$/, '')}x`, 110, '#f2f5f9');
     col('PLEDGE', `${pledge.pledgeMinutes} min`, 420, '#f2f5f9');
     col(pledge.status === 'lost' ? 'LOST' : pledge.status === 'won' ? 'WON' : 'TO WIN', pledge.status === 'lost' ? `−${pledge.pledgeMinutes}` : `+${pledge.status === 'won' ? pledge.reward - pledge.pledgeMinutes : toWin(pledge)}`, 730, pledge.status === 'lost' ? '#ff5a5f' : '#22d66e');
 
     ctx.font = `600 30px ${B}`; ctx.fillStyle = '#8c96a8'; ctx.textAlign = 'center';
-    ctx.fillText('Challenging screen time, not money.', W / 2, 1160);
+    ctx.fillText('Screen time on the line, not money.', W / 2, 1160);
     ctx.font = `italic 900 40px ${D}`; ctx.fillStyle = '#22d66e';
     ctx.fillText('TimeOut', W / 2, 1230);
     ctx.textAlign = 'left';
@@ -6104,9 +6337,9 @@ window.TIMEOUT_SUPABASE = {
   }
 
   function shareText(pledge) {
-    const picks = pledge.picks.map((l) => `${l.label} (${TO.pointValue.fmt(l.price)}) · ${l.matchup}`).join('\n');
+    const picks = pledge.picks.map((l) => `${l.label} (${TO.multiplierText(l.price)}) · ${l.matchup}`).join('\n');
     const pledgeMinutes = `${pledge.pledgeMinutes} min of screen time to earn ${toWin(pledge)} min`;
-    return `My TimeOut ${pledge.picks.length > 1 ? 'combo-goal' : 'pledge'}:\n${picks}\nOdds ${TO.pointValue.fmt(pledge.american)} · ${pledgeMinutes}`;
+    return `My TimeOut ${pledge.picks.length > 1 ? 'Combo Goal' : 'pledge'}:\n${picks}\n${TO.multiplierText(TO.pointValue.fromDecimal(pledge.decimal))} · ${pledgeMinutes}`;
   }
 
   TO.actions.share = async (el) => {
@@ -6116,7 +6349,7 @@ window.TIMEOUT_SUPABASE = {
     ui.sheet('share', {
       render: () => ({
         title: 'Share pledge',
-        body: `${url ? `<img class="share-img" src="${url}" alt="pledge card image showing the teams, pick, point value and pledge">` : '<div class="card muted small">Creating image…</div>'}
+        body: `${url ? `<img class="share-img" src="${url}" alt="pledge card image showing the teams, pick, target and pledge">` : '<div class="card muted small">Creating image…</div>'}
           <div class="small muted">${ui.embedded ? 'To save the image, right-click it or press and hold it.' : 'Save the image and post it anywhere.'}</div>
           <textarea class="textarea sr" id="share-text" readonly>${esc(shareText(pledge))}</textarea>`,
         foot: `${!ui.embedded && url ? `<a class="btn primary full" href="${url}" download="timeout-pledge.png" data-act="share-saved">${icon('share', 18)} Save image</a>` : ''}
@@ -6128,7 +6361,7 @@ window.TIMEOUT_SUPABASE = {
   };
   TO.actions['share-copy'] = async () => {
     const ok = await ui.copy(document.getElementById('share-text').value);
-    ui.toast({ kind: ok ? 'win' : 'info', title: ok ? 'pledge copied' : 'Copy the text manually', msg: ok ? 'Paste it into any chat.' : '' });
+    ui.toast({ kind: ok ? 'win' : 'info', title: ok ? 'Pledge copied' : 'Copy the text manually', msg: ok ? 'Paste it into any chat.' : '' });
   };
   TO.actions['share-saved'] = () => { /* default link behavior downloads the image */ };
 
@@ -6214,15 +6447,17 @@ window.TIMEOUT_SUPABASE = {
   const view = { tab: 'board', query: '', remote: [], searching: false, searchSeq: 0 };
 
   // Invite links stay on this page so they open the app (phone or computer view).
-  // ?invite=username is the friend link. ?join=username is accepted too, so another
-  // share-link change can use either name. A team link adds team, teamName, start, end, and key.
-  function friendLink(username = TO.account.username) {
+  // ?invite=username&code=... is the friend link; the code makes it a two-way yes. ?join=username is accepted too,
+  // so another share-link change can use either name. A team link adds team, teamName, start, end, and key.
+  function friendLink(username = TO.account.username, code = null) {
     const url = new URL(`${location.origin}${location.pathname}`);
     url.searchParams.set('invite', username);
+    if (code) url.searchParams.set('code', code);
     return url.toString();
   }
-  function teamLink(team) {
-    const url = new URL(friendLink(team.owner || TO.account.username));
+  function teamLink(team, code = null) {
+    // The code belongs to the person sharing, so the link has to name that person too.
+    const url = new URL(friendLink(code ? TO.account.username : (team.owner || TO.account.username), code));
     url.searchParams.set('team', team.id);
     url.searchParams.set('teamName', team.name);
     url.searchParams.set('start', team.start);
@@ -6230,27 +6465,41 @@ window.TIMEOUT_SUPABASE = {
     if (team.shareKey) url.searchParams.set('key', team.shareKey);
     return url.toString();
   }
-  const inviteLink = () => friendLink();
+  const myCode = async () => (TO.api.myInviteCode ? TO.api.myInviteCode() : null);
+  const inviteLink = async () => friendLink(TO.account.username, await myCode());
 
+  /** The system share sheet where there is one, otherwise the clipboard. */
+  async function shareOrCopy(link, title, copiedTitle) {
+    if (navigator.share) {
+      try { await navigator.share({ title, url: link }); return; } catch (e) { if (e && e.name === 'AbortError') return; }
+    }
+    const ok = await ui.copy(link);
+    ui.toast({ kind: ok ? 'win' : 'info', title: ok ? copiedTitle : title, msg: ok ? link : `Copy this: ${link}`, ms: 5000 });
+  }
+
+  // Kept in localStorage, not sessionStorage: a new account confirms its email in a new tab, and the invite has to survive that.
   const INVITE_KEY = 'timeout.invite';
-  function readInvite() {
-    try { return JSON.parse(sessionStorage.getItem(INVITE_KEY) || 'null'); } catch (e) { return null; }
-  }
-  function clearInvite() {
-    try { sessionStorage.removeItem(INVITE_KEY); } catch (e) { /* private mode */ }
-  }
+  const readInvite = () => TO.store.get(INVITE_KEY, null);
+  const clearInvite = () => TO.store.del(INVITE_KEY);
   function captureInvite() {
     const q = new URLSearchParams(location.search);
     const invite = String(q.get('invite') || q.get('join') || '').replace(/^@/, '').trim();
     const team = String(q.get('team') || '').trim();
     if (!invite && !team) return null;
-    const pending = { invite, team, teamName: q.get('teamName') || '', start: q.get('start') || '', end: q.get('end') || '', key: q.get('key') || '' };
-    try { sessionStorage.setItem(INVITE_KEY, JSON.stringify(pending)); } catch (e) { /* keep going */ }
-    ['invite', 'join', 'team', 'teamName', 'start', 'end', 'key'].forEach((k) => q.delete(k));
+    const pending = { invite, team, teamName: q.get('teamName') || '', start: q.get('start') || '', end: q.get('end') || '', key: q.get('key') || '', code: q.get('code') || '' };
+    TO.store.set(INVITE_KEY, pending);
+    ['invite', 'join', 'team', 'teamName', 'start', 'end', 'key', 'code'].forEach((k) => q.delete(k));
     const next = `${location.pathname}${q.toString() ? `?${q}` : ''}${location.hash}`;
     history.replaceState(null, '', next);
     return pending;
   }
+  /** On an iPhone with the app, the same invite opens there. */
+  function appLink(p) {
+    const params = new URLSearchParams();
+    for (const k of ['invite', 'team', 'teamName', 'start', 'end', 'key', 'code']) if (p[k]) params.set(k, p[k]);
+    return `timeout://invite?${params}`;
+  }
+  const onIPhone = () => /iPhone|iPad|iPod/.test(navigator.userAgent);
   function offerInvite() {
     const p = readInvite();
     if (!p || !TO.account || !TO.data || !TO.data.onboarded) return;
@@ -6266,14 +6515,25 @@ window.TIMEOUT_SUPABASE = {
         body: joining
           ? `<p class="sub" style="margin-top:0">${who} invited you to <b style="color:var(--text)">${esc(p.teamName)}</b>${p.start && p.end ? `, ${esc(TO.fmtDate(TO.dayStart(p.start)))} – ${esc(TO.fmtDate(TO.dayStart(p.end)))}` : ''}. Joining also adds them as a friend. It is still screen time, not money.</p>`
           : `<p class="sub" style="margin-top:0">${who} sent you their TimeOut link. Add them as a friend to compare screen time without putting money on the games.</p>`,
-        foot: `<button class="btn primary full" data-act="invite-accept">${joining ? 'Add friend and join' : 'Add friend'}</button><button class="btn quiet sm" data-act="invite-dismiss">Not now</button>`,
+        foot: `<button class="btn primary full" data-act="invite-accept">${joining ? 'Add friend and join' : 'Add friend'}</button>${onIPhone() ? `<a class="btn ghost full" href="${esc(appLink(p))}">Open in the TimeOut app</a>` : ''}<button class="btn quiet sm" data-act="invite-dismiss">Not now</button>`,
       }),
     });
   }
-  function acceptInvite() {
+  async function acceptInvite() {
     const p = readInvite();
     if (!p) return;
-    if (p.invite && !St.sameUser(p.invite, TO.account.username)) St.addFriend(p.invite);
+    let friendResult = null, failure = null;
+    if (p.invite && !St.sameUser(p.invite, TO.account.username)) {
+      if (St.usesServerSocial()) {
+        try {
+          friendResult = await TO.api.acceptFriendInvite(p.invite, p.code);
+          await TO.app.syncSocial(true);
+        } catch (e) { failure = e.message; }
+      } else {
+        St.addFriend(p.invite);
+        friendResult = 'friends';
+      }
+    }
     let team = null;
     if (p.team && p.teamName && p.start && p.end) {
       try { team = St.joinTeam({ id: p.team, name: p.teamName, start: p.start, end: p.end, owner: p.invite, shareKey: /^[a-f0-9]{32}$/.test(p.key) ? p.key : null, members: p.invite ? [p.invite] : [] }); }
@@ -6285,10 +6545,14 @@ window.TIMEOUT_SUPABASE = {
     clearInvite();
     ui.closeSheet('invite');
     if (team) view.tab = 'teams';
+    else if (friendResult === 'requested') view.tab = 'requests';
     else if (p.invite) view.tab = 'board';
     TO.app.tab = 'social';
     TO.app.render();
-    ui.toast({ kind: 'win', title: team ? `You joined ${team.name}` : `You and @${p.invite} are now friends` });
+    if (failure) ui.toast({ kind: 'loss', title: `Couldn't add @${p.invite}`, msg: failure });
+    else if (team) ui.toast({ kind: 'win', title: `You joined ${team.name}` });
+    else if (friendResult === 'requested') ui.toast({ kind: 'win', title: `Friend request sent to @${p.invite}`, msg: 'That link has expired, so they\'ll need to accept.' });
+    else ui.toast({ kind: 'win', title: `You and @${p.invite} are now friends` });
   }
   TO.invites = { capture: captureInvite, offer: offerInvite, friendLink, teamLink };
 
@@ -6353,7 +6617,7 @@ window.TIMEOUT_SUPABASE = {
     const results = peopleForQuery(q);
     if (!results.length) {
       if (view.searching) return `<div class="note">${icon('search', 16)}<div><b style="color:var(--text)">Searching usernames…</b></div></div>`;
-      return `<div class="note">${icon('search', 16)}<div><b style="color:var(--text)">No one found with the username "${esc(q)}".</b><div style="margin-top:3px">They might not be on TimeOut yet. Send them your invite link instead.</div><button class="btn xs primary" style="margin-top:8px" data-act="copy-invite">${icon('link', 14)} Copy invite link</button></div></div>`;
+      return `<div class="note">${icon('search', 16)}<div><b style="color:var(--text)">No one found with the username "${esc(q)}".</b><div style="margin-top:3px">They might not be on TimeOut yet. Send them your invite link instead.</div><button class="btn xs primary" style="margin-top:8px" data-act="share-invite">${icon('share', 14)} Share invite link</button></div></div>`;
     }
     return `<div class="list">${results.map((p) => {
       const rel = St.relation(p.username);
@@ -6371,13 +6635,13 @@ window.TIMEOUT_SUPABASE = {
       <h2 style="margin:0;font-size:17px">Find friends</h2>
       <div class="input-wrap"><input class="input" id="social-search" placeholder="Search by username" value="${esc(view.query)}" autocomplete="off" autocapitalize="off" spellcheck="false"><span class="icon-btn" style="pointer-events:none">${icon('search', 18)}</span></div>
       <div id="search-results" class="stack-s">${searchResults()}</div>
-      <div class="row-layout small" style="margin-top:2px"><span class="muted ellipsis">Or share your invite link</span><button class="btn xs ghost" data-act="copy-invite">${icon('link', 14)} Copy link</button></div>
+      <div class="row-layout small" style="margin-top:2px"><span class="muted ellipsis">Or send your invite link</span><span class="row-s"><button class="btn xs primary" data-act="share-invite">${icon('share', 14)} Share</button><button class="btn xs ghost" data-act="copy-invite">${icon('link', 14)} Copy</button></span></div>
     </div>`;
   }
 
   function leaderboard() {
     if (!TO.data.friends.length) {
-      return `<div class="empty">${icon('users', 40)}<h3>Keep up with your friends</h3><p>Compare screen-time records and build teams that compete for a week or a season. Add your first friend to get started.</p><button class="btn primary" data-act="copy-invite">${icon('link', 16)} Invite a friend</button><button class="btn quiet sm" data-act="focus-search">Search usernames instead</button></div>`;
+      return `<div class="empty">${icon('users', 40)}<h3>Keep up with your friends</h3><p>Compare screen-time records and build teams that compete for a week or a season. Add your first friend to get started.</p><button class="btn primary" data-act="share-invite">${icon('share', 16)} Invite a friend</button><button class="btn quiet sm" data-act="focus-search">Search usernames instead</button></div>`;
     }
     const rows = St.leaderboard();
     return `<div class="stack-s pad"><div class="row-layout"><span class="eyebrow">Leaderboard · minutes won or lost</span><button class="link-btn tiny" data-act="settings" data-section="privacy">What friends see</button></div>
@@ -6483,7 +6747,7 @@ window.TIMEOUT_SUPABASE = {
           title: isMe ? 'Your profile' : `@${esc(username)}`,
           body: `<div class="row" style="gap:14px">${ui.avatar(isMe ? TO.account.photo : p.photo, 'xl')}<div><div style="font-size:20px;font-weight:800">${isMe ? `@${esc(username)}` : esc(p.name)}</div>${isMe ? '' : `<div class="muted small">@${esc(username)}</div>`}<div class="row-s" style="margin-top:8px">${ui.tierBadge(tierId, true)}${streak ? `<span class="tiny bold yellow row-s">${icon('flame', 12)}${streak}-day streak</span>` : ''}</div></div></div>
             ${showAll ? `<div class="record-big">${stat('Record', rec, share.record)}${stat('Minutes won/lost', `<span class="${net > 0 ? 'green' : net < 0 ? 'red' : ''}">${TO.signed(net)}</span>`, share.minutes)}${stat('Clean streak', `${streak}d`, true)}</div>` : `<div class="note">${icon('lock', 16)}<span>Add @${esc(username)} as a friend to see their stats.</span></div>`}
-            ${!isMe && showAll ? (share.challenges ? `<div class="stack-s"><div class="eyebrow">Active challenges they're sharing</div>${picks.length ? picks.map((k) => `<div class="card tight row-layout"><div><b>${esc(k.label)}</b><div class="small muted">${esc(k.matchup)}</div></div><div style="text-align:right"><div class="display green" style="font-size:18px">${TO.multiplierText(k.price)}</div><div class="tiny faint">${k.pledgeMinutes} min</div></div></div>`).join('') : '<div class="small muted">No active challenges right now.</div>'}</div>` : `<div class="small muted">${esc(p.name)} keeps their active challenges private.</div>`) : ''}
+            ${!isMe && showAll ? (share.challenges ? `<div class="stack-s"><div class="eyebrow">Active challenges they're sharing</div>${picks.length ? picks.map((k) => `<div class="card tight row-layout"><div><b>${esc(k.label)}</b><div class="small muted">${esc(k.matchup)}</div></div><div style="text-align:right"><div class="display green" style="font-size:16px">${TO.multiplierText(k.price)}</div><div class="tiny faint">${k.pledgeMinutes} min</div></div></div>`).join('') : '<div class="small muted">No active challenges right now.</div>'}</div>` : `<div class="small muted">${esc(p.name)} keeps their active challenges private.</div>`) : ''}
             ${isMe ? `<button class="btn ghost sm" data-act="settings" data-section="privacy">${icon('eye', 16)} Choose what friends can see</button>` : ''}`,
           foot: isMe ? '' : actions,
         };
@@ -6509,7 +6773,7 @@ window.TIMEOUT_SUPABASE = {
             <div class="list">${rows.map((r, i) => `<div class="lb-row ${r.me ? 'me' : ''}"><span class="rk">${r.hidden ? '–' : i + 1}</span>${ui.avatar(r.photo)}<span><span class="nm">${r.me ? 'You' : `@${esc(r.username)}`}</span><span class="sub">${r.w}-${r.l} during this team</span></span><span class="val">${r.hidden ? '<span class="faint" style="font-size:14px">Private</span>' : `<span class="${r.net > 0 ? 'green' : r.net < 0 ? 'red' : ''}">${TO.signed(r.net)}</span><small>min</small>`}</span></div>`).join('')}</div>
             <div class="tiny faint">Standings count screen-time challenges placed between the start and end dates. Friend challenges don't count.</div>
             ${invitable.length ? `<div class="field"><span class="label">Invite more friends</span><div class="pick-friends">${invitable.map((u) => { const p = personFor(u); return p ? `<button class="pick-friend" data-act="team-invite" data-id="${t.id}" data-u="${esc(u)}"><img src="${esc(p.photo)}" alt="">${icon('plus', 14)} ${esc(u)}</button>` : ''; }).join('')}</div></div>` : ''}`,
-          foot: `<button class="btn ghost sm" data-act="copy-team" data-id="${t.id}">${icon('link', 16)} Copy team link</button><button class="btn quiet sm" data-act="team-leave" data-id="${t.id}">Leave team</button>`,
+          foot: `<div class="row-s"><button class="btn primary sm grow" data-act="share-team" data-id="${t.id}">${icon('share', 16)} Share team link</button><button class="btn ghost sm" data-act="copy-team" data-id="${t.id}">${icon('link', 16)} Copy</button></div><button class="btn quiet sm" data-act="team-leave" data-id="${t.id}">Leave team</button>`,
         };
       },
     });
@@ -6539,7 +6803,7 @@ window.TIMEOUT_SUPABASE = {
         title: 'Create a team',
         body: `${ui.field({ id: 'team-name', label: 'Team name', value: draft.name, placeholder: 'Sunday Squad', err: draft.errors.name, attrs: 'maxlength="30"' })}
           <div class="row" style="align-items:flex-start">${`<div class="grow">${ui.field({ id: 'team-start', label: 'Start date', type: 'date', value: draft.start, err: draft.errors.start })}</div><div class="grow">${ui.field({ id: 'team-end', label: 'End date', type: 'date', value: draft.end, err: draft.errors.end })}</div>`}</div>
-          <div class="field"><span class="label">Invite friends</span>${TO.data.friends.length ? `<div class="pick-friends">${TO.data.friends.map((u) => { const p = St.person(u); return p ? `<button class="pick-friend ${draft.members.includes(u) ? 'on' : ''}" data-act="team-pick" data-u="${esc(u)}"><img src="${esc(p.photo)}" alt="">${esc(u)}</button>` : ''; }).join('')}</div>` : '<div class="note">No friends yet. You can still create the team and invite people later.</div>'}${draft.errors.members ? `<div class="err">${esc(draft.errors.members)}</div>` : ''}</div>`,
+          <div class="field"><span class="label">Invite friends</span>${TO.data.friends.length ? `<div class="pick-friends">${TO.data.friends.map((u) => { const p = personFor(u); return p ? `<button class="pick-friend ${draft.members.includes(u) ? 'on' : ''}" data-act="team-pick" data-u="${esc(u)}"><img src="${esc(p.photo)}" alt="">${esc(u)}</button>` : ''; }).join('')}</div>` : '<div class="note">No friends yet. You can still create the team and invite people later.</div>'}${draft.errors.members ? `<div class="err">${esc(draft.errors.members)}</div>` : ''}</div>`,
         foot: `<button class="btn primary full" data-act="team-create">Create team</button>`,
       }),
     });
@@ -6547,39 +6811,76 @@ window.TIMEOUT_SUPABASE = {
 
   // ---------- Actions ----------
   const A = TO.actions;
-  A['social-tab'] = (el) => { view.tab = el.dataset.t; TO.app.render(); if (view.tab === 'teams') St.refreshTeams(); };
+  A['social-tab'] = (el) => { view.tab = el.dataset.t; TO.app.render(); if (view.tab === 'teams') St.refreshTeams(); else TO.app.syncSocial(); };
   A.profile = (el) => profile(el.dataset.u);
   A['copy-invite'] = async () => {
-    const ok = await ui.copy(inviteLink());
-    ui.toast({ kind: ok ? 'win' : 'info', title: ok ? 'Invite link copied' : 'Your invite link', msg: ok ? inviteLink() : `Copy this: ${inviteLink()}`, ms: 5000 });
+    const link = await inviteLink();
+    const ok = await ui.copy(link);
+    ui.toast({ kind: ok ? 'win' : 'info', title: ok ? 'Invite link copied' : 'Your invite link', msg: ok ? link : `Copy this: ${link}`, ms: 5000 });
   };
+  A['share-invite'] = async () => shareOrCopy(await inviteLink(), 'Join me on TimeOut', 'Invite link copied');
   A['focus-search'] = () => { const i = document.getElementById('social-search'); if (i) i.focus(); };
-  A['add-friend'] = (el) => {
+  /** Runs a friend action on the server and refreshes, or uses this browser's accounts in offline mode. */
+  async function perform(server, offline) {
+    if (!St.usesServerSocial()) { offline(); rerender(); return true; }
+    try {
+      await server();
+      await TO.app.syncSocial(true);
+      rerender();
+      return true;
+    } catch (e) {
+      ui.toast({ kind: 'loss', title: 'Couldn\'t update your friends', msg: e.message });
+      return false;
+    }
+  }
+  A['add-friend'] = async (el) => {
     const u = el.dataset.u;
+    if (St.usesServerSocial()) {
+      try {
+        const result = await TO.api.sendFriendRequest(u);
+        await TO.app.syncSocial(true);
+        ui.toast({ kind: 'win', title: result === 'friends' ? `You and @${u} are now friends` : `Friend request sent to @${u}` });
+      } catch (e) { ui.toast({ kind: 'loss', title: 'Couldn\'t send that request', msg: e.message }); }
+      rerender();
+      return;
+    }
     const rel = St.relation(u);
     St.sendFriendRequest(u);
     ui.toast({ kind: 'win', title: rel === 'incoming' ? `You and @${u} are now friends` : `Friend request sent to @${u}` });
     rerender();
   };
-  A['cancel-request'] = (el) => { St.cancelFriendRequest(el.dataset.u); rerender(); };
-  A['resend-request'] = (el) => {
+  A['cancel-request'] = (el) => perform(() => TO.api.cancelFriendRequest(el.dataset.u), () => St.cancelFriendRequest(el.dataset.u));
+  A['resend-request'] = async (el) => {
+    const u = el.dataset.u;
+    if (St.usesServerSocial()) {
+      if (await perform(() => TO.api.sendFriendRequest(u))) ui.toast({ kind: 'win', title: `Request sent again to @${u}`, msg: 'You can send another one in an hour.' });
+      return;
+    }
     try {
-      St.resendFriendRequest(el.dataset.u);
-      ui.toast({ kind: 'win', title: `Request sent again to @${el.dataset.u}`, msg: 'You can send another one in an hour.' });
+      St.resendFriendRequest(u);
+      ui.toast({ kind: 'win', title: `Request sent again to @${u}`, msg: 'You can send another one in an hour.' });
     } catch (e) {
       if (!(e instanceof TO.AppError)) throw e;
       ui.toast({ kind: 'warn', title: 'Not yet', msg: e.message });
     }
     rerender();
   };
-  A['accept-fr'] = (el) => { const r = TO.data.requestsIn.find((x) => x.id === el.dataset.id); St.acceptFriendRequest(el.dataset.id); if (r) ui.toast({ kind: 'win', title: `You and @${r.from} are now friends` }); TO.app.render(); };
-  A['decline-fr'] = (el) => { St.declineFriendRequest(el.dataset.id); TO.app.render(); };
+  A['accept-fr'] = async (el) => {
+    const r = TO.data.requestsIn.find((x) => x.id === el.dataset.id);
+    if (!r) return;
+    if (await perform(() => TO.api.answerFriendRequest(r.from, true), () => St.acceptFriendRequest(el.dataset.id))) ui.toast({ kind: 'win', title: `You and @${r.from} are now friends` });
+  };
+  A['decline-fr'] = (el) => {
+    const r = TO.data.requestsIn.find((x) => x.id === el.dataset.id);
+    if (r) perform(() => TO.api.answerFriendRequest(r.from, false), () => St.declineFriendRequest(el.dataset.id));
+  };
   A['remove-friend'] = async (el) => {
     const u = el.dataset.u;
     if (!(await ui.confirm({ title: `Remove @${esc(u)}?`, body: 'You can add them again later.', confirm: 'Remove', danger: true }))) return;
-    St.removeFriend(u);
-    ui.closeSheet('profile');
-    TO.app.render();
+    if (await perform(() => TO.api.removeFriend(u), () => St.removeFriend(u))) {
+      ui.closeSheet('profile');
+      TO.app.render();
+    }
   };
   A['goto-social'] = () => { ui.closeAllSheets(); ui.closeAllPages(); TO.app.go('social'); };
   A.team = (el) => { teamSheet(el.dataset.id); St.refreshTeams(); };
@@ -6616,9 +6917,15 @@ window.TIMEOUT_SUPABASE = {
     const t = TO.data.teams.find((x) => x.id === el.dataset.id);
     if (!t) return;
     St.ensureTeamKey(t);
-    const link = teamLink(t);
+    const link = teamLink(t, await myCode());
     const ok = await ui.copy(link);
     ui.toast({ kind: ok ? 'win' : 'info', title: ok ? 'Team link copied' : 'Team link', msg: ok ? link : `Copy this: ${link}`, ms: 5000 });
+  };
+  A['share-team'] = async (el) => {
+    const t = TO.data.teams.find((x) => x.id === el.dataset.id);
+    if (!t) return;
+    St.ensureTeamKey(t);
+    shareOrCopy(teamLink(t, await myCode()), `Join ${t.name} on TimeOut`, 'Team link copied');
   };
   A['invite-accept'] = () => acceptInvite();
   A['invite-dismiss'] = () => { clearInvite(); ui.closeSheet('invite'); };
@@ -6696,7 +7003,7 @@ window.TIMEOUT_SUPABASE = {
     wrap.style.cssText = 'position:absolute;inset:0';
     const item = (key, sub) => `<button class="dn" data-act="settings" data-section="${key}">${icon(SECTIONS[key].icon, 20)}${SECTIONS[key].title}${sub ? `<span class="sub">${sub}</span>` : ''}</button>`;
     wrap.innerHTML = `<div class="scrim" data-act="close-drawer"></div><aside class="drawer" aria-label="Menu">
-      <div class="drawer-head">${ui.avatar(TO.account.photo, 'lg')}<div class="grow" style="min-width:0"><b class="ellipsis" style="display:block;font-size:17px">@${esc(TO.account.username)}</b><div class="small muted ellipsis">${esc(TO.account.email)}</div>${TO.account.server ? `<div class="tiny faint ellipsis">Login #${TO.account.server.loginCount} · from the database</div>` : ''}<div style="margin-top:6px">${ui.tierBadge(wl.tier.id, true)}</div></div></div>
+      <div class="drawer-head">${ui.avatar(TO.account.photo, 'lg')}<div class="grow" style="min-width:0"><b class="ellipsis" style="display:block;font-size:17px">@${esc(TO.account.username)}</b><div class="small muted ellipsis">${esc(TO.account.email)}</div><div style="margin-top:6px">${ui.tierBadge(wl.tier.id, true)}</div></div></div>
       <nav>
         ${item('screentime', `${wl.phoneLeft} min left`)}
         ${item('sports')}
@@ -6760,7 +7067,7 @@ window.TIMEOUT_SUPABASE = {
       <div class="stack-s">
         <div class="eyebrow">Controls</div>
         <div class="list">
-          ${listRow('shield', 'Enforce app limits', s.lockedApps.length ? 'Blocks your locked apps when today\'s phone time runs out' : '<span class="yellow">Lock at least one app or site below to turn this on</span>', ui.switchEl('set-enforce', s.enforce && s.lockedApps.length > 0, 'data-change="set-enforce"'), 'for="set-enforce"')}
+          ${listRow('shield', 'Enforce app limits', s.lockedApps.length || s.deviceLockPoints > 0 ? 'Blocks your locked apps when today\'s phone time runs out' : '<span class="yellow">Lock at least one app or site below to turn this on</span>', ui.switchEl('set-enforce', s.enforce && (s.lockedApps.length > 0 || s.deviceLockPoints > 0), 'data-change="set-enforce"'), 'for="set-enforce"')}
           <button class="list-row" data-act="locked-apps"><span class="lr-icon">${icon('lock', 17)}</span><span class="lr-main"><div class="lr-title">Locked apps & sites</div><div class="lr-sub">${s.lockedApps.length} locked · ${St.lockPoints()} lock points</div></span>${icon('chevR', 18, 'chev')}</button>
           <div class="list-row" style="flex-wrap:wrap"><span class="lr-icon">${icon('clock', 17)}</span><span class="lr-main"><div class="lr-title">Minimum phone time per day</div><div class="lr-sub">Losses can't push your limit below this</div></span><div class="seg" style="width:100%;margin-top:4px">${[0, 15, 30].map((v) => `<button class="${s.minLimit === v ? 'on' : ''}" data-act="set-minlimit" data-v="${v}">${v ? `${v} min` : 'None'}</button>`).join('')}</div></div>
           <div class="list-row" style="flex-wrap:wrap"><span class="lr-icon">${icon('bell', 17)}</span><span class="lr-main"><div class="lr-title">Warn me when phone time is low</div><div class="lr-sub">Shows a heads-up before apps lock</div></span><div class="seg" style="width:100%;margin-top:4px">${[5, 10, 15].map((v) => `<button class="${s.lowWarn === v ? 'on' : ''}" data-act="set-lowwarn" data-v="${v}">${v} min left</button>`).join('')}</div></div>
@@ -6788,8 +7095,8 @@ window.TIMEOUT_SUPABASE = {
       </div>
       <div class="card stack-s">
         <div class="row-layout"><div class="row-s">${icon('flame', 20, wl.streak ? 'yellow' : 'faint')}<b style="font-size:16px">${wl.streak ? `${wl.streak}-day clean streak` : 'No clean streak yet'}</b></div>${wl.multiplier > 1 ? `<span class="tag green" style="height:24px;font-size:12px">Wins ${St.fmtMult(wl.multiplier)}</span>` : ''}</div>
-        ${ms ? `<div class="bar"><i style="width:${(wl.streak / ms.days) * 100}%;background:var(--warn)"></i></div><div class="small muted bold">${ms.days - wl.streak} more clean day${ms.days - wl.streak === 1 ? '' : 's'} for ${St.fmtMult(ms.mult)} winnings.</div>` : '<div class="small green bold">Max multiplier reached. Keep it going.</div>'}
-        <div class="small muted">A clean day means limits were on, you stayed under your phone time, and you didn't use an emergency unlock. Winnings get ×1.1 at 3 days and ×1.25 at 7. An emergency unlock resets the streak.</div>
+        ${ms ? `<div class="bar"><i style="width:${(wl.streak / ms.days) * 100}%;background:var(--warn)"></i></div><div class="small muted bold">${ms.days - wl.streak} more clean day${ms.days - wl.streak === 1 ? '' : 's'} for ${St.fmtMult(ms.mult)} earned minutes.</div>` : '<div class="small green bold">Max multiplier reached. Keep it going.</div>'}
+        <div class="small muted">A clean day means limits were on, you stayed under your phone time, and you didn't use an emergency unlock. Earned minutes get ×1.1 at 3 days and ×1.25 at 7. An emergency unlock resets the streak.</div>
       </div>`;
   }
 
@@ -6803,7 +7110,7 @@ window.TIMEOUT_SUPABASE = {
   function notifications() {
     const n = TO.data.settings.notify;
     const row = (k, t, sub, ic) => listRow(ic, t, sub, ui.switchEl(`nt-${k}`, n[k], `data-change="set-notify" data-k="${k}"`), `for="nt-${k}"`);
-    return `<div class="small muted">In the demo these show as banners at the top of the screen.</div><div class="list">
+    return `<div class="small muted">These show as banners at the top of the screen while TimeOut is open. The iPhone app also sends real notifications when it's closed.</div><div class="list">
       ${row('resolved', 'Challenge results', 'When a matchup challenge is completed', 'target')}
       ${row('friends', 'Friend requests', 'When someone adds or accepts you', 'userPlus')}
       ${row('lowTime', 'Low phone time', 'Before your locked apps close', 'phone')}
@@ -6816,7 +7123,7 @@ window.TIMEOUT_SUPABASE = {
     return `<div class="small muted">Friends only see what you turn on here. Anything off shows as "Private" to them.</div><div class="list">
       ${row('record', 'My record', 'Wins and losses', 'chart')}
       ${row('minutes', 'Minutes won or lost', 'Your leaderboard number', 'hourglass')}
-      ${row('challenges', 'My open challenges', 'Picks you currently have open', 'ticket')}
+      ${row('challenges', 'My active challenges', 'Picks you currently have open', 'target')}
     </div>`;
   }
 
@@ -6849,7 +7156,7 @@ window.TIMEOUT_SUPABASE = {
           ${ui.field({ id: 'acct-new', label: 'New password', type: 'password', err: acctErr.newPassword, hint: 'At least 8 characters' })}
           <button class="btn ghost" data-act="acct-pw">Update password</button>
         </div>
-        <div class="stack-s"><button class="btn ghost" data-act="logout">${icon('logout', 18)} Log out</button></div>`;
+        <div class="stack-s"><button class="btn ghost" data-act="logout">${icon('logout', 18)} Log out</button><button class="btn quiet" style="color:var(--loss)" data-act="acct-delete">Delete account</button></div>`;
     }
     return `<div class="photo-pick"><label class="ph" for="acct-photo" style="cursor:pointer"><img src="${esc(a.photo)}" alt="Profile photo"><span class="cam">${icon('camera', 15)}</span></label><div><b>Profile photo</b><div class="small muted">Tap the photo to change it.</div></div><input type="file" id="acct-photo" accept="image/*" class="sr" data-change="acct-photo"></div>
       <div class="card stack">
@@ -6915,7 +7222,7 @@ window.TIMEOUT_SUPABASE = {
         const group = (kind) => St.LOCKABLE.filter((x) => x.kind === kind).map((x) => `<button class="list-row" data-act="lock-toggle" data-id="${x.id}"><span class="lr-icon" style="background:${x.color}22;color:${x.color}">${icon(kind === 'Category' ? 'grid' : kind === 'Website' ? 'globe' : 'phone', 17)}</span><span class="lr-main"><div class="lr-title">${esc(x.name)}</div><div class="lr-sub">${x.note ? `${esc(x.note)} · ` : ''}${x.pts} pt${x.pts === 1 ? '' : 's'}</div></span><span class="checkbox ${lockDraft.includes(x.id) ? 'on' : ''}">${icon('check', 15)}</span></button>`).join('');
         return {
           title: 'Locked apps & sites',
-          body: `<div class="small muted">These are the apps TimeOut blocks when your phone time runs out. The more you lock, the higher your tier.</div>
+          body: `<div class="small muted">These are the apps TimeOut blocks when your phone time runs out. The more you lock, the higher your tier. A browser can't block apps, so the real block happens in the TimeOut iPhone app.</div>
             <div class="card tight row-layout"><span class="bold">${pts} lock points</span>${ui.tierBadge(t.id)}</div>
             <div class="eyebrow">Categories · 3 pts each</div><div class="list">${group('Category')}</div>
             <div class="eyebrow">Apps · 1 pt each</div><div class="list">${group('App')}</div>
@@ -7015,7 +7322,17 @@ window.TIMEOUT_SUPABASE = {
     refresh();
   };
   A['acct-delete'] = async () => {
-    if (!(await ui.confirm({ title: 'Delete your account?', body: 'This removes your account, challenges and friends from this device. It can\'t be undone.', confirm: 'Delete account', danger: true }))) return;
+    const server = !!TO.account.server;
+    const body = server
+      ? 'This permanently deletes your TimeOut account, challenges, wallet and settings from TimeOut\'s servers and this device, and takes you off your teams. It can\'t be undone.'
+      : 'This removes your account, challenges and friends from this device. It can\'t be undone.';
+    if (!(await ui.confirm({ title: 'Delete your account?', body, confirm: 'Delete account', danger: true }))) return;
+    if (server) {
+      try { await TO.api.deleteAccount(); } catch (e) {
+        ui.toast({ kind: 'loss', title: 'Couldn\'t delete your account', msg: e.message });
+        return;
+      }
+    }
     St.deleteAccount();
     TO.comboGoalBuilder.clear();
     TO.app.boot();
@@ -7025,7 +7342,7 @@ window.TIMEOUT_SUPABASE = {
   C['set-enforce'] = async (el) => {
     const want = el.checked;
     el.checked = !want;
-    if (want && !TO.data.settings.lockedApps.length) {
+    if (want && !TO.data.settings.lockedApps.length && !(TO.data.settings.deviceLockPoints > 0)) {
       const pick = await ui.confirm({ title: 'Lock an app first', body: 'App limits need at least one locked app, site or category to block. Choose what TimeOut locks when your phone time runs out, and limits turn on with it.', confirm: 'Choose apps', cancel: 'Not now' });
       if (pick) lockedAppsSheet();
       return;
@@ -7388,7 +7705,21 @@ window.TIMEOUT_SUPABASE = {
       ui.toast({ kind: 'loss', title: 'Couldn\'t log in to the demo account', msg: e.message });
     }
   };
-  A.forgot = () => ui.confirm({ title: 'Reset your password', body: TO.api.online ? 'Password reset emails aren\'t built yet. Log in with the demo account or create a new account.' : 'In this demo, accounts live only in this browser, so there\'s no email reset. Create a new account or log in with the demo account.', confirm: 'OK', cancel: null });
+  A.forgot = async () => {
+    if (!TO.api.configured) {
+      ui.confirm({ title: 'Reset your password', body: 'TimeOut can\'t reach its server right now, so password reset emails can\'t be sent. Try again when you\'re back online.', confirm: 'OK', cancel: null });
+      return;
+    }
+    const email = String(document.getElementById('li-id')?.value || '').trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
+      ui.toast({ kind: 'warn', title: 'Enter your email first', msg: 'Type it above, then tap Forgot password.' });
+      return;
+    }
+    try {
+      await TO.api.sendPasswordReset(email);
+      ui.confirm({ title: 'Check your email', body: `If ${esc(email)} has a TimeOut account, we sent it a link to reset your password. Open it to sign in, then set a new password in <b>Account</b>.`, confirm: 'OK', cancel: null });
+    } catch (e) { ui.toast({ kind: 'loss', title: 'Couldn\'t send the email', msg: e.message }); }
+  };
   A['toggle-pw'] = (el) => {
     const input = document.getElementById(el.dataset.for);
     if (!input) return;
@@ -7462,8 +7793,26 @@ window.TIMEOUT_SUPABASE = {
     app.tab = 'home';
     app.render();
     TO.live.refresh();
-    if (St.refreshTeams) St.refreshTeams();
+    app.syncSocial().then(() => { if (St.refreshTeams) St.refreshTeams(); });
     if (TO.invites) TO.invites.offer();
+  };
+
+  /** Friends and requests from the server, with a banner for anything new.
+   *  `quiet` is for after the user's own action, which already says what happened. */
+  app.syncSocial = async (quiet = false) => {
+    if (!TO.data || !St.usesServerSocial() || !TO.api.socialState) return;
+    const state = await TO.api.socialState();
+    if (!state || !TO.data) return;
+    const changes = St.applySocial(state);
+    if (!quiet && TO.data.settings.notify.friends) {
+      for (const u of changes.newRequests) ui.toast({ kind: 'info', title: `@${u} sent you a friend request`, msg: 'Open Social to accept it.' });
+      for (const u of changes.newFriends) ui.toast({ kind: 'win', title: `You and @${u} are now friends` });
+    }
+    if (inShell() && !isTyping()) {
+      app.renderChrome();
+      if (app.tab === 'social') app.renderView();
+    }
+    if (ui.sheetOpen('profile')) ui.refreshSheet('profile');
   };
 
   const inShell = () => !!document.getElementById('shell') && !!TO.data;
@@ -7724,6 +8073,7 @@ window.TIMEOUT_SUPABASE = {
     if (remoteSync) return remoteSync;
     if (!force && Date.now() - remoteSyncAt < 30000) return;
     remoteSyncAt = Date.now();
+    app.syncSocial();
     remoteSync = TO.api.loadState().then((state) => {
       if (!state || !inShell()) return;
       St.adoptServerUser(TO.account.server, state);
