@@ -281,6 +281,11 @@
     refresh();
   };
   A.emergency = async () => {
+    // Screen time is enforced on the phone, so that's where an unlock has to happen.
+    if (TO.account?.server) {
+      ui.toast({ kind: 'warn', title: 'Use the iPhone app', msg: 'Emergency unlocks are made in the TimeOut iPhone app.' });
+      return;
+    }
     const wl = St.wallet();
     const ok = await ui.confirm({
       title: `Unlock ${TO.RULES.overrideMinutes} minutes now?`,

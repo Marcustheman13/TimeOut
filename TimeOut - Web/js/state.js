@@ -148,6 +148,9 @@
    *  acc.server always holds the latest values from the database (last login, login count...). */
   function adoptServerUser(user, remoteState = null) {
     const id = `srv_${user.id}`;
+    let shared = null;
+    let serverStreak = null;
+    let balanceSource = 'server';
     const all = accounts();
     const acc = all[id] || { id, salt: null, pw: null };
     Object.assign(acc, {
@@ -156,6 +159,9 @@
     });
     all[id] = acc; saveAccounts(all);
     if (remoteState) {
+      shared = remoteState.shared || {};
+      serverStreak = remoteState.wallet ? remoteState.wallet.streakDays : null;
+      delete remoteState.shared;
       const cached = TO.store.get(dataKey(id), null);
       if (cached) {
         const remoteChallenges = remoteState.challenges || [];
@@ -174,21 +180,22 @@
           }
           mergedChallenges.set(key, combined);
         }
-        const hasUnsyncedChallenges = (cached.challenges || []).some((challenge) => challenge.kind === 'sports' && !challenge.supabaseId);
+        const hasUnsyncedChallenges = (cached.challenges || []).some((challenge) => syncsToServer(challenge) && !challenge.supabaseId);
         const remoteHasPreferences = remoteState.appPreferencesReady && Object.keys(remoteState.settings || {}).length > 1;
         const preferences = remoteHasPreferences
           ? Object.assign({}, cached.settings || {}, remoteState.settings || {})
           : Object.assign({}, remoteState.settings || {}, cached.settings || {});
-        const savedSports = [
-          ...(Array.isArray(cached.settings?.sports) ? cached.settings.sports : []),
-          ...(Array.isArray(remoteState.settings?.sports) ? remoteState.settings.sports : []),
-        ].filter((league) => S.REAL_LEAGUES.includes(league));
-        if (savedSports.length) preferences.sports = [...new Set(savedSports)];
+        // One side's list wins outright. Combining them would bring back a sport the user just unfollowed.
+        const savedSports = (remoteHasPreferences ? remoteState.settings?.sports : cached.settings?.sports) || [];
+        const followed = savedSports.filter((league) => S.REAL_LEAGUES.includes(league));
+        if (followed.length) preferences.sports = [...new Set(followed)];
         remoteState = Object.assign({}, cached, remoteState, { challenges: [...mergedChallenges.values()], settings: preferences });
         // The new day starts on the device. The server's wallet only moves to a new day when a challenge is
         // placed, so a lagging server day must never pull this wallet back: that would close the same day
         // again and bump the streak on every sync.
-        if (hasUnsyncedChallenges || !remoteState.wallet || remoteState.wallet.dayKey !== TO.dayKey()) remoteState.wallet = cached.wallet;
+        if (hasUnsyncedChallenges || !remoteState.wallet) balanceSource = 'keep';
+        else if (remoteState.wallet.dayKey !== TO.dayKey()) balanceSource = 'day';
+        if (balanceSource !== 'server') remoteState.wallet = cached.wallet;
         else if (cached.wallet) {
           // Supabase currently owns the balance fields, while clean-day history is local-only.
           // Keep those local streak and usage ledgers when refreshing the server wallet.
@@ -228,7 +235,77 @@
     }
     else if (!TO.store.get(dataKey(id), null)) TO.store.set(dataKey(id), user.isDemo ? seedDemoData(TO.now()) : freshData(TO.now()));
     startSession(id);
+    if (shared) { applySharedLedger(shared, balanceSource, serverStreak); save(); }
     return acc;
+  }
+
+  // ---------- Shared between a user's devices ----------
+  /** Whether a challenge is saved in the server's challenge tables. To-dos, races and predictions stay on the device that placed them. */
+  function syncsToServer(challenge) {
+    return challenge?.kind === 'sports' && Number(challenge.pledgeMinutes) > 0 && challenge.picks?.length > 0
+      && challenge.picks.every((pick) => (pick.kind === 'game' || pick.kind === 'sports') && pick.gameId);
+  }
+
+  function deviceId() {
+    let id = TO.store.get('timeout.deviceId', null);
+    if (!id) { id = TO.uid('device'); TO.store.set('timeout.deviceId', id); }
+    return id;
+  }
+
+  /** Minutes the device-only challenges on a day have taken. The server's balance can't include these. */
+  function localPledged(d, day) {
+    return (d.challenges || []).reduce((sum, c) => {
+      if (syncsToServer(c) || c.dayKey !== day) return sum;
+      const refund = c.status === 'void' || c.status === 'tie' ? Number(c.reward || 0) : 0;
+      return sum + Number(c.pledgeMinutes || 0) - refund;
+    }, 0);
+  }
+
+  /** What goes in the shared ledger. The phone owns the screen-time records, so the web only passes back what it received; each device owns its own totals. */
+  function sharedLedger(d = TO.data) {
+    const w = d.wallet;
+    const cutoff = TO.addDays(w.dayKey, -7);
+    const recent = (map) => Object.fromEntries(Object.entries(map || {}).filter(([day]) => day >= cutoff));
+    const pledgedByDay = {}, netByDay = {};
+    for (const c of d.challenges || []) {
+      if (syncsToServer(c)) continue;
+      if (c.dayKey >= cutoff) pledgedByDay[c.dayKey] = localPledged(d, c.dayKey);
+      if (c.status !== 'open') {
+        const day = creditDay(c);
+        if (day >= cutoff) netByDay[day] = (netByDay[day] || 0) + Number(c.reward || 0) - Number(c.pledgeMinutes || 0);
+      }
+    }
+    const devices = {};
+    for (const [id, device] of Object.entries(d.sharedDevices || {})) {
+      const entry = { pledgedByDay: recent(device.pledgedByDay), netByDay: recent(device.netByDay) };
+      if (Object.keys(entry.pledgedByDay).length || Object.keys(entry.netByDay).length) devices[id] = entry;
+    }
+    devices[deviceId()] = { pledgedByDay, netByDay };
+    return {
+      usageByDay: d.phoneRecords?.usageByDay || {}, overridesByDay: d.phoneRecords?.overridesByDay || {}, penaltyByDay: d.phoneRecords?.penaltyByDay || {}, devices,
+    };
+  }
+
+  /** Shows the phone's screen-time records and streak, and counts the other devices' challenges. Runs after the new day has started here, so days line up. */
+  function applySharedLedger(shared, balanceSource, serverStreak) {
+    const d = TO.data, w = d.wallet;
+    for (const key of ['usageByDay', 'overridesByDay', 'penaltyByDay']) {
+      if (shared[key]) { d.phoneRecords[key] = shared[key]; w[key] = { ...shared[key] }; }
+    }
+    if (serverStreak != null) w.streakDays = serverStreak;
+    if (shared.devices) {
+      d.sharedDevices = { ...shared.devices };
+      delete d.sharedDevices[deviceId()];
+    }
+    let othersPledged = 0;
+    for (const device of Object.values(d.sharedDevices)) {
+      othersPledged += Number(device.pledgedByDay?.[w.dayKey]) || 0;
+      for (const [day, n] of Object.entries(device.netByDay || {})) w.netByDay[day] = (w.netByDay[day] || 0) + (Number(n) || 0);
+    }
+    if (balanceSource === 'keep') return;
+    const base = balanceSource === 'day' ? RULES.daily + (w.bonusDay === w.dayKey ? Number(w.bonusGranted || 0) : 0) : w.balance;
+    w.balance = Math.max(0, base - localPledged(d, w.dayKey) - othersPledged);
+    w.lockedOut = w.balance <= 0;
   }
 
   function startSession(id) {
@@ -338,6 +415,8 @@
       socialProfiles: {}, // friends' shared stats and team results, cached from the server
       teamResults: {},
       socialSynced: false,
+      sharedDevices: {}, // the user's other devices, from the shared ledger
+      phoneRecords: {}, // the phone's screen-time records, exactly as it last reported them
     };
   }
 
@@ -1360,6 +1439,7 @@
     RULES, TIERS, LOCKABLE, PEOPLE, DEMO, TODO_VALUE,
     tierById, tierForPoints, tierPerks, streakMultiplier, nextStreakMilestone, fmtMult,
     accounts, findAccount, createAccount, login, logout, loadSession, startSession, updateAccount, deleteAccount, adoptServerUser,
+    syncsToServer, sharedLedger,
     validateUsername, validateEmail, validatePassword,
     save, wallet, rollover, grantTierBonus, addUsage, checkPhoneTime, useEmergencyUnlock, setSetting, limitFor, baseLimitFor, lockPoints, tier,
     submitPledge, placeTodoCombo, completeTodo, resolve, outcome, combine, pickFromSelection,

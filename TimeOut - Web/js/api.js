@@ -7,6 +7,10 @@
   let pendingState = null;
   let lastSaveAt = 0;
   let lastSettingsSnapshot = '';
+  let lastLedgerSnapshot = '';
+  let supportsSharedLedger = true;
+  // Postgres reorders JSON keys, so sort them to compare the saved ledger with this device's.
+  const canonical = (value) => JSON.stringify(value, (key, v) => (v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).sort()) : v));
   let supportsAppPreferences = true;
   let supportsTierBonusColumns = null;
   let supportsTierPerkColumns = null;
@@ -16,7 +20,6 @@
   let lastTierPerkMigrationAlertAt = 0;
   const placing = new Set();
   const settling = new Set();
-  const isPersistableGamePick = (pick) => pick?.kind === 'game' || (pick?.kind === 'sports' && !!pick.gameId);
 
   // The server's own wording. Never shown to users; the app reads it to recognize specific problems.
   const rawText = (error) => String(error?.debug || error?.message || '');
@@ -245,6 +248,16 @@
       supportsAppPreferences = false;
       settingsRows = await rest(`user_settings?select=followed_sports,timezone,notifications_enabled&user_id=eq.${safeId}&limit=1`);
     }
+    let shared = null;
+    if (supportsSharedLedger) {
+      try {
+        const rows = await rest(`user_settings?select=shared_ledger&user_id=eq.${safeId}&limit=1`);
+        shared = rows?.[0]?.shared_ledger || null;
+        if (shared) lastLedgerSnapshot = canonical(shared);
+      } catch (e) {
+        if (/shared_ledger/i.test(rawText(e))) supportsSharedLedger = false; // server/db/supabase-shared-ledger.sql hasn't been run
+      }
+    }
     // "pushed" and "push" are the previous database labels.
     const status = { pending: 'open', won: 'won', lost: 'lost', tied: 'tie', pushed: 'tie', voided: 'void', cancelled: 'void' };
     const result = { pending: 'pending', win: 'won', loss: 'lost', tie: 'tie', push: 'tie', void: 'void' };
@@ -273,10 +286,7 @@
       walletState.insuranceByWeek = wallet.tier_insurance_by_week || {};
     }
     const appPreferences = settings?.app_preferences || {};
-    const storedSports = [
-      ...(Array.isArray(settings?.followed_sports) ? settings.followed_sports : []),
-      ...(Array.isArray(appPreferences.sports) ? appPreferences.sports : []),
-    ];
+    const storedSports = Array.isArray(appPreferences.sports) ? appPreferences.sports : (Array.isArray(settings?.followed_sports) ? settings.followed_sports : []);
     const followedSports = [...new Set(storedSports.filter((league) => TO.sim.REAL_LEAGUES.includes(league)))];
     const remotePreferences = { ...appPreferences };
     if (followedSports.length) remotePreferences.sports = followedSports;
@@ -284,9 +294,9 @@
       challenges,
       ...(walletState ? { wallet: walletState } : {}),
       ...(settings ? { settings: remotePreferences, appPreferencesReady: supportsAppPreferences } : {}),
+      ...(shared ? { shared } : {}),
     };
   };
-  let syncedStreak = null;
   let inviteCode = null;
 
   api.queueStateSave = (data) => {
@@ -322,8 +332,22 @@
         await rest(`user_settings?user_id=eq.${encodeURIComponent(id)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: settingsSnapshot });
         lastSettingsSnapshot = settingsSnapshot;
       }
+      // Its own column and its own write, so these frequent updates can't overwrite a settings change from another device.
+      if (supportsSharedLedger) {
+        const ledger = TO.state.sharedLedger(data);
+        const ledgerSnapshot = canonical(ledger);
+        if (ledgerSnapshot !== lastLedgerSnapshot) {
+          try {
+            await rest(`user_settings?user_id=eq.${encodeURIComponent(id)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ shared_ledger: ledger }) });
+            lastLedgerSnapshot = ledgerSnapshot;
+          } catch (e) {
+            if (/shared_ledger/i.test(rawText(e))) supportsSharedLedger = false;
+            else console.warn('Could not share daily records with your other devices:', e.message);
+          }
+        }
+      }
       for (const challenge of data.challenges || []) {
-        if (challenge.kind !== 'sports' || !Number(challenge.pledgeMinutes) || !challenge.picks?.length || challenge.picks.some((pick) => !isPersistableGamePick(pick) || !pick.gameId)) continue;
+        if (!TO.state.syncsToServer(challenge)) continue;
         if (!challenge.supabaseId && !placing.has(challenge.id)) {
           placing.add(challenge.id);
           try {
@@ -409,12 +433,6 @@
           } finally { settling.delete(challenge.supabaseId); }
         }
       }
-      // Friends see this streak. The app works it out on the device, so the server needs telling.
-      const streak = Number(data.wallet?.streakDays || 0);
-      if (syncedStreak !== streak) {
-        await rest('rpc/timeout_set_streak', { method: 'POST', signal: AbortSignal.timeout(4000), body: JSON.stringify({ p_streak: streak }) }).catch(() => {});
-        syncedStreak = streak;
-      }
       lastSaveAt = Date.now();
       api.syncError = null;
     } catch (e) {
@@ -467,7 +485,6 @@
     api.clearToken();
     lastSettingsSnapshot = '';
     inviteCode = null;
-    syncedStreak = null;
   };
 
   /** Permanently deletes the signed-in account and its data (server/db/supabase-delete-account.sql). */

@@ -55,6 +55,7 @@ struct RemoteState {
     /// Raw app_preferences (plus followed sports), merged key by key like the web demo.
     var settings: [String: Any]?
     var appPreferencesReady = false
+    var shared: SharedLedger?
 }
 
 /// Accounts, the screen-time wallet, challenges, resolution, tiers/streaks, friends and teams.
@@ -280,6 +281,7 @@ final class Store {
         accountsById[id] = acc
         saveAccounts()
 
+        var balanceSource = BalanceSource.server
         if let remote = remoteIn {
             var merged: UserData
             if let cached = loadData(id) {
@@ -311,13 +313,14 @@ final class Store {
                     } else { byKey[k] = b }
                 }
                 merged.challenges = order.compactMap { byKey[$0] }
-                let hasUnsynced = cached.challenges.contains { $0.kind == "sports" && $0.supabaseId == nil }
+                let hasUnsynced = cached.challenges.contains { Self.syncsToServer($0) && $0.supabaseId == nil }
                 // Settings: whichever side has real preferences wins, key by key.
                 let cachedDict = Self.dictionary(cached.settings)
                 let remoteDict = remote.settings ?? [:]
                 let remoteHasPrefs = remote.appPreferencesReady && remoteDict.count > 1
                 var prefs = remoteHasPrefs ? cachedDict.merging(remoteDict) { _, r in r } : remoteDict.merging(cachedDict) { _, c in c }
-                let sports = (cached.settings.sports + ((remoteDict["sports"] as? [String]) ?? [])).filter { Sim.realLeagues.contains($0) }
+                // One side's list wins outright. Combining them would bring back a sport the user just unfollowed.
+                let sports = ((remoteHasPrefs ? remoteDict["sports"] as? [String] : nil) ?? cached.settings.sports).filter { Sim.realLeagues.contains($0) }
                 var unique: [String] = []
                 for s in sports where !unique.contains(s) { unique.append(s) }
                 if !unique.isEmpty { prefs["sports"] = unique }
@@ -344,6 +347,8 @@ final class Store {
                         w.bonusGranted = max(localBonus, serverBonus)
                     }
                     merged.wallet = w
+                } else {
+                    balanceSource = hasUnsynced || remote.wallet == nil ? .keep : .day
                 }
             } else {
                 merged = freshData(TO.now())
@@ -369,6 +374,78 @@ final class Store {
             storeData(id, freshData(TO.now()))
         }
         startSession(id)
+        if let remoteIn {
+            applySharedLedger(remoteIn.shared, balanceSource)
+            save()
+        }
+    }
+
+    // MARK: Shared between a user's devices
+
+    private enum BalanceSource { case server, day, keep }
+
+    /// Whether a challenge is saved in the server's challenge tables. To-dos, races and predictions stay on the device that placed them.
+    static func syncsToServer(_ c: Challenge) -> Bool {
+        c.kind == "sports" && c.pledgeMinutes > 0 && !c.picks.isEmpty && c.picks.allSatisfy { ($0.kind == "game" || $0.kind == "sports") && $0.gameId != nil }
+    }
+
+    private static var deviceId: String {
+        if let id = UserDefaults.standard.string(forKey: "timeout.deviceId") { return id }
+        let id = TO.uid("device")
+        UserDefaults.standard.set(id, forKey: "timeout.deviceId")
+        return id
+    }
+
+    /// Minutes the device-only challenges on a day have taken. The server's balance can't include these.
+    private func localPledged(_ d: UserData, _ day: String) -> Int {
+        d.challenges.reduce(0) { sum, c in
+            if Self.syncsToServer(c) || c.dayKey != day { return sum }
+            return sum + c.pledgeMinutes - (c.status == "void" || c.status == "tie" ? c.reward : 0)
+        }
+    }
+
+    /// What goes in the shared ledger: this phone's screen-time records, plus each device's own challenge totals.
+    func sharedLedger(_ d: UserData) -> SharedLedger {
+        let cutoff = TO.addDays(d.wallet.dayKey, -7)
+        func recent(_ map: [String: Int]) -> [String: Int] { map.filter { $0.key >= cutoff } }
+        var mine = SharedLedger.Device()
+        for c in d.challenges where !Self.syncsToServer(c) {
+            if c.dayKey >= cutoff { mine.pledgedByDay[c.dayKey] = localPledged(d, c.dayKey) }
+            if c.status != "open" {
+                let day = Self.creditDay(c)
+                if day >= cutoff { mine.netByDay[day, default: 0] += c.reward - c.pledgeMinutes }
+            }
+        }
+        var ledger = SharedLedger()
+        for (id, device) in d.sharedDevices {
+            let entry = SharedLedger.Device(pledgedByDay: recent(device.pledgedByDay), netByDay: recent(device.netByDay))
+            if !entry.pledgedByDay.isEmpty || !entry.netByDay.isEmpty { ledger.devices[id] = entry }
+        }
+        ledger.devices[Self.deviceId] = mine
+        ledger.usageByDay = recent(d.wallet.usageByDay)
+        ledger.overridesByDay = recent(d.wallet.overridesByDay)
+        ledger.penaltyByDay = recent(d.wallet.penaltyByDay)
+        return ledger
+    }
+
+    /// Counts challenges from the user's other devices. Screen-time records come from this phone, so nothing else is read back.
+    private func applySharedLedger(_ shared: SharedLedger?, _ balanceSource: BalanceSource) {
+        guard var d = data else { return }
+        if let shared {
+            d.sharedDevices = shared.devices
+            d.sharedDevices[Self.deviceId] = nil
+        }
+        var othersPledged = 0
+        for device in d.sharedDevices.values {
+            othersPledged += device.pledgedByDay[d.wallet.dayKey] ?? 0
+            for (day, n) in device.netByDay { d.wallet.netByDay[day, default: 0] += n }
+        }
+        if balanceSource != .keep {
+            let base = balanceSource == .day ? Rules.daily + (d.wallet.bonusDay == d.wallet.dayKey ? d.wallet.bonusGranted : 0) : d.wallet.balance
+            d.wallet.balance = max(0, base - localPledged(d, d.wallet.dayKey) - othersPledged)
+            d.wallet.lockedOut = d.wallet.balance <= 0
+        }
+        data = d
     }
 
     static func dictionary(_ s: Settings) -> [String: Any] {

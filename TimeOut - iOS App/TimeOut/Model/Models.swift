@@ -342,6 +342,45 @@ struct Squad: Codable, Hashable, Identifiable {
     var rev: Int?
 }
 
+/// What a user's devices share (`user_settings.shared_ledger`). Same shape as the web app's.
+/// This phone owns the screen-time records; the website only displays them.
+struct SharedLedger: Codable {
+    struct Device: Codable {
+        var pledgedByDay: [String: Int] = [:]
+        var netByDay: [String: Int] = [:]
+
+        init(pledgedByDay: [String: Int] = [:], netByDay: [String: Int] = [:]) {
+            self.pledgedByDay = pledgedByDay
+            self.netByDay = netByDay
+        }
+
+        enum CodingKeys: String, CodingKey { case pledgedByDay, netByDay }
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            pledgedByDay = (try? c.decode([String: Int].self, forKey: .pledgedByDay)) ?? [:]
+            netByDay = (try? c.decode([String: Int].self, forKey: .netByDay)) ?? [:]
+        }
+    }
+
+    var usageByDay: [String: Int] = [:]
+    var overridesByDay: [String: Int] = [:]
+    var penaltyByDay: [String: Int] = [:]
+    var devices: [String: Device] = [:]
+
+    init() {}
+
+    enum CodingKeys: String, CodingKey { case usageByDay, overridesByDay, penaltyByDay, devices }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        usageByDay = (try? c.decode([String: Int].self, forKey: .usageByDay)) ?? [:]
+        overridesByDay = (try? c.decode([String: Int].self, forKey: .overridesByDay)) ?? [:]
+        penaltyByDay = (try? c.decode([String: Int].self, forKey: .penaltyByDay)) ?? [:]
+        devices = (try? c.decode([String: Device].self, forKey: .devices)) ?? [:]
+    }
+}
+
 struct UserData: Codable {
     var v = 1
     var wallet: WalletData
@@ -360,10 +399,12 @@ struct UserData: Codable {
     var socialProfiles: [String: SocialProfile] = [:]
     var teamResults: [String: [TeamStanding]] = [:]
     var socialSynced = false
+    /// The user's other devices, from the shared ledger.
+    var sharedDevices: [String: SharedLedger.Device] = [:]
 
     init(wallet: WalletData) { self.wallet = wallet }
 
-    enum CodingKeys: String, CodingKey { case v, wallet, challenges, lastPledge, settings, onboarded, friends, requestsIn, requestsOut, teams, feedFilter, feedLive, socialProfiles, teamResults, socialSynced }
+    enum CodingKeys: String, CodingKey { case sharedDevices, v, wallet, challenges, lastPledge, settings, onboarded, friends, requestsIn, requestsOut, teams, feedFilter, feedLive, socialProfiles, teamResults, socialSynced }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -373,6 +414,7 @@ struct UserData: Codable {
         lastPledge = (try? c.decode(Int.self, forKey: .lastPledge)) ?? 5
         settings = (try? c.decode(Settings.self, forKey: .settings)) ?? Settings()
         onboarded = (try? c.decode(Bool.self, forKey: .onboarded)) ?? false
+        sharedDevices = (try? c.decode([String: SharedLedger.Device].self, forKey: .sharedDevices)) ?? [:]
         friends = (try? c.decode([String].self, forKey: .friends)) ?? []
         requestsIn = (try? c.decode([FriendRequest].self, forKey: .requestsIn)) ?? []
         requestsOut = (try? c.decode([FriendRequest].self, forKey: .requestsOut)) ?? []

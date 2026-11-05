@@ -126,7 +126,7 @@ final class AppModel {
         }
         ScreenTime.shared.sync()
         store.checkPhoneTime()
-        if Date().timeIntervalSince(lastRemoteSync) > 30 { syncRemoteState() }
+        if Date().timeIntervalSince(lastRemoteSync) > Self.remoteSyncSeconds { syncRemoteState() }
     }
 
     func notifyResolved(_ list: [Challenge]) {
@@ -146,14 +146,18 @@ final class AppModel {
     }
 
     /// Challenges placed on another device (or the website) show up here within 30 seconds.
+    private static let remoteSyncSeconds: TimeInterval = 15
+
     func syncRemoteState(force: Bool = false) {
         guard inShell, API.shared.configured, API.shared.hasToken, let server = store.account?.server, !remoteSyncing else { return }
-        if !force && Date().timeIntervalSince(lastRemoteSync) < 30 { return }
+        if !force && Date().timeIntervalSince(lastRemoteSync) < Self.remoteSyncSeconds { return }
         lastRemoteSync = Date()
         remoteSyncing = true
         Task {
             defer { remoteSyncing = false }
             await syncSocial()
+            // Save first, so a change made on this device isn't overwritten by the older copy on the server.
+            do { try await API.shared.flushState() } catch { return }
             guard let state = try? await API.shared.loadState(), inShell else { return }
             store.adoptServerUser(server, remote: state)
         }
