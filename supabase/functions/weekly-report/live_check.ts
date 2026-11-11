@@ -1,15 +1,15 @@
 // Checks the AI step against the real Gemini API, the one thing the unit tests can't do. It sends four sample weeks through
 // the same code the Edge Function uses and reports, for each, whether the AI's own words were accepted or the template
-// had to step in. Costs a handful of free-tier requests and sends no email.
+// had to step in. Costs a handful of free-tier requests and publishes nothing.
 //
 //   deno run --allow-net --allow-env --allow-read --allow-write supabase/functions/weekly-report/live_check.ts
 //
-// Options: --runs=3 (tries per week, to see how often the AI gets it right)  --html=out.html (saves the first email)
+// Options: --runs=3 (tries per week, to see how often the AI gets it right)  --json=out.json (saves the first report, as the apps would receive it)
 // The key comes from GEMINI_API_KEY, or from a line GEMINI_API_KEY=... in supabase/functions/weekly-report/.env
 // (git ignores .env files). GEMINI_MODEL picks another model.
 
 import { DEFAULT_MODEL, writeDecision } from "./ai.ts";
-import { renderEmail } from "./email.ts";
+import { buildReport } from "./report.ts";
 import { computeStats, type WorkChallenge, type WorkUser } from "./stats.ts";
 
 async function readKey(): Promise<string | null> {
@@ -51,7 +51,7 @@ console.log(`Model ${model} is available.\n`);
 
 // Step 2: four different weeks.
 const base = {
-  userId: "check", email: "check@example.com", name: null, timezone: "America/Denver", weekStart: "2026-11-02", enforce: true, minLimit: 0,
+  userId: "check", timezone: "America/Denver", weekStart: "2026-11-02", enforce: true, minLimit: 0,
   overridesByDay: {}, penaltyByDay: {},
 };
 const won = (day: string, p: number, r: number, leagues = ["nba"]): WorkChallenge => ({ day, status: "won", pledge: p, reward: r, insured: false, leagues });
@@ -96,10 +96,10 @@ for (const { name, user } of weeks) {
     console.log(`  run ${run}: ${written.source === "ai" ? "AI wrote it" : "TEMPLATE used"} (${written.attempts} call${written.attempts === 1 ? "" : "s"})${written.note ? `  [${written.note}]` : ""}`);
     if (run === 1) {
       console.log(`    ${d.weekType} / ${d.tone}${d.skip ? " / SKIP" : ""}\n    "${d.headline}"\n    ${d.summary}\n    Noticing: ${d.insight}\n    Next week (${d.suggestion.kind}): ${d.suggestion.text}`);
-      const out = arg("html");
+      const out = arg("json");
       if (out && !savedHtml && !d.skip) {
-        await Deno.writeTextFile(out, renderEmail({ name: "Sam Lee", stats, decision: d, unsubscribeUrl: "https://example.test/unsubscribe" }).html);
-        console.log(`    (saved the email to ${out})`);
+        await Deno.writeTextFile(out, JSON.stringify(buildReport(user.weekStart, stats, d), null, 2));
+        console.log(`    (saved the report to ${out})`);
         savedHtml = true;
       }
     }

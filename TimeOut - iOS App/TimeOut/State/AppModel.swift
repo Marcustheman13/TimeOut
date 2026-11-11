@@ -83,6 +83,7 @@ final class AppModel {
         Task {
             await syncSocial()
             await store.refreshTeams()
+            await WeeklyReports.shared.refresh()
         }
         Invites.offer()
         ScreenTime.shared.sync()
@@ -156,6 +157,7 @@ final class AppModel {
         Task {
             defer { remoteSyncing = false }
             await syncSocial()
+            await WeeklyReports.shared.refresh() // checks at most every few minutes
             // Save first, so a change made on this device isn't overwritten by the older copy on the server.
             do { try await API.shared.flushState() } catch { return }
             guard let state = try? await API.shared.loadState(), inShell else { return }

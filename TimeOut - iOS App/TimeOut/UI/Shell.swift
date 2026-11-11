@@ -74,7 +74,7 @@ struct TopBar: View {
             Button { ui.drawerOpen = true } label: {
                 Icon(.menu, 22).foregroundStyle(Theme.text).frame(width: 40, height: 40)
                     .overlay(alignment: .topTrailing) {
-                        if wl.appsLocked {
+                        if wl.appsLocked || WeeklyReports.shared.unread > 0 {
                             Circle().fill(Theme.live).frame(width: 8, height: 8)
                                 .overlay(Circle().stroke(Theme.bg, lineWidth: 2)).padding(7)
                         }

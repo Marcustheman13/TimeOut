@@ -855,3 +855,17 @@ a.btn, a.dn, a.sn { text-decoration: none; color: inherit; }
   .race-silk { width: 34px; height: 34px; }
   .race-target { width: 88px; }
 }
+
+/* Weekly report */
+.weekly-report .wr-headline { margin: 0; font-size: 24px; line-height: 1.2; font-family: var(--font-display); letter-spacing: 0.01em; }
+.weekly-report .wr-text { margin: 0; font-size: 15px; line-height: 1.5; color: var(--text-2); }
+.wr-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; }
+.wr-tile { background: var(--raised); border: 1px solid var(--stroke); border-radius: 12px; padding: 12px 8px; text-align: center; }
+.wr-tile b { display: block; font-size: 20px; line-height: 1.2; }
+.wr-tile span { display: block; margin-top: 4px; font-size: 12px; color: var(--faint); }
+.wr-note { border-left: 3px solid var(--accent); background: var(--raised); border-radius: 0 12px 12px 0; padding: 12px 14px; }
+.wr-note.alt { border-left-color: var(--blue); }
+.wr-note p { margin: 4px 0 0; font-size: 15px; line-height: 1.45; }
+.wr-days { display: grid; gap: 0; font-size: 14px; }
+.wr-day { display: grid; grid-template-columns: 1fr auto auto 56px; gap: 12px; padding: 8px 0; border-top: 1px solid var(--stroke); align-items: baseline; }
+.wr-day > :nth-child(n+2) { text-align: right; }

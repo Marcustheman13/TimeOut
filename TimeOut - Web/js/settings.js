@@ -11,6 +11,7 @@
     sports: { title: 'Sports & races', icon: 'grid' },
     notifications: { title: 'Notifications & privacy', icon: 'bell' },
     account: { title: 'Account', icon: 'user' },
+    weekly: { title: 'Weekly report', icon: 'chart' },
   };
   // Older links still name the sections that now live inside a combined page.
   const SECTION_GROUP = { status: 'screentime', races: 'sports', privacy: 'notifications' };
@@ -25,9 +26,10 @@
     wrap.style.cssText = 'position:absolute;inset:0';
     const item = (key, sub) => `<button class="dn" data-act="settings" data-section="${key}">${icon(SECTIONS[key].icon, 20)}${SECTIONS[key].title}${sub ? `<span class="sub">${sub}</span>` : ''}</button>`;
     wrap.innerHTML = `<div class="scrim" data-act="close-drawer"></div><aside class="drawer" aria-label="Menu">
-      <div class="drawer-head">${ui.avatar(TO.account.photo, 'lg')}<div class="grow" style="min-width:0"><b class="ellipsis" style="display:block;font-size:17px">@${esc(TO.account.username)}</b><div class="small muted ellipsis">${esc(TO.account.email)}</div><div style="margin-top:6px">${ui.tierBadge(wl.tier.id, true)}</div></div></div>
+      <button class="drawer-head" data-act="settings" data-section="account" title="Account" style="width:100%;text-align:left">${ui.avatar(TO.account.photo, 'lg')}<div class="grow" style="min-width:0"><b class="ellipsis" style="display:block;font-size:17px">@${esc(TO.account.username)}</b><div class="small muted ellipsis">${esc(TO.account.email)}</div><div style="margin-top:6px">${ui.tierBadge(wl.tier.id, true)}</div></div></button>
       <nav>
         ${item('screentime', `${wl.phoneLeft} min left`)}
+        ${TO.weekly.unread() ? item('weekly', '<b class="tag green">New</b>') : item('weekly')}
         ${item('sports')}
         ${item('notifications')}
         ${item('account')}
@@ -133,6 +135,7 @@
     const n = TO.data.settings.notify;
     const row = (k, t, sub, ic) => listRow(ic, t, sub, ui.switchEl(`nt-${k}`, n[k], `data-change="set-notify" data-k="${k}"`), `for="nt-${k}"`);
     return `<div class="small muted">These show as banners at the top of the screen while TimeOut is open. The iPhone app also sends real notifications when it's closed.</div><div class="list">
+      ${row('weekly', 'Weekly report', 'A review of your week, every Monday, in the menu', 'chart')}
       ${row('resolved', 'Challenge results', 'When a matchup challenge is completed', 'target')}
       ${row('friends', 'Friend requests', 'When someone adds or accepts you', 'userPlus')}
       ${row('lowTime', 'Low phone time', 'Before your locked apps close', 'phone')}
@@ -165,7 +168,7 @@
   function account() {
     const a = TO.account;
     if (TO.api.online && a.server) {
-      return `<div class="photo-pick"><span class="ph"><img src="${esc(a.photo)}" alt="Profile photo"></span><div><b>@${esc(a.username)}</b><div class="small muted">${esc(a.email)}</div></div></div>
+      return `<div class="photo-pick"><label class="ph" for="acct-photo" style="cursor:pointer"><img src="${esc(a.photo)}" alt="Profile photo"><span class="cam">${icon('camera', 15)}</span></label><div><b>@${esc(a.username)}</b><div class="small muted">${esc(a.email)}</div><div class="small muted">Tap the photo to change it.</div></div><input type="file" id="acct-photo" accept="image/*" class="sr" data-change="acct-photo"></div>
         ${serverAccountCard(a.server)}
         <div class="card stack">
           <h2 style="margin:0;font-size:17px">Profile</h2>
@@ -206,6 +209,7 @@
       sports: () => `${sports()}<div class="eyebrow">Virtual racing</div>${TO.views.races.render()}`,
       notifications: () => `${notifications()}<div class="eyebrow">What friends can see</div>${privacy()}`,
       account,
+      weekly: () => `<div class="weekly-page">${TO.weekly.render()}</div>`,
     };
     return { title: SECTIONS[key].title, body: map[key]() };
   }
@@ -215,6 +219,7 @@
     closeDrawer();
     acctErr = {};
     ui.openPage('settings', { render: () => render(key), after: key === 'sports' ? (el) => TO.races.mount(el) : undefined });
+    if (key === 'weekly') { TO.weekly.sel = 0; TO.weekly.markShown(); TO.weekly.refresh(); }
   }
 
   // ---------- App walkthrough ----------

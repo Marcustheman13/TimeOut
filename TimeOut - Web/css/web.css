@@ -59,6 +59,8 @@
 .sn.primary.on .ic { color: var(--accent); }
 .sn-l { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sn-sub { font-size: 12px; font-weight: 700; color: var(--muted); white-space: nowrap; }
+.sn:has(.sn-sub) { height: auto; min-height: 44px; padding-top: 6px; padding-bottom: 6px; flex-wrap: wrap; row-gap: 0; }
+.sn:has(.sn-sub) .sn-sub { order: 3; flex: 0 0 100%; padding-left: 29px; margin-top: -2px; white-space: normal; }
 .sn-n {
   min-width: 22px; height: 20px; padding: 0 6px;
   border-radius: 10px; background: var(--live-fill); color: #fff;

@@ -10,7 +10,7 @@ const challenge = (day: string, status: WorkChallenge["status"], pledge: number,
 
 const statsFor = (over: Partial<WorkUser>) =>
   computeStats({
-    userId: "u", email: "a@b.c", name: null, timezone: "America/Denver", weekStart: WEEK, enforce: true, minLimit: 0,
+    userId: "u", timezone: "America/Denver", weekStart: WEEK, enforce: true, minLimit: 0,
     streak: 0, usageByDay: {}, overridesByDay: {}, penaltyByDay: {}, challenges: [], ...over,
   });
 

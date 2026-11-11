@@ -14,7 +14,7 @@ export interface ModelConfig {
 // stopped working for new keys), and the checks in decision.ts catch any answer the newer model gets wrong.
 export const DEFAULT_MODEL = "gemini-flash-lite-latest";
 
-export const SYSTEM_PROMPT = `You write the weekly review email for TimeOut, an app where people pledge phone minutes (never money) on sports challenges and limit their time on apps they choose. Win a challenge and tomorrow's phone time goes up. Lose and it goes down.
+export const SYSTEM_PROMPT = `You write the weekly review that TimeOut shows inside its app, an app where people pledge phone minutes (never money) on sports challenges and limit their time on apps they choose. Win a challenge and tomorrow's phone time goes up. Lose and it goes down.
 
 You get one person's stats for the past week as JSON. Decide how to frame the week, then write it.
 
@@ -125,7 +125,7 @@ export interface Deps {
 /**
  * Asks the AI to decide the week and checks its answer. One retry: if the answer breaks a rule, the model is told which
  * one and tries again. If the call itself fails (rate limit, outage), it waits a few seconds and tries again. After two
- * failures the template writes the email, so a bad AI day never means a missing email.
+ * failures the template writes the report, so a bad AI day never means a missing report.
  */
 export async function writeDecision(stats: WeekStats, config: ModelConfig | null, deps: Deps = {}): Promise<Written> {
   if (!config) return { decision: fallbackDecision(stats), source: "fallback", attempts: 0, note: "GEMINI_API_KEY isn't set" };

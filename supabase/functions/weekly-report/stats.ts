@@ -17,8 +17,6 @@ export interface WorkChallenge {
 
 export interface WorkUser {
   userId: string;
-  email: string;
-  name: string | null;
   timezone: string;
   weekStart: string; // the Monday, YYYY-MM-DD
   enforce: boolean;
@@ -191,7 +189,7 @@ export function computeStats(user: WorkUser): WeekStats {
   };
 }
 
-/** What the AI gets to see. Only numbers and fixed words, no names, emails or dates. */
+/** What the AI gets to see. Only numbers and fixed words, no names or dates. */
 export function forModel(stats: WeekStats): Record<string, unknown> {
   return {
     hasUsage: stats.hasUsage,

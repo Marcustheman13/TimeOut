@@ -402,7 +402,7 @@
         lockedApps: [],
         minLimit: 0,
         lowWarn: 10,
-        notify: { resolved: true, friends: true, lowTime: true },
+        notify: { resolved: true, friends: true, lowTime: true, weekly: true },
         privacy: { record: true, minutes: true, challenges: true },
         deviceLockPoints: 0, // lock points from real Screen Time picks in the iPhone app
       },
@@ -453,6 +453,7 @@
     const notify = d.settings && d.settings.notify;
     if (notify && notify.settled != null && notify.resolved == null) notify.resolved = notify.settled;
     if (notify) delete notify.settled;
+    if (notify && notify.weekly == null) notify.weekly = true;
     return d;
   }
 

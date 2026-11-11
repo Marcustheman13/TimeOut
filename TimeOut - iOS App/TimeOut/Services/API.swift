@@ -689,6 +689,30 @@ final class API {
         return SocialState(friends: friends, requestsIn: json["requestsIn"].array.compactMap(request), requestsOut: json["requestsOut"].array.compactMap(request))
     }
 
+    // MARK: Weekly report
+
+    /// The person's published weekly reports, newest first. Nil when it can't be reached or the database doesn't have them yet.
+    func weeklyReports() async -> [WeeklyReport]? {
+        guard configured, token != nil, let json = try? await rest("rpc/timeout_my_weekly_reports", method: "POST", body: ["p_limit": 12], timeout: 6), json.isArray else { return nil }
+        return json.array.compactMap { item in
+            let r = item["report"]
+            guard let week = item["weekStart"].string, let headline = r["headline"].text else { return nil }
+            let days: [WeeklyReport.Day]? = r["days"].isArray ? r["days"].array.map {
+                WeeklyReport.Day(weekday: $0["weekday"].string ?? "", used: $0["used"].number.map { Int($0) }, limit: Int($0["limit"].number ?? 0), status: $0["status"].string ?? "none")
+            } : nil
+            return WeeklyReport(
+                week: week, range: r["range"].string ?? "", weekType: r["weekType"].string ?? "steady", label: r["label"].string ?? "",
+                headline: headline, summary: r["summary"].string ?? "", insight: r["insight"].string ?? "", suggestion: r["suggestion"]["text"].string ?? "",
+                tiles: r["tiles"].array.compactMap { t in t["label"].string.map { WeeklyReport.Tile(label: $0, value: t["value"].string ?? "") } },
+                days: days, read: item["read"].bool ?? false)
+        }
+    }
+
+    func markWeeklyReportRead(_ week: String) async {
+        guard configured, token != nil else { return }
+        _ = try? await rest("rpc/timeout_mark_weekly_report_read", method: "POST", body: ["p_week": week], timeout: 6)
+    }
+
     /// Runs one friends function. Turns "the database doesn't have it yet" into a sentence people can act on.
     private func friendCall(_ name: String, _ body: [String: Any]) async throws -> JSON {
         do {

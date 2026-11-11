@@ -464,6 +464,7 @@ final class Store {
     }
 
     func logout() {
+        WeeklyReports.shared.reset()
         sessionId = nil
         account = nil
         data = nil
