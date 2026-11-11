@@ -67,7 +67,7 @@
           <div class="big" style="margin-top:4px">${wl.balance}<small>min</small></div>
         </div>
         <div style="text-align:right">
-          <div class="eyebrow" style="color:var(--muted)">Resets in</div>
+          <div class="eyebrow" style="color:var(--faint)">Resets in</div>
           ${ui.countdownEl(TO.nextMidnight(), 'cd')}
         </div>
       </div>
