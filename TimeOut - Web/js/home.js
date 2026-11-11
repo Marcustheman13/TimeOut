@@ -32,10 +32,10 @@
   }
 
   /** Today and tomorrow. Counts are games still to be played that day, in the sports being shown. */
-  function dayBar() {
-    if (liveOnly() || TO.live.offline) return '';
+  function dayBar(lead = '') {
+    if (liveOnly() || TO.live.offline) return lead ? `<div class="hscroll day-bar" data-hkey="days">${lead}</div>` : '';
     const f = activeFilter();
-    const chips = [];
+    const chips = lead ? [lead] : [];
     for (let i = 0; i <= TO.live.days; i++) {
       const games = boardGames(i, true).filter((g) => g.state !== 'final' && (f === 'all' || g.league === f));
       const n = games.length;
@@ -148,7 +148,7 @@
     chips.push(`<button class="chip dashed" data-act="settings" data-section="sports">${icon('sliders', 14)}Edit</button>`);
     const cfb = (f === 'ncaaf' || f === 'all') && !TO.live.offline ? `<label class="cfb-select-label" for="cfb-group">College Football</label><select id="cfb-group" class="cfb-select" aria-label="College football conference">${TO.live.groups.map(([id, name]) => `<option value="${id}" ${TO.live.selectedGroup() === id ? 'selected' : ''}>${esc(name)}</option>`).join('')}</select>` : '';
     const liveTile = `<button class="live-tile ${on ? 'on' : ''}" data-act="feed-live" aria-pressed="${on}" aria-label="Live games only, ${liveNow} live now in ${esc(filterName())}"><i></i>Live${liveNow ? `<span class="n">${liveNow}</span>` : ''}</button>`;
-    return `<div class="filterbar"><div class="hscroll" data-hkey="filters">${chips.join('')}</div>${liveTile}${dayBar()}${cfb}</div>`;
+    return `<div class="filterbar"><div class="hscroll" data-hkey="filters">${chips.join('')}</div>${dayBar(liveTile)}${cfb}</div>`;
   }
 
   // ---------- Game card ----------

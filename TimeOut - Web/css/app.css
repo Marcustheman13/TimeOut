@@ -372,9 +372,9 @@ label.list-row { cursor: pointer; }
 .mini-challenge .t { font-weight: 800; font-size: 14px; }
 
 .filterbar { position: sticky; top: 0; z-index: 4; background: var(--bg); padding: 10px 0; }
-.live-tile { margin: 10px 16px 0; height: 30px; padding: 0 10px; display: inline-flex; align-items: center; gap: 6px; border: 1px solid rgba(255, 59, 74, 0.55); border-radius: 8px; background: rgba(255, 59, 74, 0.13); color: var(--live); font-size: 13px; font-weight: 800; }
+.live-tile { flex: none; height: 28px; padding: 0 10px; display: inline-flex; align-items: center; gap: 6px; border: 1px solid rgba(255, 59, 74, 0.55); border-radius: 999px; background: rgba(255, 59, 74, 0.13); color: var(--live); font-size: 12.5px; font-weight: 700; white-space: nowrap; }
 .live-tile i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
-.live-tile .n { font-size: 12px; opacity: 0.8; font-variant-numeric: tabular-nums; }
+.live-tile .n { font-size: 11px; opacity: 0.8; font-variant-numeric: tabular-nums; }
 .live-tile.on { background: var(--live); border-color: transparent; color: #fff; }
 .setup-banner { margin: 4px 16px 0; padding: 14px; display: grid; gap: 10px; border: 1px solid rgba(34, 214, 110, 0.4); border-radius: 16px; background: linear-gradient(135deg, rgba(34, 214, 110, 0.17), rgba(34, 214, 110, 0.06)); }
 .setup-banner b { display: block; font-size: 16px; font-weight: 800; }

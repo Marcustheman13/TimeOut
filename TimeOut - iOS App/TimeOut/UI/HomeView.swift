@@ -429,8 +429,11 @@ struct FilterBar: View {
                 .padding(.horizontal, 16)
             }
             .scrollIndicators(.hidden)
-            LiveTile(games: today).frame(maxWidth: .infinity, alignment: .leading).padding(.top, 10).gutter()
-            DayBar().padding(.top, 10)
+            HStack(spacing: 8) {
+                LiveTile(games: today)
+                DayBar(inset: false)
+            }
+            .padding(.leading, 16).padding(.top, 10)
             if (f == "ncaaf" || f == "all") && !live.offline {
                 Text("COLLEGE FOOTBALL").font(.barlow(11, 800)).tracking(0.55).foregroundStyle(Theme.muted)
                     .padding(.top, 9).padding(.bottom, 4).gutter()
@@ -470,13 +473,13 @@ struct LiveTile: View {
         Button { home.setLive(!on) } label: {
             HStack(spacing: 6) {
                 Circle().fill(on ? .white : Theme.live).frame(width: 7, height: 7)
-                Text("Live").font(.barlow(13, 800))
-                if n > 0 { Text("\(n)").font(.barlow(12, 800)).monospacedDigit().opacity(0.8) }
+                Text("Live").font(.barlow(12.5, 700))
+                if n > 0 { Text("\(n)").font(.barlow(11, 800)).monospacedDigit().opacity(0.8) }
             }
             .foregroundStyle(on ? .white : Theme.live)
-            .padding(.horizontal, 10).frame(height: 30)
-            .background(on ? Theme.live : Theme.live.opacity(0.13), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Theme.live.opacity(on ? 0 : 0.55), lineWidth: 1))
+            .padding(.horizontal, 10).frame(height: 28)
+            .background(on ? Theme.live : Theme.live.opacity(0.13), in: Capsule())
+            .overlay(Capsule().strokeBorder(Theme.live.opacity(on ? 0 : 0.55), lineWidth: 1))
             .fixedSize()
         }
         .buttonStyle(.press)
