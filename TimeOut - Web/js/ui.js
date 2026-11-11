@@ -82,7 +82,7 @@
     wrap.dataset.sheet = name;
     wrap.id = id;
     wrap.style.cssText = 'position:absolute;inset:0;';
-    wrap.innerHTML = `<div class="scrim" data-act="close-sheet" data-name="${name}"></div><div class="sheet ${opts.tall ? 'tall' : ''}" role="dialog" aria-modal="true"><div class="grab"></div><div class="sheet-head"><h2></h2><button class="icon-btn" data-act="close-sheet" data-name="${name}" aria-label="Close">${icon('x', 20)}</button></div><div class="sheet-body"></div><div class="sheet-foot" hidden></div></div>`;
+    wrap.innerHTML = `<div class="scrim" data-act="close-sheet" data-name="${name}"></div><div class="sheet ${opts.tall ? 'tall' : ''}" role="dialog" aria-modal="true" aria-labelledby="${id}-title"><div class="grab"></div><div class="sheet-head"><h2 id="${id}-title"></h2><button class="icon-btn" data-act="close-sheet" data-name="${name}" aria-label="Close">${icon('x', 20)}</button></div><div class="sheet-body"></div><div class="sheet-foot" hidden></div></div>`;
     ui.layer().appendChild(wrap);
     wrap._opts = opts;
     ui.refreshSheet(name);

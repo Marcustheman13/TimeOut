@@ -58,7 +58,7 @@
       </div>
 
       <div class="card stack-s">
-        <div class="row-layout"><h2 style="margin:0;font-size:17px">Today</h2><span class="tiny faint bold">Resets in ${ui.countdownEl(TO.nextMidnight())}</span></div>
+        <div class="row-layout"><h2 style="margin:0;font-size:17px">Today</h2><span class="tiny muted bold">Resets in ${ui.countdownEl(TO.nextMidnight())}</span></div>
         ${brow('Base limit', `${TO.RULES.daily} min`)}
         ${brow("Yesterday's challenges", TO.signedMin(wl.yesterdayNet), wl.yesterdayNet > 0 ? 'green' : wl.yesterdayNet < 0 ? 'red' : '')}
         ${wl.penaltyToday ? brow('Emergency unlock penalty', `−${wl.penaltyToday} min`, 'red') : ''}
