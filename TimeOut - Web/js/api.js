@@ -565,7 +565,12 @@
   }
   /** 'requested', or 'friends' when they had already asked you. */
   api.sendFriendRequest = (username) => friendCall('timeout_send_friend_request', { p_username: username });
-  api.answerFriendRequest = (username, accept) => friendCall('timeout_answer_friend_request', { p_username: username, p_accept: accept });
+  api.answerFriendRequest = async (username, accept) => {
+    const done = await friendCall('timeout_answer_friend_request', { p_username: username, p_accept: accept });
+    // The server answers false when it couldn't find that request. Don't pretend it worked.
+    if (done === false) throw new TO.AppError('request_missing', `Couldn't ${accept ? 'accept' : 'decline'} the request from @${username}. Pull to refresh and try again.`);
+    return done;
+  };
   api.cancelFriendRequest = (username) => friendCall('timeout_cancel_friend_request', { p_username: username });
   api.removeFriend = (username) => friendCall('timeout_remove_friend', { p_username: username });
   /** 'friends', 'requested' (no valid code, so it is an ordinary request) or 'self'. */

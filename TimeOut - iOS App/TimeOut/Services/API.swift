@@ -703,7 +703,11 @@ final class API {
         try await friendCall("timeout_send_friend_request", ["p_username": username]).string ?? "requested"
     }
     func answerFriendRequest(_ username: String, accept: Bool) async throws {
-        _ = try await friendCall("timeout_answer_friend_request", ["p_username": username, "p_accept": accept])
+        let done = try await friendCall("timeout_answer_friend_request", ["p_username": username, "p_accept": accept])
+        // The server answers false when it couldn't find that request. Don't pretend it worked.
+        if done.bool == false {
+            throw AppError(code: "request_missing", message: "Couldn't \(accept ? "accept" : "decline") the request from @\(username). Pull to refresh and try again.")
+        }
     }
     func cancelFriendRequest(_ username: String) async throws {
         _ = try await friendCall("timeout_cancel_friend_request", ["p_username": username])
