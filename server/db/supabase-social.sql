@@ -4,6 +4,10 @@
 -- The tables have row-level security with no policies, so clients can only reach them through
 -- the functions below. Every function works from auth.uid(), so nobody can act for someone else.
 
+-- Usernames are looked up case-insensitively (timeout_user_by_name), so they must be unique that way too.
+-- If this fails, two profiles differ only by capitalisation: rename one, then rerun.
+create unique index if not exists profiles_username_lower_key on public.profiles (lower(username));
+
 create table if not exists public.friend_requests (
   id uuid primary key default gen_random_uuid(),
   from_user uuid not null references auth.users(id) on delete cascade,
