@@ -59,10 +59,10 @@ Deno.test("callModel returns the parsed JSON and sends the key in a header, not 
     seen = { url, key: new Headers(init.headers).get("x-goog-api-key") };
     return Promise.resolve(new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: '{"skip":false}' }] } }] })));
   }) as unknown as typeof fetch;
-  assertEquals(await callModel(stats, { apiKey: "KEY", model: "gemini-2.5-flash" }, fake), { skip: false });
+  assertEquals(await callModel(stats, { apiKey: "KEY", model: "gemini-flash-lite-latest" }, fake), { skip: false });
   assertEquals(seen?.key, "KEY");
   assertEquals(seen?.url.includes("KEY"), false);
-  assert(seen?.url.includes("gemini-2.5-flash:generateContent"));
+  assert(seen?.url.includes("gemini-flash-lite-latest:generateContent"));
 });
 
 Deno.test("callModel throws on a rate limit, an empty answer, and bad JSON, so the template takes over", async () => {

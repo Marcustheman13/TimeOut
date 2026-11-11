@@ -10,7 +10,9 @@ export interface ModelConfig {
   model: string;
 }
 
-export const DEFAULT_MODEL = "gemini-2.5-flash";
+// An alias Google keeps pointed at its current small model. Named versions get retired (gemini-2.5-flash already
+// stopped working for new keys), and the checks in decision.ts catch any answer the newer model gets wrong.
+export const DEFAULT_MODEL = "gemini-flash-lite-latest";
 
 export const SYSTEM_PROMPT = `You write the weekly review email for TimeOut, an app where people pledge phone minutes (never money) on sports challenges and limit their time on apps they choose. Win a challenge and tomorrow's phone time goes up. Lose and it goes down.
 

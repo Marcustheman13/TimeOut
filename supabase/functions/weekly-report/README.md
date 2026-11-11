@@ -38,7 +38,7 @@ Nothing here has been deployed. Do these in order.
 
 ### 1. Get the free keys
 
-- **Gemini:** create an API key in [Google AI Studio](https://aistudio.google.com/apikey). The free tier needs no card. Check the current model names and limits there, and set `GEMINI_MODEL` if `gemini-2.5-flash` has been replaced.
+- **Gemini:** create an API key in [Google AI Studio](https://aistudio.google.com/apikey). The free tier needs no card. Check the current model names and limits there, and set `GEMINI_MODEL` if `gemini-flash-lite-latest` has been replaced. (Named versions get retired: `gemini-2.5-flash` already stopped working for new keys, which is why the default is an alias that Google keeps current.)
 - **Resend:** make an account at [resend.com](https://resend.com) and create an API key. Without a verified domain, Resend only delivers to the email address on your own Resend account. That's fine for testing (see step 4). To email real users you need a domain, verified under Resend → Domains.
 
 ### 2. Check the AI works (no database or deploy needed)
@@ -80,7 +80,7 @@ npx supabase functions deploy weekly-report --project-ref obegznrsxlbpmtbmqkll -
 | `GEMINI_API_KEY` | Yes for AI | Without it, every email is written by the template. |
 | `RESEND_API_KEY` | Yes to send | |
 | `PUSH_WEBHOOK_SECRET` | Yes | Must match the Vault secret. Also signs unsubscribe links. |
-| `GEMINI_MODEL` | No | Defaults to `gemini-2.5-flash`. |
+| `GEMINI_MODEL` | No | Defaults to `gemini-flash-lite-latest`. |
 | `WEEKLY_REPORT_FROM` | No | Defaults to `TimeOut <onboarding@resend.dev>`. Use your own domain once it's verified. |
 | `WEEKLY_REPORT_DRY_RUN` | No | Real sending stays **off** until this is `false`. |
 | `WEEKLY_REPORT_REDIRECT_TO` | No | Sends every email to this address instead, marked `[test for …]`. Use it to test before you have a domain. |
