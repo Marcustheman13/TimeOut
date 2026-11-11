@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TimeOut: Try it live</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@500;600;700&family=Barlow+Condensed:ital,wght@0,800;1,900&display=swap">
+<style>
+:root{--bg:#0a0d12;--surface:#141922;--stroke:#283141;--text:#f2f5f9;--text-2:#8c96a8;--accent:#22d66e;--ink:#03140a}
+*{box-sizing:border-box;margin:0}
+html,body{height:100%}
+body{background:radial-gradient(900px 600px at 15% 10%,rgba(34,214,110,.14),transparent 60%),var(--bg);color:var(--text);font-family:'Barlow',system-ui,sans-serif;display:grid;place-items:center;padding:4vmin}
+main{width:100%;max-width:1400px;display:grid;grid-template-columns:1.2fr 1fr;align-items:center;gap:6vmin}
+.brand{display:flex;align-items:center;gap:2.4vmin}
+.icon{width:11vmin;height:11vmin;border-radius:24%;flex:none;box-shadow:0 0 6vmin rgba(34,214,110,.35)}
+h1{font-family:'Barlow Condensed','Arial Narrow',sans-serif;font-style:italic;font-weight:900;font-size:min(17vmin,15vw);line-height:.9;letter-spacing:.02em}
+h1 b{color:var(--accent);font-weight:900}
+.tag{margin-top:3vmin;font-family:'Barlow Condensed','Arial Narrow',sans-serif;font-weight:800;font-size:min(5.2vmin,6vw);line-height:1.1;color:var(--text)}
+.tag em{font-style:normal;color:var(--accent)}
+.sub{margin-top:1.6vmin;color:var(--text-2);font-size:min(2.8vmin,4vw);font-weight:500}
+.side{display:flex;align-items:center;justify-content:center;gap:4vmin}
+.card{background:#fff;border-radius:3vmin;padding:2.6vmin;display:flex;flex-direction:column;align-items:center;gap:2vmin;box-shadow:0 0 0 .5vmin var(--accent),0 2vmin 6vmin rgba(0,0,0,.5)}
+.qr{width:min(40vmin,60vw);height:auto;display:block}
+.scan{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:min(3.6vmin,5vw);color:var(--ink);letter-spacing:.06em;text-transform:uppercase}
+.phone{height:min(62vmin,70vh);border-radius:4vmin;border:.6vmin solid var(--stroke);box-shadow:0 2vmin 6vmin rgba(0,0,0,.5)}
+.url{margin-top:4vmin;display:inline-block;background:var(--accent);color:var(--ink);font-weight:700;font-size:min(3.2vmin,4.4vw);padding:1.2vmin 2.4vmin;border-radius:99px;text-decoration:none}
+@media (max-width:900px),(max-aspect-ratio:1/1){
+ main{grid-template-columns:1fr;text-align:center;gap:5vmin}
+ .brand{justify-content:center}.side{flex-direction:column}.phone{display:none}
+}
+@media (min-width:901px) and (max-width:1250px){.phone{display:none}}
+</style>
+</head>
+<body>
+<main>
+ <section>
+  <div class="brand">
+   <svg class="icon" viewBox="0 0 100 100" role="img" aria-label="TimeOut logo"><rect width="100" height="100" rx="22.5" fill="#22D66E"/><g transform="translate(48 50) skewX(-10) translate(-50 -50)" fill="#03140A"><rect x="19" y="23" width="62" height="16" rx="8"/><rect x="42" y="44" width="16" height="33" rx="8"/></g></svg>
+   <h1>TIME<b>OUT</b></h1>
+  </div>
+  <p class="tag">Challenge friends with <em>screen time</em>, not money.</p>
+  <p class="sub">Group 9 &middot; Owen, Easton, Will &amp; Marcus</p>
+  <a class="url" href="https://marcustheman13.github.io/TimeOut/">marcustheman13.github.io/TimeOut</a>
+ </section>
+ <section class="side">
+  <div class="card">
+   <svg class="qr" role="img" aria-label="QR code for marcustheman13.github.io/TimeOut" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 29 29" shape-rendering="crispEdges"><path fill="#ffffff" d="M0 0h29v29H0z"/><path stroke="#000000" d="M0 0.5h7m2 0h1m1 0h2m3 0h4m2 0h7M0 1.5h1m5 0h1m4 0h1m2 0h4m2 0h1m1 0h1m5 0h1M0 2.5h1m1 0h3m1 0h1m1 0h4m2 0h3m1 0h2m2 0h1m1 0h3m1 0h1M0 3.5h1m1 0h3m1 0h1m1 0h2m4 0h1m2 0h1m2 0h1m1 0h1m1 0h3m1 0h1M0 4.5h1m1 0h3m1 0h1m1 0h6m2 0h1m1 0h2m2 0h1m1 0h3m1 0h1M0 5.5h1m5 0h1m1 0h1m2 0h1m1 0h5m2 0h1m1 0h1m5 0h1M0 6.5h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7M8 7.5h3m3 0h2M0 8.5h1m1 0h5m3 0h1m1 0h3m2 0h1m2 0h1m1 0h5M0 9.5h1m1 0h2m1 0h1m1 0h1m3 0h1m2 0h1m1 0h4m2 0h3m3 0h1M1 10.5h1m2 0h3m5 0h1m1 0h2m2 0h1m4 0h1M4 11.5h2m1 0h1m4 0h1m1 0h3m2 0h2m3 0h2m1 0h1M0 12.5h3m1 0h3m1 0h1m4 0h5m1 0h1m5 0h2M1 13.5h1m2 0h2m1 0h1m1 0h2m1 0h1m1 0h3m2 0h2m1 0h3m3 0h1M0 14.5h2m3 0h5m1 0h1m2 0h3m3 0h2m3 0h2M1 15.5h4m2 0h1m1 0h1m2 0h1m3 0h1m1 0h1m3 0h1m1 0h1m2 0h1M0 16.5h2m2 0h3m1 0h1m4 0h1m3 0h1m5 0h1m1 0h2M0 17.5h1m1 0h2m1 0h1m2 0h1m1 0h1m2 0h1m3 0h4m1 0h3m1 0h1m1 0h1M0 18.5h1m1 0h1m1 0h3m3 0h7m1 0h1m1 0h1m2 0h2m1 0h1M0 19.5h1m1 0h2m3 0h1m4 0h1m1 0h1m1 0h1m1 0h1m1 0h2m2 0h1m2 0h1M0 20.5h1m3 0h3m1 0h4m5 0h1m1 0h6m1 0h3M8 21.5h6m2 0h1m3 0h1m3 0h5M0 22.5h7m6 0h4m2 0h2m1 0h1m1 0h3M0 23.5h1m5 0h1m1 0h1m3 0h2m1 0h1m3 0h2m3 0h1M0 24.5h1m1 0h3m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m2 0h1m2 0h5m1 0h3M0 25.5h1m1 0h3m1 0h1m1 0h1m1 0h1m1 0h2m2 0h1m1 0h2m5 0h4M0 26.5h1m1 0h3m1 0h1m1 0h1m3 0h4m1 0h3m1 0h7M0 27.5h1m5 0h1m2 0h2m1 0h1m1 0h1m1 0h1m1 0h1m1 0h6m1 0h1M0 28.5h7m1 0h1m2 0h1m2 0h1m2 0h3m1 0h1m1 0h1m2 0h1"/></svg>
+
+   <span class="scan">Scan &amp; try it</span>
+  </div>
+  <img class="phone" src="screen-home.jpg" alt="TimeOut home screen">
+ </section>
+</main>
+</body>
+</html>
