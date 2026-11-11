@@ -26,7 +26,7 @@
     wrap.style.cssText = 'position:absolute;inset:0';
     const item = (key, sub) => `<button class="dn" data-act="settings" data-section="${key}">${icon(SECTIONS[key].icon, 20)}${SECTIONS[key].title}${sub ? `<span class="sub">${sub}</span>` : ''}</button>`;
     wrap.innerHTML = `<div class="scrim" data-act="close-drawer"></div><aside class="drawer" aria-label="Menu">
-      <div class="drawer-head">${ui.avatar(TO.account.photo, 'lg')}<div class="grow" style="min-width:0"><b class="ellipsis" style="display:block;font-size:17px">@${esc(TO.account.username)}</b><div class="small muted ellipsis">${esc(TO.account.email)}</div><div style="margin-top:6px">${ui.tierBadge(wl.tier.id, true)}</div></div></div>
+      <button class="drawer-head" data-act="settings" data-section="account" title="Account" style="width:100%;text-align:left">${ui.avatar(TO.account.photo, 'lg')}<div class="grow" style="min-width:0"><b class="ellipsis" style="display:block;font-size:17px">@${esc(TO.account.username)}</b><div class="small muted ellipsis">${esc(TO.account.email)}</div><div style="margin-top:6px">${ui.tierBadge(wl.tier.id, true)}</div></div></button>
       <nav>
         ${item('screentime', `${wl.phoneLeft} min left`)}
         ${TO.weekly.unread() ? item('weekly', '<b class="tag green">New</b>') : item('weekly')}
@@ -168,7 +168,7 @@
   function account() {
     const a = TO.account;
     if (TO.api.online && a.server) {
-      return `<div class="photo-pick"><span class="ph"><img src="${esc(a.photo)}" alt="Profile photo"></span><div><b>@${esc(a.username)}</b><div class="small muted">${esc(a.email)}</div></div></div>
+      return `<div class="photo-pick"><label class="ph" for="acct-photo" style="cursor:pointer"><img src="${esc(a.photo)}" alt="Profile photo"><span class="cam">${icon('camera', 15)}</span></label><div><b>@${esc(a.username)}</b><div class="small muted">${esc(a.email)}</div><div class="small muted">Tap the photo to change it.</div></div><input type="file" id="acct-photo" accept="image/*" class="sr" data-change="acct-photo"></div>
         ${serverAccountCard(a.server)}
         <div class="card stack">
           <h2 style="margin:0;font-size:17px">Profile</h2>

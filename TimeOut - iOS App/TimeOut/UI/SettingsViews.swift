@@ -52,16 +52,20 @@ struct DrawerView: View {
             ZStack(alignment: .leading) {
                 Theme.scrim.ignoresSafeArea().onTapGesture { close() }.opacity(shown ? 1 : 0)
                 VStack(alignment: .leading, spacing: 0) {
-                    HStack(spacing: 12) {
-                        Avatar(src: acc?.photo ?? "", size: 64)
-                        VStack(alignment: .leading, spacing: 0) {
-                            Text("@\(acc?.username ?? "")").font(.barlow(17, 700)).lineLimit(1)
-                            Text(acc?.email ?? "").font(.barlow(13)).foregroundStyle(Theme.text2).lineLimit(1)
-                            TierBadge(tierId: wl.tier.id, sm: true).padding(.top, 6)
+                    Button { SettingsModel.open("account") } label: {
+                        HStack(spacing: 12) {
+                            Avatar(src: acc?.photo ?? "", size: 64)
+                            VStack(alignment: .leading, spacing: 0) {
+                                Text("@\(acc?.username ?? "")").font(.barlow(17, 700)).lineLimit(1)
+                                Text(acc?.email ?? "").font(.barlow(13)).foregroundStyle(Theme.text2).lineLimit(1)
+                                TierBadge(tierId: wl.tier.id, sm: true).padding(.top, 6)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.top, 18).padding(.horizontal, 18).padding(.bottom, 14)
                     }
-                    .padding(.top, 18).padding(.horizontal, 18).padding(.bottom, 14)
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Account")
                     HRule()
                     ScrollView {
                         VStack(spacing: 2) {
