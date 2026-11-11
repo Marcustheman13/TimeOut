@@ -49,6 +49,7 @@
     if (!invite && !team) return null;
     const pending = { invite, team, teamName: q.get('teamName') || '', start: q.get('start') || '', end: q.get('end') || '', key: q.get('key') || '', code: q.get('code') || '' };
     TO.store.set(INVITE_KEY, pending);
+    setTimeout(() => tryOpenApp(pending), 0);
     ['invite', 'join', 'team', 'teamName', 'start', 'end', 'key', 'code'].forEach((k) => q.delete(k));
     const next = `${location.pathname}${q.toString() ? `?${q}` : ''}${location.hash}`;
     history.replaceState(null, '', next);
@@ -61,6 +62,17 @@
     return `timeout://invite?${params}`;
   }
   const onIPhone = () => /iPhone|iPad|iPod/.test(navigator.userAgent);
+  /** Share links open the app by default on an iPhone. Flip `autoOpen` to true once TimeOut is on the App Store:
+   *  without the app installed, Safari shows an error for the timeout:// address. Put the store page in `appStoreUrl`
+   *  (https://apps.apple.com/app/id...) and people without the app get an Install button instead. */
+  TO.appLink = TO.appLink || { autoOpen: false, appStoreUrl: '' };
+  const AUTO_TRIED = 'timeout.appOpenTried';
+  function tryOpenApp(p) {
+    if (!p || !onIPhone() || !TO.appLink.autoOpen) return;
+    try { if (sessionStorage.getItem(AUTO_TRIED)) return; sessionStorage.setItem(AUTO_TRIED, '1'); } catch (e) { /* private mode: try once per load */ }
+    location.href = appLink(p);
+    // If the app isn't installed the page stays here, and the invite sheet offers the App Store link.
+  }
   function offerInvite() {
     const p = readInvite();
     if (!p || !TO.account || !TO.data || !TO.data.onboarded) return;
@@ -76,7 +88,7 @@
         body: joining
           ? `<p class="sub" style="margin-top:0">${who} invited you to <b style="color:var(--text)">${esc(p.teamName)}</b>${p.start && p.end ? `, ${esc(TO.fmtDate(TO.dayStart(p.start)))} – ${esc(TO.fmtDate(TO.dayStart(p.end)))}` : ''}. Joining also adds them as a friend. It is still screen time, not money.</p>`
           : `<p class="sub" style="margin-top:0">${who} sent you their TimeOut link. Add them as a friend to compare screen time without putting money on the games.</p>`,
-        foot: `<button class="btn primary full" data-act="invite-accept">${joining ? 'Add friend and join' : 'Add friend'}</button>${onIPhone() ? `<a class="btn ghost full" href="${esc(appLink(p))}">Open in the TimeOut app</a>` : ''}<button class="btn quiet sm" data-act="invite-dismiss">Not now</button>`,
+        foot: `<button class="btn primary full" data-act="invite-accept">${joining ? 'Add friend and join' : 'Add friend'}</button>${onIPhone() ? `<a class="btn ghost full" href="${esc(appLink(p))}">Open in the TimeOut app</a>${TO.appLink.appStoreUrl ? `<a class="btn quiet sm full" href="${esc(TO.appLink.appStoreUrl)}">Get the app from the App Store</a>` : ''}` : ''}<button class="btn quiet sm" data-act="invite-dismiss">Not now</button>`,
       }),
     });
   }
@@ -397,6 +409,8 @@
   A['add-friend'] = async (el) => {
     const u = el.dataset.u;
     if (St.usesServerSocial()) {
+      const incoming = St.relation(u) === 'incoming' && TO.data.requestsIn.find((r) => String(r.from).toLowerCase() === u.toLowerCase());
+      if (incoming) { ui.closeSheet('profile'); return A['accept-fr']({ dataset: { id: incoming.id } }); }
       try {
         const result = await TO.api.sendFriendRequest(u);
         await TO.app.syncSocial(true);
@@ -429,11 +443,37 @@
   A['accept-fr'] = async (el) => {
     const r = TO.data.requestsIn.find((x) => x.id === el.dataset.id);
     if (!r) return;
-    if (await perform(() => TO.api.answerFriendRequest(r.from, true), () => St.acceptFriendRequest(el.dataset.id))) ui.toast({ kind: 'win', title: `You and @${r.from} are now friends` });
+    if (!St.usesServerSocial()) {
+      St.acceptFriendRequest(r.id);
+      view.tab = 'board';
+      rerender();
+      ui.toast({ kind: 'win', title: `You and @${r.from} are now friends`, msg: 'They\'re in your Friends list.' });
+      return;
+    }
+    // The request goes away and the person appears under Friends right now; the server confirms in the background.
+    const undo = St.acceptServerRequest(r.from);
+    view.tab = 'board';
+    rerender();
+    ui.toast({ kind: 'win', title: `You and @${r.from} are now friends`, msg: 'They\'re in your Friends list.' });
+    try {
+      await TO.api.answerFriendRequest(r.from, true);
+      await TO.app.syncSocial(true);
+    } catch (e) {
+      undo();
+      view.tab = 'requests';
+      ui.toast({ kind: 'loss', title: `Couldn't accept @${r.from}`, msg: TO.friendlyMessage(e) });
+    }
+    rerender();
   };
-  A['decline-fr'] = (el) => {
+  A['decline-fr'] = async (el) => {
     const r = TO.data.requestsIn.find((x) => x.id === el.dataset.id);
-    if (r) perform(() => TO.api.answerFriendRequest(r.from, false), () => St.declineFriendRequest(el.dataset.id));
+    if (!r) return;
+    if (!St.usesServerSocial()) { St.declineFriendRequest(r.id); rerender(); return; }
+    const undo = St.declineServerRequest(r.from);
+    rerender();
+    try { await TO.api.answerFriendRequest(r.from, false); await TO.app.syncSocial(true); }
+    catch (e) { undo(); ui.toast({ kind: 'loss', title: 'Couldn\'t decline that request', msg: TO.friendlyMessage(e) }); }
+    rerender();
   };
   A['remove-friend'] = async (el) => {
     const u = el.dataset.u;

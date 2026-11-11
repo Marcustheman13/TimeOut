@@ -31,6 +31,20 @@ How data moves through the customer-facing app, the planned admin portal and the
 
 ---
 
+## Data Flow Diagrams
+
+Logical DFDs for the whole TimeOut system (the website and iPhone app share the same data). Solid lines carry data in, dashed lines carry data out.
+
+**Level 0 (context diagram):** the whole system as one process and every outside party it trades data with.
+
+![TimeOut Level 0 context diagram: Player, Email Service, Push Notification Service, Sports Data Provider and Phone Screen Time around one TimeOut System process](docs/diagrams/TimeOut-DFD-Level-0.png)
+
+**Level 1:** the system split into its seven main processes and four data stores.
+
+![TimeOut Level 1 data flow diagram: processes for accounts, live games, placing and resolving challenges, friends, screen-time limits and notifications, with Accounts, Challenges, Screen-Time Wallet and Friends data stores](docs/diagrams/TimeOut-DFD-Level-1.png)
+
+---
+
 ORIGINAL ERD
 
 <img width="1706" height="1040" alt="Sports Challenging ERD" src="https://github.com/user-attachments/assets/1183be55-ab84-49b5-9a56-1c6e293e26a4" />

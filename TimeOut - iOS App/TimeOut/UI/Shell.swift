@@ -48,6 +48,18 @@ struct ShellView: View {
             }
             .padding(.bottom, 14)
         }
+        // Swipe in from the left edge to open the menu. Off while a page, sheet or the menu itself is on screen.
+        .overlay(alignment: .leading) {
+            if ui.pages.isEmpty && ui.sheets.isEmpty && !ui.drawerOpen {
+                Color.clear
+                    .frame(width: 22)
+                    .padding(.top, 60).padding(.bottom, 100)
+                    .contentShape(Rectangle())
+                    .gesture(DragGesture(minimumDistance: 16).onEnded { g in
+                        if g.translation.width > 50 && abs(g.translation.width) > abs(g.translation.height) * 1.5 { ui.drawerOpen = true }
+                    })
+            }
+        }
     }
 }
 

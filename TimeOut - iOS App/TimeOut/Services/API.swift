@@ -24,6 +24,8 @@ final class API {
     @ObservationIgnored private var pendingState: UserData?
     @ObservationIgnored private var lastSaveAt: Date = .distantPast
     @ObservationIgnored private var lastSettingsSnapshot = ""
+    @ObservationIgnored private var lastLedgerSnapshot = ""
+    @ObservationIgnored private var supportsSharedLedger = true
     @ObservationIgnored private var supportsAppPreferences = true
     @ObservationIgnored private var supportsTierBonusColumns: Bool?
     @ObservationIgnored private var supportsTierPerkColumns: Bool?
@@ -343,14 +345,37 @@ final class API {
         if settings.isObject {
             var prefs = (settings["app_preferences"].isObject ? Self.any(settings["app_preferences"]) as? [String: Any] : nil) ?? [:]
             var followed: [String] = []
-            for s in (settings["followed_sports"].array + ((prefs["sports"] as? [String])?.map { JSON.string($0) } ?? [])) {
-                if let v = s.string, Sim.realLeagues.contains(v), !followed.contains(v) { followed.append(v) }
+            for v in (prefs["sports"] as? [String]) ?? settings["followed_sports"].array.compactMap({ $0.string }) {
+                if Sim.realLeagues.contains(v), !followed.contains(v) { followed.append(v) }
             }
             if !followed.isEmpty { prefs["sports"] = followed }
             state.settings = prefs
             state.appPreferencesReady = supportsAppPreferences
         }
+        if supportsSharedLedger {
+            do {
+                let rows = try await rest("user_settings?select=shared_ledger&user_id=eq.\(safe)&limit=1")
+                let ledger = rows[0]["shared_ledger"]
+                if ledger.isObject, let raw = try? JSONSerialization.data(withJSONObject: Self.any(ledger)),
+                   let decoded = try? JSONDecoder().decode(SharedLedger.self, from: raw) {
+                    state.shared = decoded
+                    lastLedgerSnapshot = Self.ledgerSnapshot(decoded)
+                }
+            } catch {
+                noteLedgerError(error) // server/db/supabase-shared-ledger.sql may not have been run
+            }
+        }
         return state
+    }
+
+    private static func ledgerSnapshot(_ ledger: SharedLedger) -> String {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        return (try? encoder.encode(ledger)).flatMap { String(data: $0, encoding: .utf8) } ?? ""
+    }
+
+    private func noteLedgerError(_ error: Error) {
+        if let e = error as? AppError, e.raw.range(of: "shared_ledger", options: .caseInsensitive) != nil { supportsSharedLedger = false }
     }
 
     private static func counts(_ json: JSON) -> [String: Int] {
@@ -423,9 +448,29 @@ final class API {
                 _ = try await rest("user_settings?user_id=eq.\(Self.enc(id))", method: "PATCH", body: settingsValue, extra: ["Prefer": "return=minimal"])
                 lastSettingsSnapshot = snapshot
             }
+            // Its own column and its own write, so these frequent updates can't overwrite a settings change from another device.
+            if supportsSharedLedger {
+                var ledger = Store.shared.sharedLedger(data)
+                // Another device may have recorded newer records since this one last read them: never write an older number over them.
+                if let rows = try? await rest("user_settings?select=shared_ledger&user_id=eq.\(Self.enc(id))&limit=1"),
+                   rows[0]["shared_ledger"].isObject,
+                   let raw = try? JSONSerialization.data(withJSONObject: Self.any(rows[0]["shared_ledger"])),
+                   let theirs = try? JSONDecoder().decode(SharedLedger.self, from: raw) {
+                    ledger = ledger.merged(with: theirs)
+                }
+                let ledgerSnapshot = Self.ledgerSnapshot(ledger)
+                if ledgerSnapshot != lastLedgerSnapshot,
+                   let raw = try? JSONEncoder().encode(ledger), let body = try? JSONSerialization.jsonObject(with: raw) {
+                    do {
+                        _ = try await rest("user_settings?user_id=eq.\(Self.enc(id))", method: "PATCH", body: ["shared_ledger": body], extra: ["Prefer": "return=minimal"])
+                        lastLedgerSnapshot = ledgerSnapshot
+                    } catch {
+                        noteLedgerError(error)
+                    }
+                }
+            }
             for challenge in data.challenges {
-                guard challenge.kind == "sports", challenge.pledgeMinutes > 0, !challenge.picks.isEmpty,
-                      challenge.picks.allSatisfy({ ($0.kind == "game" || $0.kind == "sports") && $0.gameId != nil }) else { continue }
+                guard Store.syncsToServer(challenge) else { continue }
                 var supabaseId = challenge.supabaseId
                 if supabaseId == nil && !placing.contains(challenge.id) {
                     placing.insert(challenge.id)

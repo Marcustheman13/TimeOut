@@ -55,6 +55,7 @@ struct RemoteState {
     /// Raw app_preferences (plus followed sports), merged key by key like the web demo.
     var settings: [String: Any]?
     var appPreferencesReady = false
+    var shared: SharedLedger?
 }
 
 /// Accounts, the screen-time wallet, challenges, resolution, tiers/streaks, friends and teams.
@@ -280,6 +281,7 @@ final class Store {
         accountsById[id] = acc
         saveAccounts()
 
+        var balanceSource = BalanceSource.server
         if let remote = remoteIn {
             var merged: UserData
             if let cached = loadData(id) {
@@ -311,13 +313,14 @@ final class Store {
                     } else { byKey[k] = b }
                 }
                 merged.challenges = order.compactMap { byKey[$0] }
-                let hasUnsynced = cached.challenges.contains { $0.kind == "sports" && $0.supabaseId == nil }
+                let hasUnsynced = cached.challenges.contains { Self.syncsToServer($0) && $0.supabaseId == nil }
                 // Settings: whichever side has real preferences wins, key by key.
                 let cachedDict = Self.dictionary(cached.settings)
                 let remoteDict = remote.settings ?? [:]
                 let remoteHasPrefs = remote.appPreferencesReady && remoteDict.count > 1
                 var prefs = remoteHasPrefs ? cachedDict.merging(remoteDict) { _, r in r } : remoteDict.merging(cachedDict) { _, c in c }
-                let sports = (cached.settings.sports + ((remoteDict["sports"] as? [String]) ?? [])).filter { Sim.realLeagues.contains($0) }
+                // One side's list wins outright. Combining them would bring back a sport the user just unfollowed.
+                let sports = ((remoteHasPrefs ? remoteDict["sports"] as? [String] : nil) ?? cached.settings.sports).filter { Sim.realLeagues.contains($0) }
                 var unique: [String] = []
                 for s in sports where !unique.contains(s) { unique.append(s) }
                 if !unique.isEmpty { prefs["sports"] = unique }
@@ -344,6 +347,8 @@ final class Store {
                         w.bonusGranted = max(localBonus, serverBonus)
                     }
                     merged.wallet = w
+                } else {
+                    balanceSource = hasUnsynced || remote.wallet == nil ? .keep : .day
                 }
             } else {
                 merged = freshData(TO.now())
@@ -369,6 +374,78 @@ final class Store {
             storeData(id, freshData(TO.now()))
         }
         startSession(id)
+        if let remoteIn {
+            applySharedLedger(remoteIn.shared, balanceSource)
+            save()
+        }
+    }
+
+    // MARK: Shared between a user's devices
+
+    private enum BalanceSource { case server, day, keep }
+
+    /// Whether a challenge is saved in the server's challenge tables. To-dos, races and predictions stay on the device that placed them.
+    static func syncsToServer(_ c: Challenge) -> Bool {
+        c.kind == "sports" && c.pledgeMinutes > 0 && !c.picks.isEmpty && c.picks.allSatisfy { ($0.kind == "game" || $0.kind == "sports") && $0.gameId != nil }
+    }
+
+    private static var deviceId: String {
+        if let id = UserDefaults.standard.string(forKey: "timeout.deviceId") { return id }
+        let id = TO.uid("device")
+        UserDefaults.standard.set(id, forKey: "timeout.deviceId")
+        return id
+    }
+
+    /// Minutes the device-only challenges on a day have taken. The server's balance can't include these.
+    private func localPledged(_ d: UserData, _ day: String) -> Int {
+        d.challenges.reduce(0) { sum, c in
+            if Self.syncsToServer(c) || c.dayKey != day { return sum }
+            return sum + c.pledgeMinutes - (c.status == "void" || c.status == "tie" ? c.reward : 0)
+        }
+    }
+
+    /// What goes in the shared ledger: this phone's screen-time records, plus each device's own challenge totals.
+    func sharedLedger(_ d: UserData) -> SharedLedger {
+        let cutoff = TO.addDays(d.wallet.dayKey, -7)
+        func recent(_ map: [String: Int]) -> [String: Int] { map.filter { $0.key >= cutoff } }
+        var mine = SharedLedger.Device()
+        for c in d.challenges where !Self.syncsToServer(c) {
+            if c.dayKey >= cutoff { mine.pledgedByDay[c.dayKey] = localPledged(d, c.dayKey) }
+            if c.status != "open" {
+                let day = Self.creditDay(c)
+                if day >= cutoff { mine.netByDay[day, default: 0] += c.reward - c.pledgeMinutes }
+            }
+        }
+        var ledger = SharedLedger()
+        for (id, device) in d.sharedDevices {
+            let entry = SharedLedger.Device(pledgedByDay: recent(device.pledgedByDay), netByDay: recent(device.netByDay))
+            if !entry.pledgedByDay.isEmpty || !entry.netByDay.isEmpty { ledger.devices[id] = entry }
+        }
+        ledger.devices[Self.deviceId] = mine
+        ledger.usageByDay = recent(d.wallet.usageByDay)
+        ledger.overridesByDay = recent(d.wallet.overridesByDay)
+        ledger.penaltyByDay = recent(d.wallet.penaltyByDay)
+        return ledger
+    }
+
+    /// Counts challenges from the user's other devices. Screen-time records come from this phone, so nothing else is read back.
+    private func applySharedLedger(_ shared: SharedLedger?, _ balanceSource: BalanceSource) {
+        guard var d = data else { return }
+        if let shared {
+            d.sharedDevices = shared.devices
+            d.sharedDevices[Self.deviceId] = nil
+        }
+        var othersPledged = 0
+        for device in d.sharedDevices.values {
+            othersPledged += device.pledgedByDay[d.wallet.dayKey] ?? 0
+            for (day, n) in device.netByDay { d.wallet.netByDay[day, default: 0] += n }
+        }
+        if balanceSource != .keep {
+            let base = balanceSource == .day ? Rules.daily + (d.wallet.bonusDay == d.wallet.dayKey ? d.wallet.bonusGranted : 0) : d.wallet.balance
+            d.wallet.balance = max(0, base - localPledged(d, d.wallet.dayKey) - othersPledged)
+            d.wallet.lockedOut = d.wallet.balance <= 0
+        }
+        data = d
     }
 
     static func dictionary(_ s: Settings) -> [String: Any] {
@@ -1320,10 +1397,71 @@ final class Store {
 
     struct SocialChanges { var newRequests: [String] = []; var newFriends: [String] = [] }
 
+    /// Requests answered a moment ago. A sync that started before the answer reached the server would bring the request
+    /// back (or drop the new friend), so for a short while the local answer wins.
+    private struct RecentAnswer { var at: Date; var accepted: Bool }
+    private var recentAnswers: [String: RecentAnswer] = [:]
+    private func recentAnswer(_ username: String) -> RecentAnswer? {
+        let key = username.lowercased()
+        guard let a = recentAnswers[key] else { return nil }
+        if Date().timeIntervalSince(a.at) > 30 { recentAnswers[key] = nil; return nil }
+        return a
+    }
+
+    /// Accepting on a real account: the request leaves Requests and the person shows in Friends at once, before the
+    /// server confirms. Returns a closure that puts everything back if the server says no.
+    func acceptServerRequest(_ username: String) -> () -> Void {
+        guard var d = data else { return {} }
+        let key = username.lowercased()
+        let before = d
+        d.requestsIn.removeAll { ($0.from ?? "").lowercased() == key }
+        if !d.friends.contains(where: { $0.lowercased() == key }) { d.friends.append(username) }
+        if d.socialProfiles[key] == nil {
+            d.socialProfiles[key] = SocialProfile(username: username, name: username, photo: nil,
+                                                  share: PrivacySettings(record: false, minutes: false, challenges: false))
+        }
+        recentAnswers[key] = RecentAnswer(at: Date(), accepted: true)
+        data = d
+        saveQuiet()
+        return { [weak self] in
+            guard let self, var cur = self.data else { return }
+            self.recentAnswers[key] = nil
+            cur.requestsIn = before.requestsIn
+            cur.friends = before.friends
+            cur.socialProfiles = before.socialProfiles
+            self.data = cur
+            self.saveQuiet()
+        }
+    }
+
+    /// Declining: the request leaves the list at once.
+    func declineServerRequest(_ username: String) -> () -> Void {
+        guard var d = data else { return {} }
+        let key = username.lowercased()
+        let before = d.requestsIn
+        d.requestsIn.removeAll { ($0.from ?? "").lowercased() == key }
+        recentAnswers[key] = RecentAnswer(at: Date(), accepted: false)
+        data = d
+        saveQuiet()
+        return { [weak self] in
+            guard let self, var cur = self.data else { return }
+            self.recentAnswers[key] = nil
+            cur.requestsIn = before
+            self.data = cur
+            self.saveQuiet()
+        }
+    }
+
     /// Replaces this device's friends and requests with what the server says, and reports what's new since last time.
     @discardableResult
-    func applySocial(_ state: API.SocialState) -> SocialChanges {
+    func applySocial(_ incoming: API.SocialState) -> SocialChanges {
         guard var d = data, usesServerSocial else { return SocialChanges() }
+        var state = incoming
+        state.requestsIn = state.requestsIn.filter { recentAnswer($0.username) == nil }
+        let heldFriends: [String] = recentAnswers.keys.filter { k in
+            (recentAnswer(k)?.accepted ?? false) && !state.friends.contains { $0.username.lowercased() == k }
+        }.compactMap { k in d.friends.first { $0.lowercased() == k } }
+        let heldProfiles = Dictionary(uniqueKeysWithValues: heldFriends.compactMap { f in d.socialProfiles[f.lowercased()].map { (f.lowercased(), $0) } })
         var changes = SocialChanges()
         let friendsBefore = Set(d.friends.map { $0.lowercased() })
         let requestsBefore = Set(d.requestsIn.compactMap { $0.from?.lowercased() })
@@ -1332,8 +1470,9 @@ final class Store {
             changes.newRequests = state.requestsIn.map(\.username).filter { !requestsBefore.contains($0.lowercased()) }
             changes.newFriends = state.friends.map(\.username).filter { !friendsBefore.contains($0.lowercased()) }
         }
-        d.friends = state.friends.map(\.username)
+        d.friends = state.friends.map(\.username) + heldFriends
         d.socialProfiles = Dictionary(state.friends.map { ($0.username.lowercased(), $0) }, uniquingKeysWith: { a, _ in a })
+        for (k, p) in heldProfiles { d.socialProfiles[k] = p }
         for r in state.requestsIn + state.requestsOut where d.socialProfiles[r.username.lowercased()] == nil {
             d.socialProfiles[r.username.lowercased()] = SocialProfile(username: r.username, name: r.name, photo: r.photo,
                                                                      share: PrivacySettings(record: false, minutes: false, challenges: false))

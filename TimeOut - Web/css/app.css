@@ -757,6 +757,18 @@ label.list-row { cursor: pointer; }
 .steps { display: flex; gap: 6px; }
 .steps i { flex: 1; height: 4px; border-radius: 2px; background: var(--raised); }
 .steps i.on { background: var(--accent); }
+.wt-page { display: flex; flex-direction: column; gap: 10px; padding: 4px 0 8px; }
+.wt-ic { width: 60px; height: 60px; border-radius: 18px; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; }
+.wt-title { margin: 6px 0 0; font-family: var(--font-display); font-weight: 900; font-size: 30px; line-height: 1.05; }
+.wt-text { margin: 0; color: var(--text-2); font-size: 16px; }
+.wt-points { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.wt-points li { display: flex; gap: 10px; align-items: flex-start; font-size: 15px; color: var(--text); }
+.wt-points li svg { flex: none; margin-top: 2px; color: var(--accent); }
+.wt-dots { display: flex; gap: 6px; justify-content: center; margin: 14px 0 4px; }
+.wt-dots i { width: 7px; height: 7px; border-radius: 50%; background: var(--raised); }
+.wt-dots i.on { background: var(--accent); width: 20px; border-radius: 4px; }
+.wt-nav { display: flex; gap: 10px; width: 100%; }
+.wt-nav .grow { flex: 1; }
 .how-card { display: flex; gap: 14px; align-items: flex-start; }
 .how-card .n { width: 34px; height: 34px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; font-family: var(--font-display); font-weight: 900; font-size: 19px; flex: none; }
 .how-card h3 { margin: 0 0 3px; font-size: 16px; }

@@ -770,6 +770,18 @@ label.list-row { cursor: pointer; }
 .steps { display: flex; gap: 6px; }
 .steps i { flex: 1; height: 4px; border-radius: 2px; background: var(--raised); }
 .steps i.on { background: var(--accent); }
+.wt-page { display: flex; flex-direction: column; gap: 10px; padding: 4px 0 8px; }
+.wt-ic { width: 60px; height: 60px; border-radius: 18px; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; }
+.wt-title { margin: 6px 0 0; font-family: var(--font-display); font-weight: 900; font-size: 30px; line-height: 1.05; }
+.wt-text { margin: 0; color: var(--text-2); font-size: 16px; }
+.wt-points { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.wt-points li { display: flex; gap: 10px; align-items: flex-start; font-size: 15px; color: var(--text); }
+.wt-points li svg { flex: none; margin-top: 2px; color: var(--accent); }
+.wt-dots { display: flex; gap: 6px; justify-content: center; margin: 14px 0 4px; }
+.wt-dots i { width: 7px; height: 7px; border-radius: 50%; background: var(--raised); }
+.wt-dots i.on { background: var(--accent); width: 20px; border-radius: 4px; }
+.wt-nav { display: flex; gap: 10px; width: 100%; }
+.wt-nav .grow { flex: 1; }
 .how-card { display: flex; gap: 14px; align-items: flex-start; }
 .how-card .n { width: 34px; height: 34px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; font-family: var(--font-display); font-weight: 900; font-size: 19px; flex: none; }
 .how-card h3 { margin: 0 0 3px; font-size: 16px; }
@@ -1529,6 +1541,22 @@ window.TO = window.TO || {};
     online: () => navigator.onLine !== false && !TO.net.simulatedOffline,
   };
 
+  /** The app walkthrough: shown once after sign-up, and any time from the menu. Keep in step with Walkthrough.swift on iPhone. */
+  TO.WALKTHROUGH = [
+    { icon: 'hourglass', title: 'Pledge minutes, not money', text: 'You get 60 pledge minutes every day. They reset at midnight.',
+      points: ['Pick a game and call the outcome.', 'Pledge some of your minutes on it.', 'No money changes hands, ever.'] },
+    { icon: 'target', title: 'Win to earn, miss to lose', text: 'Results are settled automatically when the game ends.',
+      points: ['Win: your pledge comes back with bonus minutes added to tomorrow\'s phone time.', 'Miss: those minutes come off tomorrow\'s phone time.', 'Postponed game: your minutes are returned.'] },
+    { icon: 'lock', title: 'Set up Screen Time', text: 'The iPhone app turns your daily allowance into a real limit.',
+      points: ['Open Menu \u2192 Screen Time and tap Allow Screen Time (Face ID or passcode).', 'Choose the apps to block. Apple keeps the list private.', 'When today\'s minutes run out, those apps lock until midnight.', 'The website shows the same minutes and stays in sync with your phone.'] },
+    { icon: 'users', title: 'Play with friends', text: 'Challenges are better with people watching.',
+      points: ['Find friends by username or send them your invite link.', 'Accept requests under Social \u2192 Requests; they move straight to Friends.', 'Compare records on the leaderboard (you choose what you share).', 'Start a team and race over a week.'] },
+    { icon: 'flame', title: 'Tiers and streaks', text: 'The more apps you lock, the higher your tier.',
+      points: ['Higher tiers unlock bonus minutes and allowance boosts.', 'Keep a winning streak to climb faster.', 'Change your locked apps any time in Settings.'] },
+    { icon: 'bell', title: 'You\'re set', text: 'Same account on the website and the iPhone app.',
+      points: ['Pledges, friends and minutes stay in sync everywhere.', 'Turn notifications on to hear about results and friend requests.', 'Reopen this walkthrough any time from the menu.'] },
+  ];
+
   TO.icon = (name, size = 20, extra = '') =>
     `<svg class="ic ${extra}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[name] || ''}</svg>`;
 
@@ -2282,6 +2310,9 @@ window.TO = window.TO || {};
    *  acc.server always holds the latest values from the database (last login, login count...). */
   function adoptServerUser(user, remoteState = null) {
     const id = `srv_${user.id}`;
+    let shared = null;
+    let serverStreak = null;
+    let balanceSource = 'server';
     const all = accounts();
     const acc = all[id] || { id, salt: null, pw: null };
     Object.assign(acc, {
@@ -2290,6 +2321,9 @@ window.TO = window.TO || {};
     });
     all[id] = acc; saveAccounts(all);
     if (remoteState) {
+      shared = remoteState.shared || {};
+      serverStreak = remoteState.wallet ? remoteState.wallet.streakDays : null;
+      delete remoteState.shared;
       const cached = TO.store.get(dataKey(id), null);
       if (cached) {
         const remoteChallenges = remoteState.challenges || [];
@@ -2308,21 +2342,22 @@ window.TO = window.TO || {};
           }
           mergedChallenges.set(key, combined);
         }
-        const hasUnsyncedChallenges = (cached.challenges || []).some((challenge) => challenge.kind === 'sports' && !challenge.supabaseId);
+        const hasUnsyncedChallenges = (cached.challenges || []).some((challenge) => syncsToServer(challenge) && !challenge.supabaseId);
         const remoteHasPreferences = remoteState.appPreferencesReady && Object.keys(remoteState.settings || {}).length > 1;
         const preferences = remoteHasPreferences
           ? Object.assign({}, cached.settings || {}, remoteState.settings || {})
           : Object.assign({}, remoteState.settings || {}, cached.settings || {});
-        const savedSports = [
-          ...(Array.isArray(cached.settings?.sports) ? cached.settings.sports : []),
-          ...(Array.isArray(remoteState.settings?.sports) ? remoteState.settings.sports : []),
-        ].filter((league) => S.REAL_LEAGUES.includes(league));
-        if (savedSports.length) preferences.sports = [...new Set(savedSports)];
+        // One side's list wins outright. Combining them would bring back a sport the user just unfollowed.
+        const savedSports = (remoteHasPreferences ? remoteState.settings?.sports : cached.settings?.sports) || [];
+        const followed = savedSports.filter((league) => S.REAL_LEAGUES.includes(league));
+        if (followed.length) preferences.sports = [...new Set(followed)];
         remoteState = Object.assign({}, cached, remoteState, { challenges: [...mergedChallenges.values()], settings: preferences });
         // The new day starts on the device. The server's wallet only moves to a new day when a challenge is
         // placed, so a lagging server day must never pull this wallet back: that would close the same day
         // again and bump the streak on every sync.
-        if (hasUnsyncedChallenges || !remoteState.wallet || remoteState.wallet.dayKey !== TO.dayKey()) remoteState.wallet = cached.wallet;
+        if (hasUnsyncedChallenges || !remoteState.wallet) balanceSource = 'keep';
+        else if (remoteState.wallet.dayKey !== TO.dayKey()) balanceSource = 'day';
+        if (balanceSource !== 'server') remoteState.wallet = cached.wallet;
         else if (cached.wallet) {
           // Supabase currently owns the balance fields, while clean-day history is local-only.
           // Keep those local streak and usage ledgers when refreshing the server wallet.
@@ -2362,7 +2397,77 @@ window.TO = window.TO || {};
     }
     else if (!TO.store.get(dataKey(id), null)) TO.store.set(dataKey(id), user.isDemo ? seedDemoData(TO.now()) : freshData(TO.now()));
     startSession(id);
+    if (shared) { applySharedLedger(shared, balanceSource, serverStreak); save(); }
     return acc;
+  }
+
+  // ---------- Shared between a user's devices ----------
+  /** Whether a challenge is saved in the server's challenge tables. To-dos, races and predictions stay on the device that placed them. */
+  function syncsToServer(challenge) {
+    return challenge?.kind === 'sports' && Number(challenge.pledgeMinutes) > 0 && challenge.picks?.length > 0
+      && challenge.picks.every((pick) => (pick.kind === 'game' || pick.kind === 'sports') && pick.gameId);
+  }
+
+  function deviceId() {
+    let id = TO.store.get('timeout.deviceId', null);
+    if (!id) { id = TO.uid('device'); TO.store.set('timeout.deviceId', id); }
+    return id;
+  }
+
+  /** Minutes the device-only challenges on a day have taken. The server's balance can't include these. */
+  function localPledged(d, day) {
+    return (d.challenges || []).reduce((sum, c) => {
+      if (syncsToServer(c) || c.dayKey !== day) return sum;
+      const refund = c.status === 'void' || c.status === 'tie' ? Number(c.reward || 0) : 0;
+      return sum + Number(c.pledgeMinutes || 0) - refund;
+    }, 0);
+  }
+
+  /** What goes in the shared ledger. The phone owns the screen-time records, so the web only passes back what it received; each device owns its own totals. */
+  function sharedLedger(d = TO.data) {
+    const w = d.wallet;
+    const cutoff = TO.addDays(w.dayKey, -7);
+    const recent = (map) => Object.fromEntries(Object.entries(map || {}).filter(([day]) => day >= cutoff));
+    const pledgedByDay = {}, netByDay = {};
+    for (const c of d.challenges || []) {
+      if (syncsToServer(c)) continue;
+      if (c.dayKey >= cutoff) pledgedByDay[c.dayKey] = localPledged(d, c.dayKey);
+      if (c.status !== 'open') {
+        const day = creditDay(c);
+        if (day >= cutoff) netByDay[day] = (netByDay[day] || 0) + Number(c.reward || 0) - Number(c.pledgeMinutes || 0);
+      }
+    }
+    const devices = {};
+    for (const [id, device] of Object.entries(d.sharedDevices || {})) {
+      const entry = { pledgedByDay: recent(device.pledgedByDay), netByDay: recent(device.netByDay) };
+      if (Object.keys(entry.pledgedByDay).length || Object.keys(entry.netByDay).length) devices[id] = entry;
+    }
+    devices[deviceId()] = { pledgedByDay, netByDay };
+    return {
+      usageByDay: d.phoneRecords?.usageByDay || {}, overridesByDay: d.phoneRecords?.overridesByDay || {}, penaltyByDay: d.phoneRecords?.penaltyByDay || {}, devices,
+    };
+  }
+
+  /** Shows the phone's screen-time records and streak, and counts the other devices' challenges. Runs after the new day has started here, so days line up. */
+  function applySharedLedger(shared, balanceSource, serverStreak) {
+    const d = TO.data, w = d.wallet;
+    for (const key of ['usageByDay', 'overridesByDay', 'penaltyByDay']) {
+      if (shared[key]) { d.phoneRecords[key] = shared[key]; w[key] = { ...shared[key] }; }
+    }
+    if (serverStreak != null) w.streakDays = serverStreak;
+    if (shared.devices) {
+      d.sharedDevices = { ...shared.devices };
+      delete d.sharedDevices[deviceId()];
+    }
+    let othersPledged = 0;
+    for (const device of Object.values(d.sharedDevices)) {
+      othersPledged += Number(device.pledgedByDay?.[w.dayKey]) || 0;
+      for (const [day, n] of Object.entries(device.netByDay || {})) w.netByDay[day] = (w.netByDay[day] || 0) + (Number(n) || 0);
+    }
+    if (balanceSource === 'keep') return;
+    const base = balanceSource === 'day' ? RULES.daily + (w.bonusDay === w.dayKey ? Number(w.bonusGranted || 0) : 0) : w.balance;
+    w.balance = Math.max(0, base - localPledged(d, w.dayKey) - othersPledged);
+    w.lockedOut = w.balance <= 0;
   }
 
   function startSession(id) {
@@ -2472,6 +2577,8 @@ window.TO = window.TO || {};
       socialProfiles: {}, // friends' shared stats and team results, cached from the server
       teamResults: {},
       socialSynced: false,
+      sharedDevices: {}, // the user's other devices, from the shared ledger
+      phoneRecords: {}, // the phone's screen-time records, exactly as it last reported them
     };
   }
 
@@ -3024,10 +3131,55 @@ window.TO = window.TO || {};
   const RESEND_WAIT = TO.HOUR;
   const resendWait = (req, now = TO.now()) => Math.max(0, req.at + RESEND_WAIT - now);
 
+  // Requests answered a moment ago. A sync that started before the answer reached the server would bring the
+  // request back (or drop the new friend), so for a short while the local answer wins.
+  const RECENT_ANSWER_MS = 30000;
+  const recentAnswers = new Map();
+  const recentAnswer = (username) => {
+    const key = String(username).toLowerCase();
+    const a = recentAnswers.get(key);
+    if (a && Date.now() - a.at > RECENT_ANSWER_MS) { recentAnswers.delete(key); return null; }
+    return a || null;
+  };
+
+  /** Accepting a friend request on a real account: the request leaves Requests and the person shows in Friends at once,
+   *  before the server confirms. Returns a function that puts things back if the server says no. */
+  function acceptServerRequest(username) {
+    const d = TO.data;
+    const key = String(username).toLowerCase();
+    const req = d.requestsIn.find((r) => String(r.from).toLowerCase() === key);
+    const before = { requestsIn: d.requestsIn.slice(), friends: d.friends.slice(), profile: d.socialProfiles?.[key] };
+    d.requestsIn = d.requestsIn.filter((r) => String(r.from).toLowerCase() !== key);
+    if (!d.friends.some((f) => String(f).toLowerCase() === key)) d.friends.push(req ? req.from : username);
+    d.socialProfiles = d.socialProfiles || {};
+    if (!d.socialProfiles[key]) d.socialProfiles[key] = { username: req ? req.from : username, name: req ? req.from : username, photo: null, w: 0, l: 0, net: 0, tier: 'rookie', streak: 0, share: { record: false, minutes: false, challenges: false }, picks: [] };
+    recentAnswers.set(key, { at: Date.now(), accepted: true });
+    saveQuiet();
+    return () => {
+      recentAnswers.delete(key);
+      d.requestsIn = before.requestsIn; d.friends = before.friends;
+      if (before.profile) d.socialProfiles[key] = before.profile; else delete d.socialProfiles[key];
+      saveQuiet();
+    };
+  }
+
+  /** Declining: the request leaves the list at once. */
+  function declineServerRequest(username) {
+    const d = TO.data;
+    const key = String(username).toLowerCase();
+    const before = d.requestsIn.slice();
+    d.requestsIn = d.requestsIn.filter((r) => String(r.from).toLowerCase() !== key);
+    recentAnswers.set(key, { at: Date.now(), accepted: false });
+    saveQuiet();
+    return () => { recentAnswers.delete(key); d.requestsIn = before; saveQuiet(); };
+  }
+
   /** Replaces this browser's friends and requests with what the server says, and reports what's new since last time. */
   function applySocial(state) {
     const d = TO.data;
     if (!d || !usesServerSocial() || !state) return { newRequests: [], newFriends: [] };
+    state = { ...state, requestsIn: state.requestsIn.filter((r) => !recentAnswer(r.username)) };
+    const heldFriends = [...recentAnswers.entries()].filter(([k, a]) => a.accepted && recentAnswer(k) && !state.friends.some((f) => f.username.toLowerCase() === k)).map(([k]) => d.friends.find((f) => String(f).toLowerCase() === k)).filter(Boolean);
     const friendsBefore = new Set(d.friends.map((u) => String(u).toLowerCase()));
     const requestsBefore = new Set(d.requestsIn.map((r) => String(r.from).toLowerCase()));
     // The first sync isn't news: it just brings the account up to date.
@@ -3035,9 +3187,12 @@ window.TO = window.TO || {};
       newRequests: state.requestsIn.map((r) => r.username).filter((u) => !requestsBefore.has(u.toLowerCase())),
       newFriends: state.friends.map((f) => f.username).filter((u) => !friendsBefore.has(u.toLowerCase())),
     } : { newRequests: [], newFriends: [] };
-    d.friends = state.friends.map((f) => f.username);
+    const held = {};
+    for (const u of heldFriends) held[u.toLowerCase()] = d.socialProfiles?.[u.toLowerCase()];
+    d.friends = [...state.friends.map((f) => f.username), ...heldFriends];
     d.socialProfiles = {};
     for (const f of state.friends) d.socialProfiles[f.username.toLowerCase()] = f;
+    for (const [k, prof] of Object.entries(held)) if (prof) d.socialProfiles[k] = prof;
     for (const r of [...state.requestsIn, ...state.requestsOut]) {
       const key = r.username.toLowerCase();
       if (!d.socialProfiles[key]) d.socialProfiles[key] = { username: r.username, name: r.name, photo: r.photo, w: 0, l: 0, net: 0, tier: 'rookie', streak: 0, share: { record: false, minutes: false, challenges: false }, picks: [] };
@@ -3494,12 +3649,13 @@ window.TO = window.TO || {};
     RULES, TIERS, LOCKABLE, PEOPLE, DEMO, TODO_VALUE,
     tierById, tierForPoints, tierPerks, streakMultiplier, nextStreakMilestone, fmtMult,
     accounts, findAccount, createAccount, login, logout, loadSession, startSession, updateAccount, deleteAccount, adoptServerUser,
+    syncsToServer, sharedLedger,
     validateUsername, validateEmail, validatePassword,
     save, wallet, rollover, grantTierBonus, addUsage, checkPhoneTime, useEmergencyUnlock, setSetting, limitFor, baseLimitFor, lockPoints, tier,
     submitPledge, placeTodoCombo, completeTodo, resolve, outcome, combine, pickFromSelection,
     myStats, statsFor, person, sharedPicks, searchPeople, relation,
     sendFriendRequest, addFriend, acceptFriendRequest, declineFriendRequest, cancelFriendRequest, resendFriendRequest, resendWait, removeFriend,
-    socialTick, usesServerSocial, applySocial,
+    socialTick, usesServerSocial, applySocial, acceptServerRequest, declineServerRequest,
     teamStatus, teamStandings, createTeam, leaveTeam, inviteToTeam, joinTeam, refreshTeams, ensureTeamKey, sameUser, leaderboard,
     ensureDemoAccount, loginDemo, resetMyData, seedDemoData,
   };
@@ -4091,6 +4247,10 @@ window.TIMEOUT_SUPABASE = {
   let pendingState = null;
   let lastSaveAt = 0;
   let lastSettingsSnapshot = '';
+  let lastLedgerSnapshot = '';
+  let supportsSharedLedger = true;
+  // Postgres reorders JSON keys, so sort them to compare the saved ledger with this device's.
+  const canonical = (value) => JSON.stringify(value, (key, v) => (v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).sort()) : v));
   let supportsAppPreferences = true;
   let supportsTierBonusColumns = null;
   let supportsTierPerkColumns = null;
@@ -4100,7 +4260,6 @@ window.TIMEOUT_SUPABASE = {
   let lastTierPerkMigrationAlertAt = 0;
   const placing = new Set();
   const settling = new Set();
-  const isPersistableGamePick = (pick) => pick?.kind === 'game' || (pick?.kind === 'sports' && !!pick.gameId);
 
   // The server's own wording. Never shown to users; the app reads it to recognize specific problems.
   const rawText = (error) => String(error?.debug || error?.message || '');
@@ -4329,6 +4488,16 @@ window.TIMEOUT_SUPABASE = {
       supportsAppPreferences = false;
       settingsRows = await rest(`user_settings?select=followed_sports,timezone,notifications_enabled&user_id=eq.${safeId}&limit=1`);
     }
+    let shared = null;
+    if (supportsSharedLedger) {
+      try {
+        const rows = await rest(`user_settings?select=shared_ledger&user_id=eq.${safeId}&limit=1`);
+        shared = rows?.[0]?.shared_ledger || null;
+        if (shared) lastLedgerSnapshot = canonical(shared);
+      } catch (e) {
+        if (/shared_ledger/i.test(rawText(e))) supportsSharedLedger = false; // server/db/supabase-shared-ledger.sql hasn't been run
+      }
+    }
     // "pushed" and "push" are the previous database labels.
     const status = { pending: 'open', won: 'won', lost: 'lost', tied: 'tie', pushed: 'tie', voided: 'void', cancelled: 'void' };
     const result = { pending: 'pending', win: 'won', loss: 'lost', tie: 'tie', push: 'tie', void: 'void' };
@@ -4357,10 +4526,7 @@ window.TIMEOUT_SUPABASE = {
       walletState.insuranceByWeek = wallet.tier_insurance_by_week || {};
     }
     const appPreferences = settings?.app_preferences || {};
-    const storedSports = [
-      ...(Array.isArray(settings?.followed_sports) ? settings.followed_sports : []),
-      ...(Array.isArray(appPreferences.sports) ? appPreferences.sports : []),
-    ];
+    const storedSports = Array.isArray(appPreferences.sports) ? appPreferences.sports : (Array.isArray(settings?.followed_sports) ? settings.followed_sports : []);
     const followedSports = [...new Set(storedSports.filter((league) => TO.sim.REAL_LEAGUES.includes(league)))];
     const remotePreferences = { ...appPreferences };
     if (followedSports.length) remotePreferences.sports = followedSports;
@@ -4368,9 +4534,9 @@ window.TIMEOUT_SUPABASE = {
       challenges,
       ...(walletState ? { wallet: walletState } : {}),
       ...(settings ? { settings: remotePreferences, appPreferencesReady: supportsAppPreferences } : {}),
+      ...(shared ? { shared } : {}),
     };
   };
-  let syncedStreak = null;
   let inviteCode = null;
 
   api.queueStateSave = (data) => {
@@ -4391,6 +4557,18 @@ window.TIMEOUT_SUPABASE = {
       });
     }, Math.max(0, 1500 - (Date.now() - lastSaveAt)));
   };
+  /** Per-day highest of the phone's records (they only ever grow within a day), plus every device's challenge totals. */
+  function mergeLedgers(mine, server) {
+    if (!server || typeof server !== 'object') return mine;
+    const out = { ...mine };
+    for (const key of ['usageByDay', 'overridesByDay', 'penaltyByDay']) {
+      const merged = { ...(server[key] || {}) };
+      for (const [day, n] of Object.entries(mine[key] || {})) merged[day] = Math.max(Number(n) || 0, Number(merged[day]) || 0);
+      out[key] = merged;
+    }
+    out.devices = { ...(server.devices || {}), ...(mine.devices || {}) };
+    return out;
+  }
   api.flushState = async () => {
     clearTimeout(saveTimer); saveTimer = null;
     if (!pendingState || !token()) return;
@@ -4406,8 +4584,27 @@ window.TIMEOUT_SUPABASE = {
         await rest(`user_settings?user_id=eq.${encodeURIComponent(id)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: settingsSnapshot });
         lastSettingsSnapshot = settingsSnapshot;
       }
+      // Its own column and its own write, so these frequent updates can't overwrite a settings change from another device.
+      if (supportsSharedLedger) {
+        let ledger = TO.state.sharedLedger(data);
+        // Another device may have recorded newer phone usage since this one last read it: never write an older number over it.
+        try {
+          const rows = await rest(`user_settings?select=shared_ledger&user_id=eq.${encodeURIComponent(id)}&limit=1`);
+          ledger = mergeLedgers(ledger, rows?.[0]?.shared_ledger);
+        } catch (e) { /* offline or no column yet: write ours as it is */ }
+        const ledgerSnapshot = canonical(ledger);
+        if (ledgerSnapshot !== lastLedgerSnapshot) {
+          try {
+            await rest(`user_settings?user_id=eq.${encodeURIComponent(id)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ shared_ledger: ledger }) });
+            lastLedgerSnapshot = ledgerSnapshot;
+          } catch (e) {
+            if (/shared_ledger/i.test(rawText(e))) supportsSharedLedger = false;
+            else console.warn('Could not share daily records with your other devices:', e.message);
+          }
+        }
+      }
       for (const challenge of data.challenges || []) {
-        if (challenge.kind !== 'sports' || !Number(challenge.pledgeMinutes) || !challenge.picks?.length || challenge.picks.some((pick) => !isPersistableGamePick(pick) || !pick.gameId)) continue;
+        if (!TO.state.syncsToServer(challenge)) continue;
         if (!challenge.supabaseId && !placing.has(challenge.id)) {
           placing.add(challenge.id);
           try {
@@ -4493,12 +4690,6 @@ window.TIMEOUT_SUPABASE = {
           } finally { settling.delete(challenge.supabaseId); }
         }
       }
-      // Friends see this streak. The app works it out on the device, so the server needs telling.
-      const streak = Number(data.wallet?.streakDays || 0);
-      if (syncedStreak !== streak) {
-        await rest('rpc/timeout_set_streak', { method: 'POST', signal: AbortSignal.timeout(4000), body: JSON.stringify({ p_streak: streak }) }).catch(() => {});
-        syncedStreak = streak;
-      }
       lastSaveAt = Date.now();
       api.syncError = null;
     } catch (e) {
@@ -4551,7 +4742,6 @@ window.TIMEOUT_SUPABASE = {
     api.clearToken();
     lastSettingsSnapshot = '';
     inviteCode = null;
-    syncedStreak = null;
   };
 
   /** Permanently deletes the signed-in account and its data (server/db/supabase-delete-account.sql). */
@@ -6508,6 +6698,7 @@ window.TIMEOUT_SUPABASE = {
     if (!invite && !team) return null;
     const pending = { invite, team, teamName: q.get('teamName') || '', start: q.get('start') || '', end: q.get('end') || '', key: q.get('key') || '', code: q.get('code') || '' };
     TO.store.set(INVITE_KEY, pending);
+    setTimeout(() => tryOpenApp(pending), 0);
     ['invite', 'join', 'team', 'teamName', 'start', 'end', 'key', 'code'].forEach((k) => q.delete(k));
     const next = `${location.pathname}${q.toString() ? `?${q}` : ''}${location.hash}`;
     history.replaceState(null, '', next);
@@ -6520,6 +6711,17 @@ window.TIMEOUT_SUPABASE = {
     return `timeout://invite?${params}`;
   }
   const onIPhone = () => /iPhone|iPad|iPod/.test(navigator.userAgent);
+  /** Share links open the app by default on an iPhone. Flip `autoOpen` to true once TimeOut is on the App Store:
+   *  without the app installed, Safari shows an error for the timeout:// address. Put the store page in `appStoreUrl`
+   *  (https://apps.apple.com/app/id...) and people without the app get an Install button instead. */
+  TO.appLink = TO.appLink || { autoOpen: false, appStoreUrl: '' };
+  const AUTO_TRIED = 'timeout.appOpenTried';
+  function tryOpenApp(p) {
+    if (!p || !onIPhone() || !TO.appLink.autoOpen) return;
+    try { if (sessionStorage.getItem(AUTO_TRIED)) return; sessionStorage.setItem(AUTO_TRIED, '1'); } catch (e) { /* private mode: try once per load */ }
+    location.href = appLink(p);
+    // If the app isn't installed the page stays here, and the invite sheet offers the App Store link.
+  }
   function offerInvite() {
     const p = readInvite();
     if (!p || !TO.account || !TO.data || !TO.data.onboarded) return;
@@ -6535,7 +6737,7 @@ window.TIMEOUT_SUPABASE = {
         body: joining
           ? `<p class="sub" style="margin-top:0">${who} invited you to <b style="color:var(--text)">${esc(p.teamName)}</b>${p.start && p.end ? `, ${esc(TO.fmtDate(TO.dayStart(p.start)))} – ${esc(TO.fmtDate(TO.dayStart(p.end)))}` : ''}. Joining also adds them as a friend. It is still screen time, not money.</p>`
           : `<p class="sub" style="margin-top:0">${who} sent you their TimeOut link. Add them as a friend to compare screen time without putting money on the games.</p>`,
-        foot: `<button class="btn primary full" data-act="invite-accept">${joining ? 'Add friend and join' : 'Add friend'}</button>${onIPhone() ? `<a class="btn ghost full" href="${esc(appLink(p))}">Open in the TimeOut app</a>` : ''}<button class="btn quiet sm" data-act="invite-dismiss">Not now</button>`,
+        foot: `<button class="btn primary full" data-act="invite-accept">${joining ? 'Add friend and join' : 'Add friend'}</button>${onIPhone() ? `<a class="btn ghost full" href="${esc(appLink(p))}">Open in the TimeOut app</a>${TO.appLink.appStoreUrl ? `<a class="btn quiet sm full" href="${esc(TO.appLink.appStoreUrl)}">Get the app from the App Store</a>` : ''}` : ''}<button class="btn quiet sm" data-act="invite-dismiss">Not now</button>`,
       }),
     });
   }
@@ -6856,6 +7058,8 @@ window.TIMEOUT_SUPABASE = {
   A['add-friend'] = async (el) => {
     const u = el.dataset.u;
     if (St.usesServerSocial()) {
+      const incoming = St.relation(u) === 'incoming' && TO.data.requestsIn.find((r) => String(r.from).toLowerCase() === u.toLowerCase());
+      if (incoming) { ui.closeSheet('profile'); return A['accept-fr']({ dataset: { id: incoming.id } }); }
       try {
         const result = await TO.api.sendFriendRequest(u);
         await TO.app.syncSocial(true);
@@ -6888,11 +7092,37 @@ window.TIMEOUT_SUPABASE = {
   A['accept-fr'] = async (el) => {
     const r = TO.data.requestsIn.find((x) => x.id === el.dataset.id);
     if (!r) return;
-    if (await perform(() => TO.api.answerFriendRequest(r.from, true), () => St.acceptFriendRequest(el.dataset.id))) ui.toast({ kind: 'win', title: `You and @${r.from} are now friends` });
+    if (!St.usesServerSocial()) {
+      St.acceptFriendRequest(r.id);
+      view.tab = 'board';
+      rerender();
+      ui.toast({ kind: 'win', title: `You and @${r.from} are now friends`, msg: 'They\'re in your Friends list.' });
+      return;
+    }
+    // The request goes away and the person appears under Friends right now; the server confirms in the background.
+    const undo = St.acceptServerRequest(r.from);
+    view.tab = 'board';
+    rerender();
+    ui.toast({ kind: 'win', title: `You and @${r.from} are now friends`, msg: 'They\'re in your Friends list.' });
+    try {
+      await TO.api.answerFriendRequest(r.from, true);
+      await TO.app.syncSocial(true);
+    } catch (e) {
+      undo();
+      view.tab = 'requests';
+      ui.toast({ kind: 'loss', title: `Couldn't accept @${r.from}`, msg: TO.friendlyMessage(e) });
+    }
+    rerender();
   };
-  A['decline-fr'] = (el) => {
+  A['decline-fr'] = async (el) => {
     const r = TO.data.requestsIn.find((x) => x.id === el.dataset.id);
-    if (r) perform(() => TO.api.answerFriendRequest(r.from, false), () => St.declineFriendRequest(el.dataset.id));
+    if (!r) return;
+    if (!St.usesServerSocial()) { St.declineFriendRequest(r.id); rerender(); return; }
+    const undo = St.declineServerRequest(r.from);
+    rerender();
+    try { await TO.api.answerFriendRequest(r.from, false); await TO.app.syncSocial(true); }
+    catch (e) { undo(); ui.toast({ kind: 'loss', title: 'Couldn\'t decline that request', msg: TO.friendlyMessage(e) }); }
+    rerender();
   };
   A['remove-friend'] = async (el) => {
     const u = el.dataset.u;
@@ -7029,7 +7259,7 @@ window.TIMEOUT_SUPABASE = {
         ${item('sports')}
         ${item('notifications')}
         ${item('account')}
-        <button class="dn" data-act="how">${icon('help', 20)}How TimeOut works</button>
+        <button class="dn" data-act="how">${icon('help', 20)}App walkthrough</button>
         <a class="dn" href="support.html" target="_blank" rel="noopener">${icon('info', 20)}Help & support</a>
         <a class="dn" href="privacy.html" target="_blank" rel="noopener">${icon('shield', 20)}Privacy policy</a>
         <button class="dn" data-act="logout">${icon('logout', 20)}Log out</button>
@@ -7215,20 +7445,36 @@ window.TIMEOUT_SUPABASE = {
     ui.openPage('settings', { render: () => render(key), after: key === 'sports' ? (el) => TO.races.mount(el) : undefined });
   }
 
-  // ---------- How it works ----------
+  // ---------- App walkthrough ----------
+  /** One page of the walkthrough plus its dots. `mode` is 'sheet' (opened from the menu) or 'onboard' (after sign-up). */
+  function walkthroughPage(i, mode) {
+    const W = TO.WALKTHROUGH, last = i === W.length - 1, w = W[i];
+    const dots = `<div class="wt-dots" role="tablist">${W.map((_, k) => `<i class="${k === i ? 'on' : ''}"></i>`).join('')}</div>`;
+    const body = `<div class="wt-page"><span class="wt-ic">${icon(w.icon, 30)}</span><h2 class="wt-title">${w.title}</h2><p class="wt-text">${w.text}</p>
+      <ul class="wt-points">${w.points.map((t) => `<li>${icon('check', 15)}<span>${t}</span></li>`).join('')}</ul></div>${dots}`;
+    const nav = `<div class="wt-nav">${i > 0 ? `<button class="btn ghost" data-act="wt-go" data-d="-1" data-mode="${mode}">Back</button>` : ''}<button class="btn primary grow" data-act="wt-go" data-d="1" data-mode="${mode}">${last ? (mode === 'onboard' ? 'Next' : 'Got it') : 'Next'}</button></div>`;
+    return { body, nav, i, last };
+  }
+  let wtPage = 0;
   function howItWorks() {
+    wtPage = 0;
     ui.sheet('how', {
-      render: () => ({
-        title: 'How TimeOut works',
-        body: `<div class="how-card"><span class="n">1</span><div><h3>Commit screen time minutes</h3><p>You get ${TO.RULES.daily} available minutes every day. They reset at midnight.</p></div></div>
-          <div class="how-card"><span class="n">2</span><div><h3>Meet the challenge to earn time</h3><p>Successful challenges add earned minutes to tomorrow's phone-time allowance.</p></div></div>
-          <div class="how-card"><span class="n">3</span><div><h3>Results update automatically</h3><p>When a game ends, the challenge is resolved. Postponed games return your committed minutes.</p></div></div>
-          <div class="how-card"><span class="n">4</span><div><h3>Out of minutes? Wait for midnight</h3><p>At 0 minutes, new pledges pause until the reset. Emergency unlocks adjust tomorrow's allowance.</p></div></div>
-          `,
-        foot: `<button class="btn primary full" data-act="close-sheet" data-name="how">Got it</button>`,
-      }),
+      tall: true,
+      render: () => {
+        const p = walkthroughPage(wtPage, 'sheet');
+        return { title: 'App walkthrough', body: p.body, foot: p.nav };
+      },
     });
   }
+  TO.walkthroughPage = walkthroughPage;
+  TO.actions['wt-go'] = (el) => {
+    const d = Number(el.dataset.d), n = TO.WALKTHROUGH.length;
+    if (el.dataset.mode === 'onboard') { TO.actions['ob-wt'](d); return; }
+    const next = wtPage + d;
+    if (next >= n) { ui.closeSheet('how'); return; }
+    wtPage = Math.max(0, next);
+    ui.refreshSheet('how');
+  };
 
   // ---------- Locked apps ----------
   let lockDraft = [];
@@ -7279,6 +7525,11 @@ window.TIMEOUT_SUPABASE = {
     refresh();
   };
   A.emergency = async () => {
+    // Screen time is enforced on the phone, so that's where an unlock has to happen.
+    if (TO.account?.server) {
+      ui.toast({ kind: 'warn', title: 'Use the iPhone app', msg: 'Emergency unlocks are made in the TimeOut iPhone app.' });
+      return;
+    }
     const wl = St.wallet();
     const ok = await ui.confirm({
       title: `Unlock ${TO.RULES.overrideMinutes} minutes now?`,
@@ -7412,7 +7663,7 @@ window.TIMEOUT_SUPABASE = {
   const ui = TO.ui;
   const St = TO.state;
 
-  const av = { screen: 'welcome', errors: {}, formError: '', values: {}, photo: null, step: 1, sports: null, locks: [] };
+  const av = { screen: 'welcome', errors: {}, formError: '', values: {}, photo: null, step: 1, wt: 0, sports: null, locks: [] };
 
   function ticker() {
     const games = S.board(TO.now()).filter((g) => g.state === 'live' && !g.simulated).slice(0, 8);
@@ -7494,11 +7745,9 @@ window.TIMEOUT_SUPABASE = {
     const steps = `<div class="steps">${[1, 2, 3].map((i) => `<i class="${i <= step ? 'on' : ''}"></i>`).join('')}</div>`;
     let body, next;
     if (step === 1) {
-      body = `<h1>Here's the deal, @${esc(TO.account.username)}</h1>
-        <div class="how-card"><span class="n">1</span><div><h3>You get 60 pledge minutes a day</h3><p>They reset every night at midnight.</p></div></div>
-        <div class="how-card"><span class="n">2</span><div><h3>Challenges guide tomorrow's phone time</h3><p>Successful challenges add minutes to tomorrow's allowance.</p></div></div>
-        <div class="how-card"><span class="n">3</span><div><h3>No money, ever</h3><p>Commit screen-time minutes to an outcome and track your streak.</p></div></div>`;
-      next = `<button class="btn primary full" data-act="ob-next">Next</button>`;
+      const p = TO.walkthroughPage(av.wt, 'onboard');
+      body = `<h1>${av.wt === 0 ? `Here's the deal, @${esc(TO.account.username)}` : 'How TimeOut works'}</h1>${p.body}`;
+      next = `${p.nav}<button class="btn quiet sm" data-act="ob-next">Skip walkthrough</button>`;
     } else if (step === 2) {
       const sel = av.sports;
       body = `<h1>Pick your sports</h1><p class="sub">These show up on your Home feed. You can change them in Settings.</p>
@@ -7609,7 +7858,7 @@ window.TIMEOUT_SUPABASE = {
   }
 
   function startOnboarding() {
-    av.screen = 'onboard'; av.step = 1; av.sports = TO.data.settings.sports.slice(); av.locks = [];
+    av.screen = 'onboard'; av.step = 1; av.wt = 0; av.sports = TO.data.settings.sports.slice(); av.locks = [];
     render();
   }
 
@@ -7745,6 +7994,11 @@ window.TIMEOUT_SUPABASE = {
     el.innerHTML = icon(input.type === 'password' ? 'eye' : 'eyeOff', 18);
   };
   A['ob-next'] = () => { av.step++; render(); };
+  TO.actions['ob-wt'] = (d) => {
+    const n = TO.WALKTHROUGH.length;
+    if (av.wt + d >= n) { av.step++; av.wt = 0; } else av.wt = Math.max(0, av.wt + d);
+    render();
+  };
   A['ob-back'] = () => { av.step--; render(); };
   A['ob-sport'] = (el) => { const id = el.dataset.id; av.sports = av.sports.includes(id) ? av.sports.filter((x) => x !== id) : [...av.sports, id]; render(); };
   A['ob-lock'] = (el) => { const id = el.dataset.id; av.locks = av.locks.includes(id) ? av.locks.filter((x) => x !== id) : [...av.locks, id]; render(); };
@@ -8085,15 +8339,17 @@ window.TIMEOUT_SUPABASE = {
 
   // A browser session can stay open while pledges are placed in another one. Refresh the
   // shared account snapshot when this tab returns and periodically while it is visible.
+  const REMOTE_SYNC_MS = 15000;
   let remoteSyncAt = 0;
   let remoteSync = null;
   function syncRemoteState(force = false) {
     if (!inShell() || document.hidden || !TO.api.configured || !TO.api.hasToken() || !TO.account?.server) return;
     if (remoteSync) return remoteSync;
-    if (!force && Date.now() - remoteSyncAt < 30000) return;
+    if (!force && Date.now() - remoteSyncAt < REMOTE_SYNC_MS - 1000) return;
     remoteSyncAt = Date.now();
     app.syncSocial();
-    remoteSync = TO.api.loadState().then((state) => {
+    // Save first, so a change made on this device isn't overwritten by the older copy on the server.
+    remoteSync = TO.api.flushState().then(() => TO.api.loadState()).then((state) => {
       if (!state || !inShell()) return;
       St.adoptServerUser(TO.account.server, state);
       app.render();
@@ -8120,7 +8376,7 @@ window.TIMEOUT_SUPABASE = {
       ui.toast({ kind: 'loss', title: 'That link didn\'t work', msg: `${redirect.error}. Log in, or create your account again to get a new link.`, ms: 8000 });
     }
     setInterval(() => app.tick(false), 1000);
-    setInterval(() => syncRemoteState(), 30000);
+    setInterval(() => syncRemoteState(), REMOTE_SYNC_MS);
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
   else start();
@@ -8194,7 +8450,7 @@ window.TIMEOUT_SUPABASE = {
         ${tabs}
         <div class="side-label eyebrow">Screen time & settings</div>
         ${MENU.map(([k, t, ic]) => item(k, t, ic)).join('')}
-        <button class="sn" data-act="how" title="How TimeOut works">${icon('help', 19)}<span class="sn-l">How TimeOut works</span></button>
+        <button class="sn" data-act="how" title="App walkthrough">${icon('help', 19)}<span class="sn-l">App walkthrough</span></button>
         <a class="sn" href="support.html" target="_blank" rel="noopener" title="Help & support">${icon('info', 19)}<span class="sn-l">Help & support</span></a>
         <a class="sn" href="privacy.html" target="_blank" rel="noopener" title="Privacy policy">${icon('shield', 19)}<span class="sn-l">Privacy policy</span></a>
       </nav>
@@ -8308,6 +8564,26 @@ window.TIMEOUT_SUPABASE = {
     const last = ui.layer().lastElementChild;
     if (last && last.dataset.sheet === 'commitment') e.stopImmediatePropagation();
   }, true);
+
+  // ---------- Swipe the menu open from the left edge, and swipe it closed (touch screens) ----------
+  const menuOpen = () => document.body.classList.contains('side-open') || !!ui.layer().querySelector('[data-drawer]');
+  const overlaysOpen = () => ui.layer().querySelector('[data-sheet], [data-page], [data-dialog]');
+  let swipe = null;
+  window.addEventListener('touchstart', (e) => {
+    swipe = null;
+    if (e.touches.length !== 1 || !TO.data || (isWeb() && wide.matches)) return;
+    const t = e.touches[0];
+    if (menuOpen()) swipe = { x: t.clientX, y: t.clientY, mode: 'close' };
+    else if (t.clientX <= 28 && !overlaysOpen() && !document.querySelector('.auth')) swipe = { x: t.clientX, y: t.clientY, mode: 'open' };
+  }, { passive: true });
+  window.addEventListener('touchend', (e) => {
+    const s = swipe; swipe = null;
+    if (!s || !e.changedTouches.length) return;
+    const dx = e.changedTouches[0].clientX - s.x, dy = e.changedTouches[0].clientY - s.y;
+    if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+    if (s.mode === 'open' && dx > 0) { if (isWeb()) setSide(true); else A.menu(); }
+    else if (s.mode === 'close' && dx < 0) { if (document.body.classList.contains('side-open')) setSide(false); else TO.views.settings.closeDrawer(); }
+  }, { passive: true });
 
   wide.addEventListener('change', () => app.renderChrome());
 })(window.TO);

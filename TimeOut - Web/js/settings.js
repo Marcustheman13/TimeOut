@@ -31,7 +31,7 @@
         ${item('sports')}
         ${item('notifications')}
         ${item('account')}
-        <button class="dn" data-act="how">${icon('help', 20)}How TimeOut works</button>
+        <button class="dn" data-act="how">${icon('help', 20)}App walkthrough</button>
         <a class="dn" href="support.html" target="_blank" rel="noopener">${icon('info', 20)}Help & support</a>
         <a class="dn" href="privacy.html" target="_blank" rel="noopener">${icon('shield', 20)}Privacy policy</a>
         <button class="dn" data-act="logout">${icon('logout', 20)}Log out</button>
@@ -217,20 +217,36 @@
     ui.openPage('settings', { render: () => render(key), after: key === 'sports' ? (el) => TO.races.mount(el) : undefined });
   }
 
-  // ---------- How it works ----------
+  // ---------- App walkthrough ----------
+  /** One page of the walkthrough plus its dots. `mode` is 'sheet' (opened from the menu) or 'onboard' (after sign-up). */
+  function walkthroughPage(i, mode) {
+    const W = TO.WALKTHROUGH, last = i === W.length - 1, w = W[i];
+    const dots = `<div class="wt-dots" role="tablist">${W.map((_, k) => `<i class="${k === i ? 'on' : ''}"></i>`).join('')}</div>`;
+    const body = `<div class="wt-page"><span class="wt-ic">${icon(w.icon, 30)}</span><h2 class="wt-title">${w.title}</h2><p class="wt-text">${w.text}</p>
+      <ul class="wt-points">${w.points.map((t) => `<li>${icon('check', 15)}<span>${t}</span></li>`).join('')}</ul></div>${dots}`;
+    const nav = `<div class="wt-nav">${i > 0 ? `<button class="btn ghost" data-act="wt-go" data-d="-1" data-mode="${mode}">Back</button>` : ''}<button class="btn primary grow" data-act="wt-go" data-d="1" data-mode="${mode}">${last ? (mode === 'onboard' ? 'Next' : 'Got it') : 'Next'}</button></div>`;
+    return { body, nav, i, last };
+  }
+  let wtPage = 0;
   function howItWorks() {
+    wtPage = 0;
     ui.sheet('how', {
-      render: () => ({
-        title: 'How TimeOut works',
-        body: `<div class="how-card"><span class="n">1</span><div><h3>Commit screen time minutes</h3><p>You get ${TO.RULES.daily} available minutes every day. They reset at midnight.</p></div></div>
-          <div class="how-card"><span class="n">2</span><div><h3>Meet the challenge to earn time</h3><p>Successful challenges add earned minutes to tomorrow's phone-time allowance.</p></div></div>
-          <div class="how-card"><span class="n">3</span><div><h3>Results update automatically</h3><p>When a game ends, the challenge is resolved. Postponed games return your committed minutes.</p></div></div>
-          <div class="how-card"><span class="n">4</span><div><h3>Out of minutes? Wait for midnight</h3><p>At 0 minutes, new pledges pause until the reset. Emergency unlocks adjust tomorrow's allowance.</p></div></div>
-          `,
-        foot: `<button class="btn primary full" data-act="close-sheet" data-name="how">Got it</button>`,
-      }),
+      tall: true,
+      render: () => {
+        const p = walkthroughPage(wtPage, 'sheet');
+        return { title: 'App walkthrough', body: p.body, foot: p.nav };
+      },
     });
   }
+  TO.walkthroughPage = walkthroughPage;
+  TO.actions['wt-go'] = (el) => {
+    const d = Number(el.dataset.d), n = TO.WALKTHROUGH.length;
+    if (el.dataset.mode === 'onboard') { TO.actions['ob-wt'](d); return; }
+    const next = wtPage + d;
+    if (next >= n) { ui.closeSheet('how'); return; }
+    wtPage = Math.max(0, next);
+    ui.refreshSheet('how');
+  };
 
   // ---------- Locked apps ----------
   let lockDraft = [];
@@ -281,6 +297,11 @@
     refresh();
   };
   A.emergency = async () => {
+    // Screen time is enforced on the phone, so that's where an unlock has to happen.
+    if (TO.account?.server) {
+      ui.toast({ kind: 'warn', title: 'Use the iPhone app', msg: 'Emergency unlocks are made in the TimeOut iPhone app.' });
+      return;
+    }
     const wl = St.wallet();
     const ok = await ui.confirm({
       title: `Unlock ${TO.RULES.overrideMinutes} minutes now?`,

@@ -313,15 +313,17 @@
 
   // A browser session can stay open while pledges are placed in another one. Refresh the
   // shared account snapshot when this tab returns and periodically while it is visible.
+  const REMOTE_SYNC_MS = 15000;
   let remoteSyncAt = 0;
   let remoteSync = null;
   function syncRemoteState(force = false) {
     if (!inShell() || document.hidden || !TO.api.configured || !TO.api.hasToken() || !TO.account?.server) return;
     if (remoteSync) return remoteSync;
-    if (!force && Date.now() - remoteSyncAt < 30000) return;
+    if (!force && Date.now() - remoteSyncAt < REMOTE_SYNC_MS - 1000) return;
     remoteSyncAt = Date.now();
     app.syncSocial();
-    remoteSync = TO.api.loadState().then((state) => {
+    // Save first, so a change made on this device isn't overwritten by the older copy on the server.
+    remoteSync = TO.api.flushState().then(() => TO.api.loadState()).then((state) => {
       if (!state || !inShell()) return;
       St.adoptServerUser(TO.account.server, state);
       app.render();
@@ -348,7 +350,7 @@
       ui.toast({ kind: 'loss', title: 'That link didn\'t work', msg: `${redirect.error}. Log in, or create your account again to get a new link.`, ms: 8000 });
     }
     setInterval(() => app.tick(false), 1000);
-    setInterval(() => syncRemoteState(), 30000);
+    setInterval(() => syncRemoteState(), REMOTE_SYNC_MS);
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
   else start();

@@ -531,7 +531,7 @@ struct OnboardScreen: View {
             VStack(spacing: 8) {
                 switch model.step {
                 case 1:
-                    Button("Next") { model.step += 1 }.buttonStyle(.btn(.primary, full: true))
+                    EmptyView()
                 case 2:
                     Button(model.sports.isEmpty ? "Pick at least one" : "Next") { model.step += 1 }
                         .buttonStyle(.btn(.primary, full: true)).disabled(model.sports.isEmpty)
@@ -545,11 +545,10 @@ struct OnboardScreen: View {
     }
 
     private var stepOne: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            Text("Here's the deal, @\(Store.shared.account?.username ?? "")").font(.display(36, 900))
-            HowCard(n: 1, title: "You get 60 pledge minutes a day", text: "They reset every night at midnight.")
-            HowCard(n: 2, title: "You commit tomorrow's phone time", text: "Meet a challenge and tomorrow's limit goes up. Miss it and it goes down.")
-            HowCard(n: 3, title: "No money, ever", text: "Not now, not later. Commit screen time and build a clean streak.")
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Welcome, @\(Store.shared.account?.username ?? "")").font(.display(20, 800)).foregroundStyle(Theme.accent)
+            WalkthroughPager(finishLabel: "Next", skippable: true) { model.step += 1 }
+                .frame(height: 560)
         }
     }
 

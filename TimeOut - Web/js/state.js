@@ -148,6 +148,9 @@
    *  acc.server always holds the latest values from the database (last login, login count...). */
   function adoptServerUser(user, remoteState = null) {
     const id = `srv_${user.id}`;
+    let shared = null;
+    let serverStreak = null;
+    let balanceSource = 'server';
     const all = accounts();
     const acc = all[id] || { id, salt: null, pw: null };
     Object.assign(acc, {
@@ -156,6 +159,9 @@
     });
     all[id] = acc; saveAccounts(all);
     if (remoteState) {
+      shared = remoteState.shared || {};
+      serverStreak = remoteState.wallet ? remoteState.wallet.streakDays : null;
+      delete remoteState.shared;
       const cached = TO.store.get(dataKey(id), null);
       if (cached) {
         const remoteChallenges = remoteState.challenges || [];
@@ -174,21 +180,22 @@
           }
           mergedChallenges.set(key, combined);
         }
-        const hasUnsyncedChallenges = (cached.challenges || []).some((challenge) => challenge.kind === 'sports' && !challenge.supabaseId);
+        const hasUnsyncedChallenges = (cached.challenges || []).some((challenge) => syncsToServer(challenge) && !challenge.supabaseId);
         const remoteHasPreferences = remoteState.appPreferencesReady && Object.keys(remoteState.settings || {}).length > 1;
         const preferences = remoteHasPreferences
           ? Object.assign({}, cached.settings || {}, remoteState.settings || {})
           : Object.assign({}, remoteState.settings || {}, cached.settings || {});
-        const savedSports = [
-          ...(Array.isArray(cached.settings?.sports) ? cached.settings.sports : []),
-          ...(Array.isArray(remoteState.settings?.sports) ? remoteState.settings.sports : []),
-        ].filter((league) => S.REAL_LEAGUES.includes(league));
-        if (savedSports.length) preferences.sports = [...new Set(savedSports)];
+        // One side's list wins outright. Combining them would bring back a sport the user just unfollowed.
+        const savedSports = (remoteHasPreferences ? remoteState.settings?.sports : cached.settings?.sports) || [];
+        const followed = savedSports.filter((league) => S.REAL_LEAGUES.includes(league));
+        if (followed.length) preferences.sports = [...new Set(followed)];
         remoteState = Object.assign({}, cached, remoteState, { challenges: [...mergedChallenges.values()], settings: preferences });
         // The new day starts on the device. The server's wallet only moves to a new day when a challenge is
         // placed, so a lagging server day must never pull this wallet back: that would close the same day
         // again and bump the streak on every sync.
-        if (hasUnsyncedChallenges || !remoteState.wallet || remoteState.wallet.dayKey !== TO.dayKey()) remoteState.wallet = cached.wallet;
+        if (hasUnsyncedChallenges || !remoteState.wallet) balanceSource = 'keep';
+        else if (remoteState.wallet.dayKey !== TO.dayKey()) balanceSource = 'day';
+        if (balanceSource !== 'server') remoteState.wallet = cached.wallet;
         else if (cached.wallet) {
           // Supabase currently owns the balance fields, while clean-day history is local-only.
           // Keep those local streak and usage ledgers when refreshing the server wallet.
@@ -228,7 +235,77 @@
     }
     else if (!TO.store.get(dataKey(id), null)) TO.store.set(dataKey(id), user.isDemo ? seedDemoData(TO.now()) : freshData(TO.now()));
     startSession(id);
+    if (shared) { applySharedLedger(shared, balanceSource, serverStreak); save(); }
     return acc;
+  }
+
+  // ---------- Shared between a user's devices ----------
+  /** Whether a challenge is saved in the server's challenge tables. To-dos, races and predictions stay on the device that placed them. */
+  function syncsToServer(challenge) {
+    return challenge?.kind === 'sports' && Number(challenge.pledgeMinutes) > 0 && challenge.picks?.length > 0
+      && challenge.picks.every((pick) => (pick.kind === 'game' || pick.kind === 'sports') && pick.gameId);
+  }
+
+  function deviceId() {
+    let id = TO.store.get('timeout.deviceId', null);
+    if (!id) { id = TO.uid('device'); TO.store.set('timeout.deviceId', id); }
+    return id;
+  }
+
+  /** Minutes the device-only challenges on a day have taken. The server's balance can't include these. */
+  function localPledged(d, day) {
+    return (d.challenges || []).reduce((sum, c) => {
+      if (syncsToServer(c) || c.dayKey !== day) return sum;
+      const refund = c.status === 'void' || c.status === 'tie' ? Number(c.reward || 0) : 0;
+      return sum + Number(c.pledgeMinutes || 0) - refund;
+    }, 0);
+  }
+
+  /** What goes in the shared ledger. The phone owns the screen-time records, so the web only passes back what it received; each device owns its own totals. */
+  function sharedLedger(d = TO.data) {
+    const w = d.wallet;
+    const cutoff = TO.addDays(w.dayKey, -7);
+    const recent = (map) => Object.fromEntries(Object.entries(map || {}).filter(([day]) => day >= cutoff));
+    const pledgedByDay = {}, netByDay = {};
+    for (const c of d.challenges || []) {
+      if (syncsToServer(c)) continue;
+      if (c.dayKey >= cutoff) pledgedByDay[c.dayKey] = localPledged(d, c.dayKey);
+      if (c.status !== 'open') {
+        const day = creditDay(c);
+        if (day >= cutoff) netByDay[day] = (netByDay[day] || 0) + Number(c.reward || 0) - Number(c.pledgeMinutes || 0);
+      }
+    }
+    const devices = {};
+    for (const [id, device] of Object.entries(d.sharedDevices || {})) {
+      const entry = { pledgedByDay: recent(device.pledgedByDay), netByDay: recent(device.netByDay) };
+      if (Object.keys(entry.pledgedByDay).length || Object.keys(entry.netByDay).length) devices[id] = entry;
+    }
+    devices[deviceId()] = { pledgedByDay, netByDay };
+    return {
+      usageByDay: d.phoneRecords?.usageByDay || {}, overridesByDay: d.phoneRecords?.overridesByDay || {}, penaltyByDay: d.phoneRecords?.penaltyByDay || {}, devices,
+    };
+  }
+
+  /** Shows the phone's screen-time records and streak, and counts the other devices' challenges. Runs after the new day has started here, so days line up. */
+  function applySharedLedger(shared, balanceSource, serverStreak) {
+    const d = TO.data, w = d.wallet;
+    for (const key of ['usageByDay', 'overridesByDay', 'penaltyByDay']) {
+      if (shared[key]) { d.phoneRecords[key] = shared[key]; w[key] = { ...shared[key] }; }
+    }
+    if (serverStreak != null) w.streakDays = serverStreak;
+    if (shared.devices) {
+      d.sharedDevices = { ...shared.devices };
+      delete d.sharedDevices[deviceId()];
+    }
+    let othersPledged = 0;
+    for (const device of Object.values(d.sharedDevices)) {
+      othersPledged += Number(device.pledgedByDay?.[w.dayKey]) || 0;
+      for (const [day, n] of Object.entries(device.netByDay || {})) w.netByDay[day] = (w.netByDay[day] || 0) + (Number(n) || 0);
+    }
+    if (balanceSource === 'keep') return;
+    const base = balanceSource === 'day' ? RULES.daily + (w.bonusDay === w.dayKey ? Number(w.bonusGranted || 0) : 0) : w.balance;
+    w.balance = Math.max(0, base - localPledged(d, w.dayKey) - othersPledged);
+    w.lockedOut = w.balance <= 0;
   }
 
   function startSession(id) {
@@ -338,6 +415,8 @@
       socialProfiles: {}, // friends' shared stats and team results, cached from the server
       teamResults: {},
       socialSynced: false,
+      sharedDevices: {}, // the user's other devices, from the shared ledger
+      phoneRecords: {}, // the phone's screen-time records, exactly as it last reported them
     };
   }
 
@@ -890,10 +969,55 @@
   const RESEND_WAIT = TO.HOUR;
   const resendWait = (req, now = TO.now()) => Math.max(0, req.at + RESEND_WAIT - now);
 
+  // Requests answered a moment ago. A sync that started before the answer reached the server would bring the
+  // request back (or drop the new friend), so for a short while the local answer wins.
+  const RECENT_ANSWER_MS = 30000;
+  const recentAnswers = new Map();
+  const recentAnswer = (username) => {
+    const key = String(username).toLowerCase();
+    const a = recentAnswers.get(key);
+    if (a && Date.now() - a.at > RECENT_ANSWER_MS) { recentAnswers.delete(key); return null; }
+    return a || null;
+  };
+
+  /** Accepting a friend request on a real account: the request leaves Requests and the person shows in Friends at once,
+   *  before the server confirms. Returns a function that puts things back if the server says no. */
+  function acceptServerRequest(username) {
+    const d = TO.data;
+    const key = String(username).toLowerCase();
+    const req = d.requestsIn.find((r) => String(r.from).toLowerCase() === key);
+    const before = { requestsIn: d.requestsIn.slice(), friends: d.friends.slice(), profile: d.socialProfiles?.[key] };
+    d.requestsIn = d.requestsIn.filter((r) => String(r.from).toLowerCase() !== key);
+    if (!d.friends.some((f) => String(f).toLowerCase() === key)) d.friends.push(req ? req.from : username);
+    d.socialProfiles = d.socialProfiles || {};
+    if (!d.socialProfiles[key]) d.socialProfiles[key] = { username: req ? req.from : username, name: req ? req.from : username, photo: null, w: 0, l: 0, net: 0, tier: 'rookie', streak: 0, share: { record: false, minutes: false, challenges: false }, picks: [] };
+    recentAnswers.set(key, { at: Date.now(), accepted: true });
+    saveQuiet();
+    return () => {
+      recentAnswers.delete(key);
+      d.requestsIn = before.requestsIn; d.friends = before.friends;
+      if (before.profile) d.socialProfiles[key] = before.profile; else delete d.socialProfiles[key];
+      saveQuiet();
+    };
+  }
+
+  /** Declining: the request leaves the list at once. */
+  function declineServerRequest(username) {
+    const d = TO.data;
+    const key = String(username).toLowerCase();
+    const before = d.requestsIn.slice();
+    d.requestsIn = d.requestsIn.filter((r) => String(r.from).toLowerCase() !== key);
+    recentAnswers.set(key, { at: Date.now(), accepted: false });
+    saveQuiet();
+    return () => { recentAnswers.delete(key); d.requestsIn = before; saveQuiet(); };
+  }
+
   /** Replaces this browser's friends and requests with what the server says, and reports what's new since last time. */
   function applySocial(state) {
     const d = TO.data;
     if (!d || !usesServerSocial() || !state) return { newRequests: [], newFriends: [] };
+    state = { ...state, requestsIn: state.requestsIn.filter((r) => !recentAnswer(r.username)) };
+    const heldFriends = [...recentAnswers.entries()].filter(([k, a]) => a.accepted && recentAnswer(k) && !state.friends.some((f) => f.username.toLowerCase() === k)).map(([k]) => d.friends.find((f) => String(f).toLowerCase() === k)).filter(Boolean);
     const friendsBefore = new Set(d.friends.map((u) => String(u).toLowerCase()));
     const requestsBefore = new Set(d.requestsIn.map((r) => String(r.from).toLowerCase()));
     // The first sync isn't news: it just brings the account up to date.
@@ -901,9 +1025,12 @@
       newRequests: state.requestsIn.map((r) => r.username).filter((u) => !requestsBefore.has(u.toLowerCase())),
       newFriends: state.friends.map((f) => f.username).filter((u) => !friendsBefore.has(u.toLowerCase())),
     } : { newRequests: [], newFriends: [] };
-    d.friends = state.friends.map((f) => f.username);
+    const held = {};
+    for (const u of heldFriends) held[u.toLowerCase()] = d.socialProfiles?.[u.toLowerCase()];
+    d.friends = [...state.friends.map((f) => f.username), ...heldFriends];
     d.socialProfiles = {};
     for (const f of state.friends) d.socialProfiles[f.username.toLowerCase()] = f;
+    for (const [k, prof] of Object.entries(held)) if (prof) d.socialProfiles[k] = prof;
     for (const r of [...state.requestsIn, ...state.requestsOut]) {
       const key = r.username.toLowerCase();
       if (!d.socialProfiles[key]) d.socialProfiles[key] = { username: r.username, name: r.name, photo: r.photo, w: 0, l: 0, net: 0, tier: 'rookie', streak: 0, share: { record: false, minutes: false, challenges: false }, picks: [] };
@@ -1360,12 +1487,13 @@
     RULES, TIERS, LOCKABLE, PEOPLE, DEMO, TODO_VALUE,
     tierById, tierForPoints, tierPerks, streakMultiplier, nextStreakMilestone, fmtMult,
     accounts, findAccount, createAccount, login, logout, loadSession, startSession, updateAccount, deleteAccount, adoptServerUser,
+    syncsToServer, sharedLedger,
     validateUsername, validateEmail, validatePassword,
     save, wallet, rollover, grantTierBonus, addUsage, checkPhoneTime, useEmergencyUnlock, setSetting, limitFor, baseLimitFor, lockPoints, tier,
     submitPledge, placeTodoCombo, completeTodo, resolve, outcome, combine, pickFromSelection,
     myStats, statsFor, person, sharedPicks, searchPeople, relation,
     sendFriendRequest, addFriend, acceptFriendRequest, declineFriendRequest, cancelFriendRequest, resendFriendRequest, resendWait, removeFriend,
-    socialTick, usesServerSocial, applySocial,
+    socialTick, usesServerSocial, applySocial, acceptServerRequest, declineServerRequest,
     teamStatus, teamStandings, createTeam, leaveTeam, inviteToTeam, joinTeam, refreshTeams, ensureTeamKey, sameUser, leaderboard,
     ensureDemoAccount, loginDemo, resetMyData, seedDemoData,
   };

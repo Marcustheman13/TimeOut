@@ -257,6 +257,22 @@ window.TO = window.TO || {};
     online: () => navigator.onLine !== false && !TO.net.simulatedOffline,
   };
 
+  /** The app walkthrough: shown once after sign-up, and any time from the menu. Keep in step with Walkthrough.swift on iPhone. */
+  TO.WALKTHROUGH = [
+    { icon: 'hourglass', title: 'Pledge minutes, not money', text: 'You get 60 pledge minutes every day. They reset at midnight.',
+      points: ['Pick a game and call the outcome.', 'Pledge some of your minutes on it.', 'No money changes hands, ever.'] },
+    { icon: 'target', title: 'Win to earn, miss to lose', text: 'Results are settled automatically when the game ends.',
+      points: ['Win: your pledge comes back with bonus minutes added to tomorrow\'s phone time.', 'Miss: those minutes come off tomorrow\'s phone time.', 'Postponed game: your minutes are returned.'] },
+    { icon: 'lock', title: 'Set up Screen Time', text: 'The iPhone app turns your daily allowance into a real limit.',
+      points: ['Open Menu \u2192 Screen Time and tap Allow Screen Time (Face ID or passcode).', 'Choose the apps to block. Apple keeps the list private.', 'When today\'s minutes run out, those apps lock until midnight.', 'The website shows the same minutes and stays in sync with your phone.'] },
+    { icon: 'users', title: 'Play with friends', text: 'Challenges are better with people watching.',
+      points: ['Find friends by username or send them your invite link.', 'Accept requests under Social \u2192 Requests; they move straight to Friends.', 'Compare records on the leaderboard (you choose what you share).', 'Start a team and race over a week.'] },
+    { icon: 'flame', title: 'Tiers and streaks', text: 'The more apps you lock, the higher your tier.',
+      points: ['Higher tiers unlock bonus minutes and allowance boosts.', 'Keep a winning streak to climb faster.', 'Change your locked apps any time in Settings.'] },
+    { icon: 'bell', title: 'You\'re set', text: 'Same account on the website and the iPhone app.',
+      points: ['Pledges, friends and minutes stay in sync everywhere.', 'Turn notifications on to hear about results and friend requests.', 'Reopen this walkthrough any time from the menu.'] },
+  ];
+
   TO.icon = (name, size = 20, extra = '') =>
     `<svg class="ic ${extra}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[name] || ''}</svg>`;
 
