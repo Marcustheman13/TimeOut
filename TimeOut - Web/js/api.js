@@ -317,6 +317,18 @@
       });
     }, Math.max(0, 1500 - (Date.now() - lastSaveAt)));
   };
+  /** Per-day highest of the phone's records (they only ever grow within a day), plus every device's challenge totals. */
+  function mergeLedgers(mine, server) {
+    if (!server || typeof server !== 'object') return mine;
+    const out = { ...mine };
+    for (const key of ['usageByDay', 'overridesByDay', 'penaltyByDay']) {
+      const merged = { ...(server[key] || {}) };
+      for (const [day, n] of Object.entries(mine[key] || {})) merged[day] = Math.max(Number(n) || 0, Number(merged[day]) || 0);
+      out[key] = merged;
+    }
+    out.devices = { ...(server.devices || {}), ...(mine.devices || {}) };
+    return out;
+  }
   api.flushState = async () => {
     clearTimeout(saveTimer); saveTimer = null;
     if (!pendingState || !token()) return;
@@ -334,7 +346,12 @@
       }
       // Its own column and its own write, so these frequent updates can't overwrite a settings change from another device.
       if (supportsSharedLedger) {
-        const ledger = TO.state.sharedLedger(data);
+        let ledger = TO.state.sharedLedger(data);
+        // Another device may have recorded newer phone usage since this one last read it: never write an older number over it.
+        try {
+          const rows = await rest(`user_settings?select=shared_ledger&user_id=eq.${encodeURIComponent(id)}&limit=1`);
+          ledger = mergeLedgers(ledger, rows?.[0]?.shared_ledger);
+        } catch (e) { /* offline or no column yet: write ours as it is */ }
         const ledgerSnapshot = canonical(ledger);
         if (ledgerSnapshot !== lastLedgerSnapshot) {
           try {

@@ -6,7 +6,7 @@
   const ui = TO.ui;
   const St = TO.state;
 
-  const av = { screen: 'welcome', errors: {}, formError: '', values: {}, photo: null, step: 1, sports: null, locks: [] };
+  const av = { screen: 'welcome', errors: {}, formError: '', values: {}, photo: null, step: 1, wt: 0, sports: null, locks: [] };
 
   function ticker() {
     const games = S.board(TO.now()).filter((g) => g.state === 'live' && !g.simulated).slice(0, 8);
@@ -88,11 +88,9 @@
     const steps = `<div class="steps">${[1, 2, 3].map((i) => `<i class="${i <= step ? 'on' : ''}"></i>`).join('')}</div>`;
     let body, next;
     if (step === 1) {
-      body = `<h1>Here's the deal, @${esc(TO.account.username)}</h1>
-        <div class="how-card"><span class="n">1</span><div><h3>You get 60 pledge minutes a day</h3><p>They reset every night at midnight.</p></div></div>
-        <div class="how-card"><span class="n">2</span><div><h3>Challenges guide tomorrow's phone time</h3><p>Successful challenges add minutes to tomorrow's allowance.</p></div></div>
-        <div class="how-card"><span class="n">3</span><div><h3>No money, ever</h3><p>Commit screen-time minutes to an outcome and track your streak.</p></div></div>`;
-      next = `<button class="btn primary full" data-act="ob-next">Next</button>`;
+      const p = TO.walkthroughPage(av.wt, 'onboard');
+      body = `<h1>${av.wt === 0 ? `Here's the deal, @${esc(TO.account.username)}` : 'How TimeOut works'}</h1>${p.body}`;
+      next = `${p.nav}<button class="btn quiet sm" data-act="ob-next">Skip walkthrough</button>`;
     } else if (step === 2) {
       const sel = av.sports;
       body = `<h1>Pick your sports</h1><p class="sub">These show up on your Home feed. You can change them in Settings.</p>
@@ -203,7 +201,7 @@
   }
 
   function startOnboarding() {
-    av.screen = 'onboard'; av.step = 1; av.sports = TO.data.settings.sports.slice(); av.locks = [];
+    av.screen = 'onboard'; av.step = 1; av.wt = 0; av.sports = TO.data.settings.sports.slice(); av.locks = [];
     render();
   }
 
@@ -339,6 +337,11 @@
     el.innerHTML = icon(input.type === 'password' ? 'eye' : 'eyeOff', 18);
   };
   A['ob-next'] = () => { av.step++; render(); };
+  TO.actions['ob-wt'] = (d) => {
+    const n = TO.WALKTHROUGH.length;
+    if (av.wt + d >= n) { av.step++; av.wt = 0; } else av.wt = Math.max(0, av.wt + d);
+    render();
+  };
   A['ob-back'] = () => { av.step--; render(); };
   A['ob-sport'] = (el) => { const id = el.dataset.id; av.sports = av.sports.includes(id) ? av.sports.filter((x) => x !== id) : [...av.sports, id]; render(); };
   A['ob-lock'] = (el) => { const id = el.dataset.id; av.locks = av.locks.includes(id) ? av.locks.filter((x) => x !== id) : [...av.locks, id]; render(); };

@@ -370,6 +370,17 @@ struct SharedLedger: Codable {
 
     init() {}
 
+    /// Per-day highest of the phone's records (they only ever grow within a day), plus every device's challenge totals.
+    func merged(with theirs: SharedLedger) -> SharedLedger {
+        func highest(_ a: [String: Int], _ b: [String: Int]) -> [String: Int] { a.merging(b) { max($0, $1) } }
+        var out = self
+        out.usageByDay = highest(usageByDay, theirs.usageByDay)
+        out.overridesByDay = highest(overridesByDay, theirs.overridesByDay)
+        out.penaltyByDay = highest(penaltyByDay, theirs.penaltyByDay)
+        out.devices = theirs.devices.merging(devices) { _, mine in mine }
+        return out
+    }
+
     enum CodingKeys: String, CodingKey { case usageByDay, overridesByDay, penaltyByDay, devices }
 
     init(from decoder: Decoder) throws {

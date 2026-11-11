@@ -450,7 +450,14 @@ final class API {
             }
             // Its own column and its own write, so these frequent updates can't overwrite a settings change from another device.
             if supportsSharedLedger {
-                let ledger = Store.shared.sharedLedger(data)
+                var ledger = Store.shared.sharedLedger(data)
+                // Another device may have recorded newer records since this one last read them: never write an older number over them.
+                if let rows = try? await rest("user_settings?select=shared_ledger&user_id=eq.\(Self.enc(id))&limit=1"),
+                   rows[0]["shared_ledger"].isObject,
+                   let raw = try? JSONSerialization.data(withJSONObject: Self.any(rows[0]["shared_ledger"])),
+                   let theirs = try? JSONDecoder().decode(SharedLedger.self, from: raw) {
+                    ledger = ledger.merged(with: theirs)
+                }
                 let ledgerSnapshot = Self.ledgerSnapshot(ledger)
                 if ledgerSnapshot != lastLedgerSnapshot,
                    let raw = try? JSONEncoder().encode(ledger), let body = try? JSONSerialization.jsonObject(with: raw) {

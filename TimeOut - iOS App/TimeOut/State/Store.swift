@@ -1397,10 +1397,71 @@ final class Store {
 
     struct SocialChanges { var newRequests: [String] = []; var newFriends: [String] = [] }
 
+    /// Requests answered a moment ago. A sync that started before the answer reached the server would bring the request
+    /// back (or drop the new friend), so for a short while the local answer wins.
+    private struct RecentAnswer { var at: Date; var accepted: Bool }
+    private var recentAnswers: [String: RecentAnswer] = [:]
+    private func recentAnswer(_ username: String) -> RecentAnswer? {
+        let key = username.lowercased()
+        guard let a = recentAnswers[key] else { return nil }
+        if Date().timeIntervalSince(a.at) > 30 { recentAnswers[key] = nil; return nil }
+        return a
+    }
+
+    /// Accepting on a real account: the request leaves Requests and the person shows in Friends at once, before the
+    /// server confirms. Returns a closure that puts everything back if the server says no.
+    func acceptServerRequest(_ username: String) -> () -> Void {
+        guard var d = data else { return {} }
+        let key = username.lowercased()
+        let before = d
+        d.requestsIn.removeAll { ($0.from ?? "").lowercased() == key }
+        if !d.friends.contains(where: { $0.lowercased() == key }) { d.friends.append(username) }
+        if d.socialProfiles[key] == nil {
+            d.socialProfiles[key] = SocialProfile(username: username, name: username, photo: nil,
+                                                  share: PrivacySettings(record: false, minutes: false, challenges: false))
+        }
+        recentAnswers[key] = RecentAnswer(at: Date(), accepted: true)
+        data = d
+        saveQuiet()
+        return { [weak self] in
+            guard let self, var cur = self.data else { return }
+            self.recentAnswers[key] = nil
+            cur.requestsIn = before.requestsIn
+            cur.friends = before.friends
+            cur.socialProfiles = before.socialProfiles
+            self.data = cur
+            self.saveQuiet()
+        }
+    }
+
+    /// Declining: the request leaves the list at once.
+    func declineServerRequest(_ username: String) -> () -> Void {
+        guard var d = data else { return {} }
+        let key = username.lowercased()
+        let before = d.requestsIn
+        d.requestsIn.removeAll { ($0.from ?? "").lowercased() == key }
+        recentAnswers[key] = RecentAnswer(at: Date(), accepted: false)
+        data = d
+        saveQuiet()
+        return { [weak self] in
+            guard let self, var cur = self.data else { return }
+            self.recentAnswers[key] = nil
+            cur.requestsIn = before
+            self.data = cur
+            self.saveQuiet()
+        }
+    }
+
     /// Replaces this device's friends and requests with what the server says, and reports what's new since last time.
     @discardableResult
-    func applySocial(_ state: API.SocialState) -> SocialChanges {
+    func applySocial(_ incoming: API.SocialState) -> SocialChanges {
         guard var d = data, usesServerSocial else { return SocialChanges() }
+        var state = incoming
+        state.requestsIn = state.requestsIn.filter { recentAnswer($0.username) == nil }
+        let heldFriends: [String] = recentAnswers.keys.filter { k in
+            (recentAnswer(k)?.accepted ?? false) && !state.friends.contains { $0.username.lowercased() == k }
+        }.compactMap { k in d.friends.first { $0.lowercased() == k } }
+        let heldProfiles = Dictionary(uniqueKeysWithValues: heldFriends.compactMap { f in d.socialProfiles[f.lowercased()].map { (f.lowercased(), $0) } })
         var changes = SocialChanges()
         let friendsBefore = Set(d.friends.map { $0.lowercased() })
         let requestsBefore = Set(d.requestsIn.compactMap { $0.from?.lowercased() })
@@ -1409,8 +1470,9 @@ final class Store {
             changes.newRequests = state.requestsIn.map(\.username).filter { !requestsBefore.contains($0.lowercased()) }
             changes.newFriends = state.friends.map(\.username).filter { !friendsBefore.contains($0.lowercased()) }
         }
-        d.friends = state.friends.map(\.username)
+        d.friends = state.friends.map(\.username) + heldFriends
         d.socialProfiles = Dictionary(state.friends.map { ($0.username.lowercased(), $0) }, uniquingKeysWith: { a, _ in a })
+        for (k, p) in heldProfiles { d.socialProfiles[k] = p }
         for r in state.requestsIn + state.requestsOut where d.socialProfiles[r.username.lowercased()] == nil {
             d.socialProfiles[r.username.lowercased()] = SocialProfile(username: r.username, name: r.name, photo: r.photo,
                                                                      share: PrivacySettings(record: false, minutes: false, challenges: false))

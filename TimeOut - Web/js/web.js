@@ -64,7 +64,7 @@
         ${tabs}
         <div class="side-label eyebrow">Screen time & settings</div>
         ${MENU.map(([k, t, ic]) => item(k, t, ic)).join('')}
-        <button class="sn" data-act="how" title="How TimeOut works">${icon('help', 19)}<span class="sn-l">How TimeOut works</span></button>
+        <button class="sn" data-act="how" title="App walkthrough">${icon('help', 19)}<span class="sn-l">App walkthrough</span></button>
         <a class="sn" href="support.html" target="_blank" rel="noopener" title="Help & support">${icon('info', 19)}<span class="sn-l">Help & support</span></a>
         <a class="sn" href="privacy.html" target="_blank" rel="noopener" title="Privacy policy">${icon('shield', 19)}<span class="sn-l">Privacy policy</span></a>
       </nav>
@@ -178,6 +178,26 @@
     const last = ui.layer().lastElementChild;
     if (last && last.dataset.sheet === 'commitment') e.stopImmediatePropagation();
   }, true);
+
+  // ---------- Swipe the menu open from the left edge, and swipe it closed (touch screens) ----------
+  const menuOpen = () => document.body.classList.contains('side-open') || !!ui.layer().querySelector('[data-drawer]');
+  const overlaysOpen = () => ui.layer().querySelector('[data-sheet], [data-page], [data-dialog]');
+  let swipe = null;
+  window.addEventListener('touchstart', (e) => {
+    swipe = null;
+    if (e.touches.length !== 1 || !TO.data || (isWeb() && wide.matches)) return;
+    const t = e.touches[0];
+    if (menuOpen()) swipe = { x: t.clientX, y: t.clientY, mode: 'close' };
+    else if (t.clientX <= 28 && !overlaysOpen() && !document.querySelector('.auth')) swipe = { x: t.clientX, y: t.clientY, mode: 'open' };
+  }, { passive: true });
+  window.addEventListener('touchend', (e) => {
+    const s = swipe; swipe = null;
+    if (!s || !e.changedTouches.length) return;
+    const dx = e.changedTouches[0].clientX - s.x, dy = e.changedTouches[0].clientY - s.y;
+    if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+    if (s.mode === 'open' && dx > 0) { if (isWeb()) setSide(true); else A.menu(); }
+    else if (s.mode === 'close' && dx < 0) { if (document.body.classList.contains('side-open')) setSide(false); else TO.views.settings.closeDrawer(); }
+  }, { passive: true });
 
   wide.addEventListener('change', () => app.renderChrome());
 })(window.TO);

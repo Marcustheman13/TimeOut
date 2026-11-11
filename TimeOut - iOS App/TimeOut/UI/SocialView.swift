@@ -88,6 +88,10 @@ final class SocialModel {
     func addFriend(_ u: String) {
         let store = Store.shared
         if store.usesServerSocial {
+            if let incoming = store.data?.requestsIn.first(where: { ($0.from ?? "").lowercased() == u.lowercased() }) {
+                answerRequest(incoming, accept: true)
+                return
+            }
             Task {
                 do {
                     let result = try await API.shared.sendFriendRequest(u)
@@ -110,11 +114,31 @@ final class SocialModel {
 
     func answerRequest(_ r: FriendRequest, accept: Bool) {
         let from = r.from ?? ""
-        perform({ try await API.shared.answerFriendRequest(from, accept: accept) }, offline: {
-            if accept { Store.shared.acceptFriendRequest(r.id) } else { Store.shared.declineFriendRequest(r.id) }
-        }, done: {
-            if accept { UIState.shared.toast(.win, "You and @\(from) are now friends") }
-        })
+        let store = Store.shared
+        guard store.usesServerSocial else {
+            if accept {
+                store.acceptFriendRequest(r.id)
+                tab = "board"
+                UIState.shared.toast(.win, "You and @\(from) are now friends", "They're in your Friends list.")
+            } else { store.declineFriendRequest(r.id) }
+            return
+        }
+        // The request goes away and the person appears under Friends right now; the server confirms in the background.
+        let undo = accept ? store.acceptServerRequest(from) : store.declineServerRequest(from)
+        if accept {
+            tab = "board"
+            UIState.shared.toast(.win, "You and @\(from) are now friends", "They're in your Friends list.")
+        }
+        Task {
+            do {
+                try await API.shared.answerFriendRequest(from, accept: accept)
+                await AppModel.shared.syncSocial(quiet: true)
+            } catch {
+                undo()
+                if accept { tab = "requests" }
+                UIState.shared.toast(.loss, accept ? "Couldn't accept @\(from)" : "Couldn't decline that request", AppError.friendly(error))
+            }
+        }
     }
 
     func removeFriend(_ u: String, done: @escaping () -> Void) {

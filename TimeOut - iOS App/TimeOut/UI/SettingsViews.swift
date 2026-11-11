@@ -68,7 +68,7 @@ struct DrawerView: View {
                             item("sports", nil)
                             item("notifications", nil)
                             item("account", nil)
-                            row(.help, "How TimeOut works", nil) { HowItWorks.open() }
+                            row(.help, "App walkthrough", nil) { HowItWorks.open() }
                             row(.info, "Help & support", nil) { openURL(API.supportURL) }
                             row(.shield, "Privacy policy", nil) { openURL(API.privacyURL) }
                             row(.logout, "Log out", nil) { Auth.logout() }
@@ -653,13 +653,9 @@ struct AccountSection: View {
 
 struct HowItWorksSheet: View {
     var body: some View {
-        SheetFrame("How TimeOut works", close: { UIState.shared.closeSheet(.how) }) {
-            HowCard(n: 1, title: "Commit screen time minutes", text: "You get \(Rules.daily) available minutes every day. They reset at midnight.")
-            HowCard(n: 2, title: "Meet the challenge to earn time", text: "Successful challenges add earned minutes to tomorrow's phone-time allowance.")
-            HowCard(n: 3, title: "Results update automatically", text: "When a game ends, the challenge is resolved. Postponed games return your committed minutes.")
-            HowCard(n: 4, title: "Out of minutes? Wait for midnight", text: "At 0 minutes, new pledges pause until the reset. Emergency unlocks adjust tomorrow's allowance.")
-        } foot: {
-            Button("Got it") { UIState.shared.closeSheet(.how) }.buttonStyle(.btn(.primary, full: true))
+        SheetFrame("App walkthrough", tall: true, close: { UIState.shared.closeSheet(.how) }) {
+            WalkthroughPager { UIState.shared.closeSheet(.how) }
+                .frame(height: 520)
         }
     }
 }

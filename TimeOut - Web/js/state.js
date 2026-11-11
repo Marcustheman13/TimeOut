@@ -969,10 +969,55 @@
   const RESEND_WAIT = TO.HOUR;
   const resendWait = (req, now = TO.now()) => Math.max(0, req.at + RESEND_WAIT - now);
 
+  // Requests answered a moment ago. A sync that started before the answer reached the server would bring the
+  // request back (or drop the new friend), so for a short while the local answer wins.
+  const RECENT_ANSWER_MS = 30000;
+  const recentAnswers = new Map();
+  const recentAnswer = (username) => {
+    const key = String(username).toLowerCase();
+    const a = recentAnswers.get(key);
+    if (a && Date.now() - a.at > RECENT_ANSWER_MS) { recentAnswers.delete(key); return null; }
+    return a || null;
+  };
+
+  /** Accepting a friend request on a real account: the request leaves Requests and the person shows in Friends at once,
+   *  before the server confirms. Returns a function that puts things back if the server says no. */
+  function acceptServerRequest(username) {
+    const d = TO.data;
+    const key = String(username).toLowerCase();
+    const req = d.requestsIn.find((r) => String(r.from).toLowerCase() === key);
+    const before = { requestsIn: d.requestsIn.slice(), friends: d.friends.slice(), profile: d.socialProfiles?.[key] };
+    d.requestsIn = d.requestsIn.filter((r) => String(r.from).toLowerCase() !== key);
+    if (!d.friends.some((f) => String(f).toLowerCase() === key)) d.friends.push(req ? req.from : username);
+    d.socialProfiles = d.socialProfiles || {};
+    if (!d.socialProfiles[key]) d.socialProfiles[key] = { username: req ? req.from : username, name: req ? req.from : username, photo: null, w: 0, l: 0, net: 0, tier: 'rookie', streak: 0, share: { record: false, minutes: false, challenges: false }, picks: [] };
+    recentAnswers.set(key, { at: Date.now(), accepted: true });
+    saveQuiet();
+    return () => {
+      recentAnswers.delete(key);
+      d.requestsIn = before.requestsIn; d.friends = before.friends;
+      if (before.profile) d.socialProfiles[key] = before.profile; else delete d.socialProfiles[key];
+      saveQuiet();
+    };
+  }
+
+  /** Declining: the request leaves the list at once. */
+  function declineServerRequest(username) {
+    const d = TO.data;
+    const key = String(username).toLowerCase();
+    const before = d.requestsIn.slice();
+    d.requestsIn = d.requestsIn.filter((r) => String(r.from).toLowerCase() !== key);
+    recentAnswers.set(key, { at: Date.now(), accepted: false });
+    saveQuiet();
+    return () => { recentAnswers.delete(key); d.requestsIn = before; saveQuiet(); };
+  }
+
   /** Replaces this browser's friends and requests with what the server says, and reports what's new since last time. */
   function applySocial(state) {
     const d = TO.data;
     if (!d || !usesServerSocial() || !state) return { newRequests: [], newFriends: [] };
+    state = { ...state, requestsIn: state.requestsIn.filter((r) => !recentAnswer(r.username)) };
+    const heldFriends = [...recentAnswers.entries()].filter(([k, a]) => a.accepted && recentAnswer(k) && !state.friends.some((f) => f.username.toLowerCase() === k)).map(([k]) => d.friends.find((f) => String(f).toLowerCase() === k)).filter(Boolean);
     const friendsBefore = new Set(d.friends.map((u) => String(u).toLowerCase()));
     const requestsBefore = new Set(d.requestsIn.map((r) => String(r.from).toLowerCase()));
     // The first sync isn't news: it just brings the account up to date.
@@ -980,9 +1025,12 @@
       newRequests: state.requestsIn.map((r) => r.username).filter((u) => !requestsBefore.has(u.toLowerCase())),
       newFriends: state.friends.map((f) => f.username).filter((u) => !friendsBefore.has(u.toLowerCase())),
     } : { newRequests: [], newFriends: [] };
-    d.friends = state.friends.map((f) => f.username);
+    const held = {};
+    for (const u of heldFriends) held[u.toLowerCase()] = d.socialProfiles?.[u.toLowerCase()];
+    d.friends = [...state.friends.map((f) => f.username), ...heldFriends];
     d.socialProfiles = {};
     for (const f of state.friends) d.socialProfiles[f.username.toLowerCase()] = f;
+    for (const [k, prof] of Object.entries(held)) if (prof) d.socialProfiles[k] = prof;
     for (const r of [...state.requestsIn, ...state.requestsOut]) {
       const key = r.username.toLowerCase();
       if (!d.socialProfiles[key]) d.socialProfiles[key] = { username: r.username, name: r.name, photo: r.photo, w: 0, l: 0, net: 0, tier: 'rookie', streak: 0, share: { record: false, minutes: false, challenges: false }, picks: [] };
@@ -1445,7 +1493,7 @@
     submitPledge, placeTodoCombo, completeTodo, resolve, outcome, combine, pickFromSelection,
     myStats, statsFor, person, sharedPicks, searchPeople, relation,
     sendFriendRequest, addFriend, acceptFriendRequest, declineFriendRequest, cancelFriendRequest, resendFriendRequest, resendWait, removeFriend,
-    socialTick, usesServerSocial, applySocial,
+    socialTick, usesServerSocial, applySocial, acceptServerRequest, declineServerRequest,
     teamStatus, teamStandings, createTeam, leaveTeam, inviteToTeam, joinTeam, refreshTeams, ensureTeamKey, sameUser, leaderboard,
     ensureDemoAccount, loginDemo, resetMyData, seedDemoData,
   };
