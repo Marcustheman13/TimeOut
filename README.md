@@ -1,6 +1,6 @@
 # TimeOut
 
-**[Info Slide](docs/presentation/index.html)**
+**[Info Slide](https://marcustheman13.github.io/TimeOut/info.html)**
 
 **The sports challenge app where you pledge screen time instead of money.**
 Group 9, Section 1: Owen Smith, Easton Putnam, Will Fairholm, Marcus Williams.
