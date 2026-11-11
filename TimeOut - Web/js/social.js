@@ -275,7 +275,7 @@
   function render() {
     const d = TO.data;
     const reqCount = d.requestsIn.length;
-    const tab = (k, label, n) => `<button class="${view.tab === k ? 'on' : ''}" data-act="social-tab" data-t="${k}">${label}${n ? ` <span class="count-pill" style="background:var(--live);color:#fff">${n}</span>` : ''}</button>`;
+    const tab = (k, label, n) => `<button class="${view.tab === k ? 'on' : ''}" data-act="social-tab" data-t="${k}">${label}${n ? ` <span class="count-pill" style="background:var(--live-fill);color:#fff">${n}</span>` : ''}</button>`;
     let body;
     if (view.tab === 'requests') body = requests();
     else if (view.tab === 'teams') body = teams();
