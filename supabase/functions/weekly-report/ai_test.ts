@@ -1,44 +1,38 @@
 import { assert, assertEquals, assertRejects } from "jsr:@std/assert@1";
 import { buildRequest, callModel, SCHEMA, writeDecision } from "./ai.ts";
 import { fallbackDecision } from "./decision.ts";
-import { esc, renderEmail, tilesFor } from "./email.ts";
+import { buildReport, tilesFor } from "./report.ts";
 import { computeStats, type WorkUser } from "./stats.ts";
 
 const user: WorkUser = {
-  userId: "u", email: "a@b.c", name: "Sam Lee", timezone: "America/Denver", weekStart: "2026-11-02", enforce: true, minLimit: 0, streak: 3,
+  userId: "u", timezone: "America/Denver", weekStart: "2026-11-02", enforce: true, minLimit: 0, streak: 3,
   usageByDay: { "2026-11-02": 30, "2026-11-03": 80 },
   overridesByDay: {}, penaltyByDay: {},
   challenges: [{ day: "2026-11-03", status: "won", pledge: 10, reward: 25, insured: false, leagues: ["nba"] }],
 };
 const stats = computeStats(user);
 
-Deno.test("escaping covers the characters that break HTML", () => {
-  assertEquals(esc(`<script>"x" & 'y'</script>`), "&lt;script&gt;&quot;x&quot; &amp; &#39;y&#39;&lt;/script&gt;");
-});
-
-Deno.test("the email greets by first name, carries the headline, and links unsubscribe", () => {
+Deno.test("the report carries the words, the week range, the tiles and a day-by-day table", () => {
   const decision = fallbackDecision(stats);
-  const email = renderEmail({ name: "Sam Lee", stats, decision, unsubscribeUrl: "https://x.test/f?u=1&t=2" });
-  assertEquals(email.subject, `Your TimeOut week: ${decision.headline}`);
-  assert(email.html.includes("Hi Sam,"));
-  assert(email.html.includes("https://x.test/f?u=1&amp;t=2"));
-  assert(email.text.includes("Unsubscribe: https://x.test/f?u=1&t=2"));
-  assert(email.html.includes("Tuesday")); // the day-by-day table, since there is usage
+  const report = buildReport("2026-11-02", stats, decision);
+  assertEquals([report.version, report.weekStart, report.range], [1, "2026-11-02", "Nov 2 – Nov 8"]);
+  assertEquals([report.headline, report.summary, report.insight], [decision.headline, decision.summary, decision.insight]);
+  assertEquals(report.suggestion, decision.suggestion);
+  assertEquals(report.tiles, tilesFor(stats));
+  assertEquals(report.days?.length, 7);
+  assertEquals(report.days?.[1], { weekday: "Tuesday", used: 80, limit: 60, status: "over" });
+  assertEquals(report.days?.[0].status, "under");
+  assertEquals(report.days?.[6].status, "none"); // the phone recorded nothing that day
 });
 
-Deno.test("words written by the AI can't inject markup", () => {
-  const decision = { ...fallbackDecision(stats), headline: `<img src=x onerror=alert(1)>`, summary: `"><script>1</script>` };
-  const email = renderEmail({ name: `<b>Sam</b>`, stats, decision, unsubscribeUrl: "https://x.test" });
-  assertEquals(email.html.includes("<img"), false);
-  assertEquals(email.html.includes("<script"), false);
-  assertEquals(email.html.includes("<b>Sam"), false);
+Deno.test("the range handles a week that crosses a month and a year", () => {
+  assertEquals(buildReport("2026-12-28", stats, fallbackDecision(stats)).range, "Dec 28 – Jan 3");
+  assertEquals(buildReport("2026-10-26", stats, fallbackDecision(stats)).range, "Oct 26 – Nov 1");
 });
 
 Deno.test("no day-by-day table and no usage tiles when the phone hasn't synced usage", () => {
   const noUsage = computeStats({ ...user, usageByDay: {} });
-  const email = renderEmail({ name: null, stats: noUsage, decision: fallbackDecision(noUsage), unsubscribeUrl: "https://x.test" });
-  assertEquals(email.html.includes("Day by day"), false);
-  assert(email.html.includes("Hi,"));
+  assertEquals(buildReport("2026-11-02", noUsage, fallbackDecision(noUsage)).days, null);
   assertEquals(tilesFor(noUsage).map((t) => t.label), ["Challenge record", "Net minutes", "Clean-day streak"]);
 });
 
@@ -48,7 +42,7 @@ Deno.test("the Gemini request asks for JSON that matches the schema and carries 
   assertEquals(body.generationConfig.responseSchema, SCHEMA);
   const sent = body.contents[0].parts[0].text;
   assert(sent.includes('"daysUnderLimit":1'));
-  for (const secret of ["Sam", "a@b.c", "2026-"]) assertEquals(sent.includes(secret), false, secret);
+  for (const secret of ["2026-"]) assertEquals(sent.includes(secret), false, secret);
 });
 
 const reply = (status: number, body: unknown) => (() => Promise.resolve(new Response(typeof body === "string" ? body : JSON.stringify(body), { status }))) as unknown as typeof fetch;

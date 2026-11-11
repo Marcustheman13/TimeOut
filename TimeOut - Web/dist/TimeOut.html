@@ -869,6 +869,20 @@ a.btn, a.dn, a.sn { text-decoration: none; color: inherit; }
   .race-target { width: 88px; }
 }
 
+/* Weekly report */
+.weekly-report .wr-headline { margin: 0; font-size: 24px; line-height: 1.2; font-family: var(--font-display); letter-spacing: 0.01em; }
+.weekly-report .wr-text { margin: 0; font-size: 15px; line-height: 1.5; color: var(--text-2); }
+.wr-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; }
+.wr-tile { background: var(--raised); border: 1px solid var(--stroke); border-radius: 12px; padding: 12px 8px; text-align: center; }
+.wr-tile b { display: block; font-size: 20px; line-height: 1.2; }
+.wr-tile span { display: block; margin-top: 4px; font-size: 12px; color: var(--faint); }
+.wr-note { border-left: 3px solid var(--accent); background: var(--raised); border-radius: 0 12px 12px 0; padding: 12px 14px; }
+.wr-note.alt { border-left-color: var(--blue); }
+.wr-note p { margin: 4px 0 0; font-size: 15px; line-height: 1.45; }
+.wr-days { display: grid; gap: 0; font-size: 14px; }
+.wr-day { display: grid; grid-template-columns: 1fr auto auto 56px; gap: 12px; padding: 8px 0; border-top: 1px solid var(--stroke); align-items: baseline; }
+.wr-day > :nth-child(n+2) { text-align: right; }
+
 </style>
 <style>
 /* TimeOut in the browser, from phone to desktop widths. Loaded after app.css by index.html.
@@ -2567,7 +2581,7 @@ window.TO = window.TO || {};
         lockedApps: [],
         minLimit: 0,
         lowWarn: 10,
-        notify: { resolved: true, friends: true, lowTime: true },
+        notify: { resolved: true, friends: true, lowTime: true, weekly: true },
         privacy: { record: true, minutes: true, challenges: true },
         deviceLockPoints: 0, // lock points from real Screen Time picks in the iPhone app
       },
@@ -2618,6 +2632,7 @@ window.TO = window.TO || {};
     const notify = d.settings && d.settings.notify;
     if (notify && notify.settled != null && notify.resolved == null) notify.resolved = notify.settled;
     if (notify) delete notify.settled;
+    if (notify && notify.weekly == null) notify.weekly = true;
     return d;
   }
 
@@ -4793,6 +4808,20 @@ window.TIMEOUT_SUPABASE = {
         requestsOut: (json.requestsOut || []).map(request),
       };
     } catch (e) { return null; }
+  };
+
+  // ---------- Weekly report ----------
+  /** The person's published weekly reports, newest first. Null when it can't be reached or the database doesn't have them yet. */
+  api.weeklyReports = async () => {
+    if (!api.configured || !token()) return null;
+    try {
+      const rows = await rest('rpc/timeout_my_weekly_reports', { method: 'POST', signal: AbortSignal.timeout(6000), body: JSON.stringify({ p_limit: 12 }) });
+      return Array.isArray(rows) ? rows : null;
+    } catch (e) { return null; }
+  };
+  api.markWeeklyReportRead = async (week) => {
+    if (!api.configured || !token()) return;
+    try { await rest('rpc/timeout_mark_weekly_report_read', { method: 'POST', signal: AbortSignal.timeout(6000), body: JSON.stringify({ p_week: week }) }); } catch (e) { /* it shows as unread again next time */ }
   };
 
   /** Runs one friends function. Turns "the database doesn't have it yet" into a sentence people can act on. */
@@ -7234,6 +7263,94 @@ window.TIMEOUT_SUPABASE = {
 
 </script>
 <script>
+/* TimeOut web — the weekly report (menu > Weekly report). The server writes each report once a week; this only draws it. */
+(function (TO) {
+  'use strict';
+  const { esc, icon } = TO;
+  const ui = TO.ui;
+
+  /** Reports newest first, as the server returned them. `loaded` stays false until the first answer. */
+  const weekly = (TO.weekly = { list: [], loaded: false, sel: 0 });
+
+  const BADGE = { crushed: 'green', steady: 'blue', slipped: 'yellow', risky: 'red' };
+  const unread = () => weekly.list.filter((r) => !r.read).length;
+  weekly.unread = unread;
+
+  const shouldLoad = () => !!(TO.account && TO.account.server && TO.api && TO.api.weeklyReports);
+
+  /** Fetches the latest reports and updates the menu dots. Quiet when the server has none or can't be reached. */
+  weekly.refresh = async () => {
+    if (!shouldLoad()) return;
+    const rows = await TO.api.weeklyReports();
+    if (!rows || !TO.data) return;
+    // A week opened a moment ago may not be marked read on the server yet, so keep what this device already knows.
+    const seen = new Set(weekly.list.filter((r) => r.read).map((r) => r.week));
+    weekly.list = rows.filter((r) => r && r.report && r.report.headline).map((r) => ({ week: String(r.weekStart), read: !!r.read || seen.has(String(r.weekStart)), report: r.report }));
+    weekly.loaded = true;
+    weekly.sel = Math.min(weekly.sel, Math.max(0, weekly.list.length - 1));
+    if (TO.app && TO.app.renderChrome) TO.app.renderChrome();
+    if (document.querySelector('[data-page="settings"] .weekly-page')) {
+      ui.refreshPage('settings');
+      weekly.markShown();
+    }
+  };
+
+  /** Opening a report counts as reading it. */
+  weekly.markShown = () => {
+    const shown = weekly.list[weekly.sel];
+    if (!shown || shown.read) return;
+    shown.read = true;
+    TO.api.markWeeklyReportRead(shown.week);
+    if (TO.app && TO.app.renderChrome) TO.app.renderChrome();
+  };
+
+  const toneOf = (status) => (status === 'under' ? 'green' : status === 'over' ? 'red' : 'faint');
+
+  function dayTable(days) {
+    if (!days) return '';
+    const rows = days.map((d) => `<div class="wr-day"><span>${esc(d.weekday)}</span><span class="num">${d.used === null ? '–' : `${Number(d.used)} min`}</span><span class="num faint">${Number(d.limit)} min</span><b class="${toneOf(d.status)}">${d.status === 'none' ? '–' : d.status === 'over' ? 'Over' : 'Under'}</b></div>`).join('');
+    return `<div class="stack-s"><div class="eyebrow">Day by day</div><div class="wr-days">${rows}</div></div>`;
+  }
+
+  function reportCard(r) {
+    const tiles = (r.tiles || []).map((t) => `<div class="wr-tile"><b class="num">${esc(t.value)}</b><span>${esc(t.label)}</span></div>`).join('');
+    return `<div class="card stack weekly-report">
+      <div class="row-layout"><span class="tag ${BADGE[r.weekType] || 'blue'}">${esc(r.label || '')}</span><span class="small faint">${esc(r.range || '')}</span></div>
+      <h2 class="wr-headline">${esc(r.headline)}</h2>
+      <p class="wr-text">${esc(r.summary)}</p>
+      ${tiles ? `<div class="wr-tiles">${tiles}</div>` : ''}
+      <div class="wr-note"><div class="eyebrow">Worth noticing</div><p>${esc(r.insight)}</p></div>
+      <div class="wr-note alt"><div class="eyebrow">Try this next week</div><p>${esc(r.suggestion && r.suggestion.text)}</p></div>
+      ${dayTable(r.days)}
+      <div class="tiny faint">Written by an AI from your own numbers. TimeOut pledges phone minutes, never money.</div>
+    </div>`;
+  }
+
+  /** The body of the Weekly report page. */
+  weekly.render = () => {
+    if (!shouldLoad()) {
+      return `<div class="card stack-s"><h2 style="margin:0;font-size:17px">Weekly report</h2><div class="small muted">Weekly reports are written for accounts that are signed in and synced. Log in to see yours.</div></div>`;
+    }
+    if (!weekly.loaded) return `<div class="small muted">Loading your reports…</div>`;
+    if (!weekly.list.length) {
+      return `<div class="card stack-s"><div class="row-s">${icon('chart', 18)}<h2 style="margin:0;font-size:17px">No report yet</h2></div>
+        <div class="small muted">Every Monday morning TimeOut looks back at your week and writes you a short review: your challenge record, your net minutes and, once your phone has synced screen time, how you did against your limits. Your first one shows up here after a week with some activity.</div></div>`;
+    }
+    const shown = weekly.list[Math.min(weekly.sel, weekly.list.length - 1)];
+    const earlier = weekly.list.map((r, i) => ({ r, i })).filter((x) => x.i !== weekly.sel);
+    return `${reportCard(shown.report)}
+      ${earlier.length ? `<div class="eyebrow">Other weeks</div><div class="list">${earlier.map(({ r, i }) => `<button class="list-row" data-act="weekly-open" data-i="${i}"><span class="lr-main"><div class="lr-title">${esc(r.report.headline)}</div><div class="lr-sub">${esc(r.report.range || '')}</div></span>${r.read ? '' : '<span class="tag green">New</span>'}</button>`).join('')}</div>` : ''}`;
+  };
+
+  TO.actions['weekly-open'] = (el) => {
+    weekly.sel = Math.max(0, Math.min(weekly.list.length - 1, Number(el.dataset.i) || 0));
+    weekly.markShown();
+    if (ui.pageOpen('settings')) ui.refreshPage('settings');
+  };
+})(window.TO);
+
+</script>
+<script>
 /* TimeOut web demo — menu drawer and Screentime & Settings (Screen 7). */
 (function (TO) {
   'use strict';
@@ -7247,6 +7364,7 @@ window.TIMEOUT_SUPABASE = {
     sports: { title: 'Sports & races', icon: 'grid' },
     notifications: { title: 'Notifications & privacy', icon: 'bell' },
     account: { title: 'Account', icon: 'user' },
+    weekly: { title: 'Weekly report', icon: 'chart' },
   };
   // Older links still name the sections that now live inside a combined page.
   const SECTION_GROUP = { status: 'screentime', races: 'sports', privacy: 'notifications' };
@@ -7264,6 +7382,7 @@ window.TIMEOUT_SUPABASE = {
       <div class="drawer-head">${ui.avatar(TO.account.photo, 'lg')}<div class="grow" style="min-width:0"><b class="ellipsis" style="display:block;font-size:17px">@${esc(TO.account.username)}</b><div class="small muted ellipsis">${esc(TO.account.email)}</div><div style="margin-top:6px">${ui.tierBadge(wl.tier.id, true)}</div></div></div>
       <nav>
         ${item('screentime', `${wl.phoneLeft} min left`)}
+        ${TO.weekly.unread() ? item('weekly', '<b class="tag green">New</b>') : item('weekly')}
         ${item('sports')}
         ${item('notifications')}
         ${item('account')}
@@ -7369,6 +7488,7 @@ window.TIMEOUT_SUPABASE = {
     const n = TO.data.settings.notify;
     const row = (k, t, sub, ic) => listRow(ic, t, sub, ui.switchEl(`nt-${k}`, n[k], `data-change="set-notify" data-k="${k}"`), `for="nt-${k}"`);
     return `<div class="small muted">These show as banners at the top of the screen while TimeOut is open. The iPhone app also sends real notifications when it's closed.</div><div class="list">
+      ${row('weekly', 'Weekly report', 'A review of your week, every Monday, in the menu', 'chart')}
       ${row('resolved', 'Challenge results', 'When a matchup challenge is completed', 'target')}
       ${row('friends', 'Friend requests', 'When someone adds or accepts you', 'userPlus')}
       ${row('lowTime', 'Low phone time', 'Before your locked apps close', 'phone')}
@@ -7442,6 +7562,7 @@ window.TIMEOUT_SUPABASE = {
       sports: () => `${sports()}<div class="eyebrow">Virtual racing</div>${TO.views.races.render()}`,
       notifications: () => `${notifications()}<div class="eyebrow">What friends can see</div>${privacy()}`,
       account,
+      weekly: () => `<div class="weekly-page">${TO.weekly.render()}</div>`,
     };
     return { title: SECTIONS[key].title, body: map[key]() };
   }
@@ -7451,6 +7572,7 @@ window.TIMEOUT_SUPABASE = {
     closeDrawer();
     acctErr = {};
     ui.openPage('settings', { render: () => render(key), after: key === 'sports' ? (el) => TO.races.mount(el) : undefined });
+    if (key === 'weekly') { TO.weekly.sel = 0; TO.weekly.markShown(); TO.weekly.refresh(); }
   }
 
   // ---------- App walkthrough ----------
@@ -8074,6 +8196,7 @@ window.TIMEOUT_SUPABASE = {
     app.render();
     TO.live.refresh();
     app.syncSocial().then(() => { if (St.refreshTeams) St.refreshTeams(); });
+    TO.weekly.refresh();
     if (TO.invites) TO.invites.offer();
   };
 
@@ -8103,7 +8226,7 @@ window.TIMEOUT_SUPABASE = {
     const locked = wl.lockedOut || wl.balance <= 0;
     const socialBadge = TO.views.social.badge();
     document.getElementById('topbar').innerHTML = `
-      <button class="icon-btn" data-act="menu" aria-label="Menu and settings">${icon('menu', 22)}${wl.appsLocked ? '<span class="dotbadge"></span>' : ''}</button>
+      <button class="icon-btn" data-act="menu" aria-label="Menu and settings">${icon('menu', 22)}${wl.appsLocked || TO.weekly.unread() ? '<span class="dotbadge"></span>' : ''}</button>
       <div class="brand">${brandMark(18, 'brand-mark')}<span class="brand-word">TIME<b>OUT</b></span></div>
       <button class="bal-pill ${locked ? 'locked' : ''}" data-act="settings" data-section="screentime" aria-label="${locked ? 'New pledges resume at midnight' : `${wl.balance} minutes available to pledge`}">${icon(locked ? 'lock' : 'hourglass', 15)}${locked ? 'Locked' : `${wl.balance} min`}</button>`;
     const open = TO.data.challenges.filter((b) => b.status === 'open' && (b.kind === 'sports' || b.kind === 'race') && b.picks.length && b.picks.every((pick) => pick.kind === 'race' || pick.kind === 'game' || (pick.kind === 'sports' && pick.gameId))).length;
@@ -8417,6 +8540,7 @@ window.TIMEOUT_SUPABASE = {
   // Titles match the settings page titles so the open page can be highlighted.
   const MENU = [
     ['screentime', 'Screen time', 'hourglass'],
+    ['weekly', 'Weekly report', 'chart'],
     ['sports', 'Sports & races', 'grid'],
     ['notifications', 'Notifications & privacy', 'bell'],
     ['account', 'Account', 'user'],
@@ -8453,7 +8577,7 @@ window.TIMEOUT_SUPABASE = {
     const subs = { screentime: `${wl.phoneLeft} min left${wl.streak ? ` · ${wl.streak}-day streak` : ''}` };
     const item = (key, title, ic, cls = '') => {
       const on = section === title;
-      return `<button class="sn ${cls} ${on ? 'on' : ''}" data-act="settings" data-section="${key}" title="${title}" aria-current="${on ? 'page' : 'false'}">${icon(ic, 19)}<span class="sn-l">${title}</span>${subs[key] ? `<span class="sn-sub">${subs[key]}</span>` : ''}${key === 'screentime' && wl.appsLocked ? '<span class="sn-dot"></span>' : ''}</button>`;
+      return `<button class="sn ${cls} ${on ? 'on' : ''}" data-act="settings" data-section="${key}" title="${title}" aria-current="${on ? 'page' : 'false'}">${icon(ic, 19)}<span class="sn-l">${title}</span>${subs[key] ? `<span class="sn-sub">${subs[key]}</span>` : ''}${(key === 'screentime' && wl.appsLocked) || (key === 'weekly' && TO.weekly.unread()) ? '<span class="sn-dot"></span>' : ''}</button>`;
     };
     return `<div class="side-brand"><div class="brand">${brandMark(21, 'brand-mark')}<span class="brand-word">TIME<b>OUT</b></span></div></div>
       <nav class="side-nav">

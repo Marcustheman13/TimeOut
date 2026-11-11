@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1700 1000" width="1700" height="1000" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+<defs><marker id="h" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="context-stroke"/></marker></defs>
+<rect width="1700" height="1000" fill="#ffffff"/>
+<text x="40" y="56" font-size="38" font-weight="800" fill="#111827">TimeOut: AI weekly report</text>
+<text x="40" y="90" font-size="20" fill="#4b5563">A scheduled trigger starts a sequence of steps. An AI step decides how to frame each person's week and writes it. The report appears in the app menu.</text>
+<rect x="40" y="150" width="300" height="250" rx="16" fill="#ffffff" stroke="#1f4fc0" stroke-width="3"/>
+<text x="62" y="188" font-size="24" font-weight="700" fill="#111827">1 · Trigger</text>
+<rect x="248" y="164" width="76" height="28" rx="14" fill="#e8f7ee" stroke="#1a8f4a" stroke-width="2"/>
+<text x="286.0" y="184" font-size="14" font-weight="700" fill="#1a8f4a" text-anchor="middle">BUILT</text>
+<text x="62" y="222" font-size="18" fill="#374151">pg_cron, every hour</text>
+<text x="62" y="249" font-size="18" fill="#374151"></text>
+<text x="62" y="276" font-size="18" fill="#374151">Only calls out when someone</text>
+<text x="62" y="303" font-size="18" fill="#374151">is due: Monday 8am to 8pm in</text>
+<text x="62" y="330" font-size="18" fill="#374151">their own timezone, report on</text>
+<text x="62" y="357" font-size="18" fill="#374151">in Settings, not done yet</text>
+<rect x="470" y="150" width="620" height="520" rx="16" fill="#ffffff" stroke="#1f4fc0" stroke-width="3"/>
+<text x="492" y="188" font-size="24" font-weight="700" fill="#111827">2 · Edge Function: weekly-report</text>
+<rect x="998" y="164" width="76" height="28" rx="14" fill="#e8f7ee" stroke="#1a8f4a" stroke-width="2"/>
+<text x="1036.0" y="184" font-size="14" font-weight="700" fill="#1a8f4a" text-anchor="middle">BUILT</text>
+<text x="492" y="222" font-size="18" fill="#374151">Runs on Supabase (Deno), one person at a time</text>
+<text x="492" y="249" font-size="18" fill="#374151"></text>
+<text x="492" y="276" font-size="18" fill="#374151">a  Claim the week (no double reports)</text>
+<text x="492" y="303" font-size="18" fill="#374151">b  Compute the stats in code (no AI maths):</text>
+<text x="492" y="330" font-size="18" fill="#374151">     days under limit, net minutes, vs last week</text>
+<text x="492" y="357" font-size="18" fill="#374151">c  AI step: decide the week type, tone,</text>
+<text x="492" y="384" font-size="18" fill="#374151">     insight and suggestion, and write it</text>
+<text x="492" y="411" font-size="18" fill="#374151">d  Check the answer: every number must be in</text>
+<text x="492" y="438" font-size="18" fill="#374151">     the stats, no links, length limits</text>
+<text x="492" y="465" font-size="18" fill="#374151">e  Wrong? Tell the AI why and retry once</text>
+<text x="492" y="492" font-size="18" fill="#374151">f  Still wrong or AI down? Use the template</text>
+<text x="492" y="519" font-size="18" fill="#374151">g  Save the finished report</text>
+<rect x="1260" y="150" width="400" height="250" rx="16" fill="#f3f4f6" stroke="#4b5563" stroke-width="3"/>
+<text x="1282" y="188" font-size="24" font-weight="700" fill="#111827">Google Gemini API</text>
+<text x="1282" y="222" font-size="18" fill="#374151">External AI service (free tier)</text>
+<text x="1282" y="249" font-size="18" fill="#374151"></text>
+<text x="1282" y="276" font-size="18" fill="#374151">Role: decision-maker and</text>
+<text x="1282" y="303" font-size="18" fill="#374151">transformer. Sees only numbers</text>
+<text x="1282" y="330" font-size="18" fill="#374151">and fixed words, never names,</text>
+<text x="1282" y="357" font-size="18" fill="#374151">emails or dates</text>
+<rect x="470" y="760" width="620" height="200" rx="16" fill="#ffffff" stroke="#1f4fc0" stroke-width="3"/>
+<text x="492" y="798" font-size="24" font-weight="700" fill="#111827">3 · Postgres (Supabase)</text>
+<rect x="998" y="774" width="76" height="28" rx="14" fill="#e8f7ee" stroke="#1a8f4a" stroke-width="2"/>
+<text x="1036.0" y="794" font-size="14" font-weight="700" fill="#1a8f4a" text-anchor="middle">BUILT</text>
+<text x="492" y="832" font-size="18" fill="#374151">weekly_reports: stats, the AI's decision, the report, status</text>
+<text x="492" y="859" font-size="18" fill="#374151">timeout_weekly_report_work: who is due and their raw numbers</text>
+<text x="492" y="886" font-size="18" fill="#374151">timeout_my_weekly_reports / mark_read: what the apps may read</text>
+<text x="492" y="913" font-size="18" fill="#374151">Row-level security: people only get their own reports</text>
+<rect x="1260" y="640" width="400" height="320" rx="16" fill="#ffffff" stroke="#1f4fc0" stroke-width="3"/>
+<text x="1282" y="678" font-size="24" font-weight="700" fill="#111827">4 · Web app and iOS app</text>
+<rect x="1568" y="654" width="76" height="28" rx="14" fill="#e8f7ee" stroke="#1a8f4a" stroke-width="2"/>
+<text x="1606.0" y="674" font-size="14" font-weight="700" fill="#1a8f4a" text-anchor="middle">BUILT</text>
+<text x="1282" y="712" font-size="18" fill="#374151">Menu > Weekly report</text>
+<text x="1282" y="739" font-size="18" fill="#374151"></text>
+<text x="1282" y="766" font-size="18" fill="#374151">Headline, summary, stat tiles,</text>
+<text x="1282" y="793" font-size="18" fill="#374151">"worth noticing", "try next week",</text>
+<text x="1282" y="820" font-size="18" fill="#374151">day-by-day table, past weeks</text>
+<text x="1282" y="847" font-size="18" fill="#374151"></text>
+<text x="1282" y="874" font-size="18" fill="#374151">Unread dot on the menu.</text>
+<text x="1282" y="901" font-size="18" fill="#374151">Settings > Notifications has</text>
+<text x="1282" y="928" font-size="18" fill="#374151">a Weekly report switch.</text>
+<rect x="40" y="500" width="360" height="230" rx="16" fill="#fffbeb" stroke="#b45309" stroke-width="3" stroke-dasharray="9 6"/>
+<text x="62" y="538" font-size="24" font-weight="700" fill="#92400e">Human review</text>
+<text x="62" y="572" font-size="18" fill="#374151">Test runs and dry runs are saved</text>
+<text x="62" y="599" font-size="18" fill="#374151">hidden. Someone reads them in</text>
+<text x="62" y="626" font-size="18" fill="#374151">weekly_reports before reports</text>
+<text x="62" y="653" font-size="18" fill="#374151">are switched on for everyone.</text>
+<text x="62" y="680" font-size="18" fill="#374151">Failures are logged with a note.</text>
+<line x1="340" y1="260" x2="470" y2="260" stroke="#1f4fc0" stroke-width="3.5" marker-end="url(#h)"/>
+<rect x="351.5" y="219" width="107.0" height="23" fill="#ffffff" opacity="0.93"/>
+<text x="405" y="236" font-size="17" font-weight="600" fill="#1f4fc0" text-anchor="middle">every hour</text>
+<line x1="1090" y1="260" x2="1260" y2="260" stroke="#4b5563" stroke-width="3.5" marker-end="url(#h)" marker-start="url(#h)"/>
+<rect x="1135.45" y="219" width="79.10000000000001" height="23" fill="#ffffff" opacity="0.93"/>
+<text x="1175" y="226" font-size="17" font-weight="600" fill="#4b5563" text-anchor="middle">stats →</text>
+<rect x="1121.5" y="243" width="107.0" height="23" fill="#ffffff" opacity="0.93"/>
+<text x="1175" y="250" font-size="17" font-weight="600" fill="#4b5563" text-anchor="middle">← decision</text>
+<line x1="780" y1="670" x2="780" y2="760" stroke="#1f4fc0" stroke-width="3.5" marker-end="url(#h)"/>
+<rect x="721.85" y="705" width="116.30000000000001" height="23" fill="#ffffff" opacity="0.93"/>
+<text x="780" y="722" font-size="17" font-weight="600" fill="#1f4fc0" text-anchor="middle">save report</text>
+<line x1="1090" y1="860" x2="1260" y2="860" stroke="#1f4fc0" stroke-width="3.5" marker-end="url(#h)" marker-start="url(#h)"/>
+<rect x="1112.2" y="819" width="125.60000000000001" height="23" fill="#ffffff" opacity="0.93"/>
+<text x="1175" y="836" font-size="17" font-weight="600" fill="#1f4fc0" text-anchor="middle">read reports</text>
+<rect x="1126.15" y="843" width="97.7" height="23" fill="#ffffff" opacity="0.93"/>
+<text x="1175" y="860" font-size="17" font-weight="600" fill="#1f4fc0" text-anchor="middle">mark read</text>
+<polyline points="220,730 220,860 470,860" fill="none" stroke="#b45309" stroke-width="3.5" stroke-dasharray="9 6" marker-end="url(#h)"/>
+<text x="232" y="852" font-size="17" font-weight="600" fill="#b45309">reads the saved rows</text>
+<line x1="1620" y1="640" x2="1620" y2="560" stroke="#1f4fc0" stroke-width="3.5" marker-end="url(#h)"/>
+<text x="1260" y="480" font-size="17" font-weight="700" fill="#1f4fc0">Switch it off in Settings:</text>
+<text x="1260" y="504" font-size="17" fill="#374151">notify.weekly = false is saved in</text>
+<text x="1260" y="528" font-size="17" fill="#374151">user_settings, and the trigger</text>
+<text x="1260" y="552" font-size="17" fill="#374151">then skips that person.</text>
+<text x="40" y="985" font-size="16" fill="#6b7280">Solid boxes are built. Dashed boxes are a review step. Gray is an external service. The system prompt, guardrails and tests are in supabase/functions/weekly-report/.</text>
+</svg>

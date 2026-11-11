@@ -239,12 +239,14 @@ struct NotifySettings: Codable, Hashable {
     var resolved = true
     var friends = true
     var lowTime = true
+    var weekly = true
     init() {}
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         resolved = (try? c.decode(Bool.self, forKey: .resolved)) ?? true
         friends = (try? c.decode(Bool.self, forKey: .friends)) ?? true
         lowTime = (try? c.decode(Bool.self, forKey: .lowTime)) ?? true
+        weekly = (try? c.decode(Bool.self, forKey: .weekly)) ?? true
     }
 }
 

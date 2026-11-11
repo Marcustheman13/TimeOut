@@ -31,6 +31,18 @@ How data moves through the customer-facing app, the planned admin portal and the
 
 ![TimeOut system architecture: the web and iOS apps talk to Supabase and the ESPN API, a planned Express admin portal on AWS connects to Supabase Postgres, and a planned AI weekly report goes out through an email service](docs/system-architecture.png)
 
+This diagram was drawn before the AI weekly report was built. The report is now built and shows up inside the apps instead of going out by email, so see the next section for how it works.
+
+---
+
+## AI Weekly Report
+
+Every Monday morning each active user gets a short AI-written review of their week under **Menu > Weekly report** in the iPhone app and on the website. A pg_cron trigger starts a Supabase Edge Function, which works out the numbers in code, asks Google Gemini to decide how to frame the week and write it, checks the answer, and saves it for the apps to show. If the AI fails or breaks a rule, a built-in template writes the report instead. Reports stay hidden until someone has read the dry runs and switched them on.
+
+![TimeOut AI weekly report architecture: a pg_cron trigger starts the weekly-report Edge Function, which calls the Gemini API, saves the report in Supabase Postgres, and the web and iOS apps read it from the menu](docs/diagrams/TimeOut-Weekly-Report.png)
+
+Setup, guardrails and tests: [supabase/functions/weekly-report/README.md](supabase/functions/weekly-report/README.md).
+
 ---
 
 ## Data Flow Diagrams

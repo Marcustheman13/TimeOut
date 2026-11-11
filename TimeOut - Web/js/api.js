@@ -552,6 +552,20 @@
     } catch (e) { return null; }
   };
 
+  // ---------- Weekly report ----------
+  /** The person's published weekly reports, newest first. Null when it can't be reached or the database doesn't have them yet. */
+  api.weeklyReports = async () => {
+    if (!api.configured || !token()) return null;
+    try {
+      const rows = await rest('rpc/timeout_my_weekly_reports', { method: 'POST', signal: AbortSignal.timeout(6000), body: JSON.stringify({ p_limit: 12 }) });
+      return Array.isArray(rows) ? rows : null;
+    } catch (e) { return null; }
+  };
+  api.markWeeklyReportRead = async (week) => {
+    if (!api.configured || !token()) return;
+    try { await rest('rpc/timeout_mark_weekly_report_read', { method: 'POST', signal: AbortSignal.timeout(6000), body: JSON.stringify({ p_week: week }) }); } catch (e) { /* it shows as unread again next time */ }
+  };
+
   /** Runs one friends function. Turns "the database doesn't have it yet" into a sentence people can act on. */
   async function friendCall(name, body) {
     try {

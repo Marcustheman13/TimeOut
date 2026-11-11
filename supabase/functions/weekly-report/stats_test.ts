@@ -11,8 +11,6 @@ const challenge = (day: string, status: WorkChallenge["status"], pledge: number,
 
 const user = (over: Partial<WorkUser> = {}): WorkUser => ({
   userId: "11111111-1111-1111-1111-111111111111",
-  email: "someone@example.com",
-  name: "Sam Lee",
   timezone: "America/Denver",
   weekStart: WEEK,
   enforce: true,

@@ -12,7 +12,7 @@ export type Tone = typeof TONES[number];
 export type SuggestionKind = typeof SUGGESTION_KINDS[number];
 
 export interface Decision {
-  /** True when the week is too thin to say anything useful. No email goes out. */
+  /** True when the week is too thin to say anything useful. No report is published. */
   skip: boolean;
   weekType: WeekType;
   tone: Tone;

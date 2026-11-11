@@ -21,6 +21,7 @@
   // Titles match the settings page titles so the open page can be highlighted.
   const MENU = [
     ['screentime', 'Screen time', 'hourglass'],
+    ['weekly', 'Weekly report', 'chart'],
     ['sports', 'Sports & races', 'grid'],
     ['notifications', 'Notifications & privacy', 'bell'],
     ['account', 'Account', 'user'],
@@ -57,7 +58,7 @@
     const subs = { screentime: `${wl.phoneLeft} min left${wl.streak ? ` · ${wl.streak}-day streak` : ''}` };
     const item = (key, title, ic, cls = '') => {
       const on = section === title;
-      return `<button class="sn ${cls} ${on ? 'on' : ''}" data-act="settings" data-section="${key}" title="${title}" aria-current="${on ? 'page' : 'false'}">${icon(ic, 19)}<span class="sn-l">${title}</span>${subs[key] ? `<span class="sn-sub">${subs[key]}</span>` : ''}${key === 'screentime' && wl.appsLocked ? '<span class="sn-dot"></span>' : ''}</button>`;
+      return `<button class="sn ${cls} ${on ? 'on' : ''}" data-act="settings" data-section="${key}" title="${title}" aria-current="${on ? 'page' : 'false'}">${icon(ic, 19)}<span class="sn-l">${title}</span>${subs[key] ? `<span class="sn-sub">${subs[key]}</span>` : ''}${(key === 'screentime' && wl.appsLocked) || (key === 'weekly' && TO.weekly.unread()) ? '<span class="sn-dot"></span>' : ''}</button>`;
     };
     return `<div class="side-brand"><div class="brand">${brandMark(21, 'brand-mark')}<span class="brand-word">TIME<b>OUT</b></span></div></div>
       <nav class="side-nav">

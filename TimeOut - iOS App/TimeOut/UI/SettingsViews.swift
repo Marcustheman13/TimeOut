@@ -6,6 +6,7 @@ import UIKit
 enum SettingsModel {
     static let sections: [String: (title: String, icon: IconName)] = [
         "screentime": ("Screen time", .hourglass),
+        "weekly": ("Weekly report", .chart),
         "sports": ("Sports & races", .grid),
         "notifications": ("Notifications & privacy", .bell),
         "account": ("Account", .user),
@@ -65,6 +66,7 @@ struct DrawerView: View {
                     ScrollView {
                         VStack(spacing: 2) {
                             item("screentime", "\(wl.phoneLeft) min left")
+                            item("weekly", WeeklyReports.shared.unread > 0 ? "New" : nil, highlight: WeeklyReports.shared.unread > 0)
                             item("sports", nil)
                             item("notifications", nil)
                             item("account", nil)
@@ -93,18 +95,18 @@ struct DrawerView: View {
         Task { try? await Task.sleep(for: .milliseconds(200)); ui.drawerOpen = false }
     }
 
-    private func item(_ key: String, _ sub: String?) -> some View {
+    private func item(_ key: String, _ sub: String?, highlight: Bool = false) -> some View {
         let s = SettingsModel.sections[key]!
-        return row(s.icon, s.title, sub) { SettingsModel.open(key) }
+        return row(s.icon, s.title, sub, highlight: highlight) { SettingsModel.open(key) }
     }
 
-    private func row(_ icon: IconName, _ title: String, _ sub: String?, _ action: @escaping () -> Void) -> some View {
+    private func row(_ icon: IconName, _ title: String, _ sub: String?, highlight: Bool = false, _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 14) {
                 Icon(icon, 20).foregroundStyle(Theme.text2)
                 Text(title).font(.barlow(15.5, 700)).foregroundStyle(Theme.text)
                 Spacer(minLength: 0)
-                if let sub { Text(sub).font(.barlow(12, 700)).foregroundStyle(Theme.muted) }
+                if let sub { Text(sub).font(.barlow(12, 700)).foregroundStyle(highlight ? Theme.accent : Theme.muted) }
             }
             .padding(.horizontal, 12).frame(height: 50)
             .contentShape(Rectangle())
@@ -136,6 +138,7 @@ struct SettingsPage: View {
                     NotificationsSection()
                     Text("What friends can see").eyebrow()
                     PrivacySection()
+                case "weekly": WeeklyReportSection()
                 case "account": AccountSection()
                 default: EmptyView()
                 }
@@ -461,6 +464,7 @@ struct NotificationsSection: View {
             }
         }
         ListBox {
+            row(.chart, "Weekly report", "A review of your week, every Monday, in the menu", n.weekly) { v in store.updateSettings { $0.notify.weekly = v } }
             row(.target, "Challenge results", "When a matchup challenge is completed", n.resolved) { v in store.updateSettings { $0.notify.resolved = v } }
             row(.userPlus, "Friend requests", "When someone adds or accepts you", n.friends) { v in store.updateSettings { $0.notify.friends = v } }
             row(.phone, "Low phone time", "Before your locked apps close", n.lowTime) { v in

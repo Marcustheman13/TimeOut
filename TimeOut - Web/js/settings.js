@@ -11,6 +11,7 @@
     sports: { title: 'Sports & races', icon: 'grid' },
     notifications: { title: 'Notifications & privacy', icon: 'bell' },
     account: { title: 'Account', icon: 'user' },
+    weekly: { title: 'Weekly report', icon: 'chart' },
   };
   // Older links still name the sections that now live inside a combined page.
   const SECTION_GROUP = { status: 'screentime', races: 'sports', privacy: 'notifications' };
@@ -28,6 +29,7 @@
       <div class="drawer-head">${ui.avatar(TO.account.photo, 'lg')}<div class="grow" style="min-width:0"><b class="ellipsis" style="display:block;font-size:17px">@${esc(TO.account.username)}</b><div class="small muted ellipsis">${esc(TO.account.email)}</div><div style="margin-top:6px">${ui.tierBadge(wl.tier.id, true)}</div></div></div>
       <nav>
         ${item('screentime', `${wl.phoneLeft} min left`)}
+        ${TO.weekly.unread() ? item('weekly', '<b class="tag green">New</b>') : item('weekly')}
         ${item('sports')}
         ${item('notifications')}
         ${item('account')}
@@ -133,6 +135,7 @@
     const n = TO.data.settings.notify;
     const row = (k, t, sub, ic) => listRow(ic, t, sub, ui.switchEl(`nt-${k}`, n[k], `data-change="set-notify" data-k="${k}"`), `for="nt-${k}"`);
     return `<div class="small muted">These show as banners at the top of the screen while TimeOut is open. The iPhone app also sends real notifications when it's closed.</div><div class="list">
+      ${row('weekly', 'Weekly report', 'A review of your week, every Monday, in the menu', 'chart')}
       ${row('resolved', 'Challenge results', 'When a matchup challenge is completed', 'target')}
       ${row('friends', 'Friend requests', 'When someone adds or accepts you', 'userPlus')}
       ${row('lowTime', 'Low phone time', 'Before your locked apps close', 'phone')}
@@ -206,6 +209,7 @@
       sports: () => `${sports()}<div class="eyebrow">Virtual racing</div>${TO.views.races.render()}`,
       notifications: () => `${notifications()}<div class="eyebrow">What friends can see</div>${privacy()}`,
       account,
+      weekly: () => `<div class="weekly-page">${TO.weekly.render()}</div>`,
     };
     return { title: SECTIONS[key].title, body: map[key]() };
   }
@@ -215,6 +219,7 @@
     closeDrawer();
     acctErr = {};
     ui.openPage('settings', { render: () => render(key), after: key === 'sports' ? (el) => TO.races.mount(el) : undefined });
+    if (key === 'weekly') { TO.weekly.sel = 0; TO.weekly.markShown(); TO.weekly.refresh(); }
   }
 
   // ---------- App walkthrough ----------

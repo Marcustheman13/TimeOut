@@ -40,6 +40,7 @@
     app.render();
     TO.live.refresh();
     app.syncSocial().then(() => { if (St.refreshTeams) St.refreshTeams(); });
+    TO.weekly.refresh();
     if (TO.invites) TO.invites.offer();
   };
 
@@ -69,7 +70,7 @@
     const locked = wl.lockedOut || wl.balance <= 0;
     const socialBadge = TO.views.social.badge();
     document.getElementById('topbar').innerHTML = `
-      <button class="icon-btn" data-act="menu" aria-label="Menu and settings">${icon('menu', 22)}${wl.appsLocked ? '<span class="dotbadge"></span>' : ''}</button>
+      <button class="icon-btn" data-act="menu" aria-label="Menu and settings">${icon('menu', 22)}${wl.appsLocked || TO.weekly.unread() ? '<span class="dotbadge"></span>' : ''}</button>
       <div class="brand">${brandMark(18, 'brand-mark')}<span class="brand-word">TIME<b>OUT</b></span></div>
       <button class="bal-pill ${locked ? 'locked' : ''}" data-act="settings" data-section="screentime" aria-label="${locked ? 'New pledges resume at midnight' : `${wl.balance} minutes available to pledge`}">${icon(locked ? 'lock' : 'hourglass', 15)}${locked ? 'Locked' : `${wl.balance} min`}</button>`;
     const open = TO.data.challenges.filter((b) => b.status === 'open' && (b.kind === 'sports' || b.kind === 'race') && b.picks.length && b.picks.every((pick) => pick.kind === 'race' || pick.kind === 'game' || (pick.kind === 'sports' && pick.gameId))).length;

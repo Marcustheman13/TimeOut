@@ -1,6 +1,8 @@
-# Weekly report email
+# Weekly report
 
-Every Monday morning (8am in the person's own timezone) TimeOut emails each user a short review of their week: challenge record, net minutes, and, once their phone has synced screen-time records, how they did against their limits. An AI step decides how to frame the week and writes the words. Code does all the arithmetic.
+Every Monday morning (8am in the person's own timezone) TimeOut writes each active user a short review of their week and puts it in the app, under **Menu > Weekly report** on both the iPhone app and the website. It shows their challenge record, net minutes and, once their phone has synced screen-time records, how they did against their limits. An AI step decides how to frame the week and writes the words. Code does all the arithmetic.
+
+![System architecture of the AI weekly report](../../../docs/diagrams/TimeOut-Weekly-Report.png)
 
 ## How it works
 
@@ -14,42 +16,48 @@ pg_cron (hourly) ─► timeout_ping_weekly_report()      only calls out if some
    3. stats.ts                     all the arithmetic: days under limit, net minutes, vs last week
    4. ai.ts  (Gemini)              DECIDES the week type, tone, insight and suggestion, and writes the text
    5. decision.ts                  checks the AI's answer; falls back to a template if it fails
-   6. email.ts + Resend            renders and sends the email, with an unsubscribe link
-   7. finish                       records what happened in weekly_reports
+   6. report.ts                    builds the report the apps draw (words, tiles, day-by-day table)
+   7. finish                       saves it in weekly_reports as published (or hidden, for a dry run)
+                        │
+                        ▼
+   apps call timeout_my_weekly_reports  ─►  menu item + unread dot  ─►  Weekly report page
 ```
 
 **What the AI decides** (as JSON, not free text): `weekType` (crushed, steady, slipped or risky), `tone`, the one `insight` worth noticing, a `suggestion` with a kind, and `skip` when the week is too thin to report.
 
 **What stops it going wrong** (`decision.ts`)
 
-- Every number the AI writes must appear in the stats it was given. An invented number means the template writes that email instead.
+- Every number the AI writes must appear in the stats it was given. An invented number means the template writes that report instead.
 - It can't call a losing week or an over-limit week "crushed".
 - No links or markup, and length limits on every field.
 - If an answer breaks a rule, the AI is told which one and gets **one retry**. A failed call (rate limit, outage) waits 4 seconds and retries once too.
-- If that still fails, or Gemini has no key, the template writes the email. The email still goes out, and `weekly_reports.source` / `note` say why.
-- The AI only ever sees numbers and fixed words. Never a name, email, date or any text a user typed.
-- Real sends are **off** until you turn them on (see below). Until then every run is a dry run you can read in the table.
+- If that still fails, or Gemini has no key, the template writes the report. It is still published, and `weekly_reports.source` / `note` say why.
+- The AI only ever sees numbers and fixed words. Never a name, email, date or any text a user typed. The function never even receives the person's name or email.
+- Reports stay **hidden** (dry runs) until you turn them on (see step 6). Until then you can read each one in the table first. That is the human review step.
 
-**Data it uses.** Challenges come from `challenges` and `challenge_picks`. Screen-time usage comes from `user_settings.shared_ledger`, which the iPhone app writes. If that is empty (the case for every account when this was written), the email covers challenges only and leaves out anything about screen time.
+**Who gets one.** Anyone with a row in `user_settings` whose Settings > Notifications > Weekly report switch is on (the default), who had at least one resolved challenge or recorded screen time that week. A quiet week produces no report.
+
+**Data it uses.** Challenges come from `challenges` and `challenge_picks`. Screen-time usage comes from `user_settings.shared_ledger`, which the iPhone app writes. If that is empty, the report covers challenges only and leaves out anything about screen time.
+
+**What the apps can read.** Only `timeout_my_weekly_reports` (the signed-in person's own published reports) and `timeout_mark_weekly_report_read`. The table itself has row-level security with no policies, so nobody can read it directly.
 
 ## Setup
 
-Nothing here has been deployed. Do these in order.
+Nothing here has been deployed yet. Do these in order. There is no email service, so no domain and no Resend account.
 
-### 1. Get the free keys
+### 1. Get a free Gemini key
 
-- **Gemini:** create an API key in [Google AI Studio](https://aistudio.google.com/apikey). The free tier needs no card. Check the current model names and limits there, and set `GEMINI_MODEL` if `gemini-flash-lite-latest` has been replaced. (Named versions get retired: `gemini-2.5-flash` already stopped working for new keys, which is why the default is an alias that Google keeps current.)
-- **Resend:** make an account at [resend.com](https://resend.com) and create an API key. Without a verified domain, Resend only delivers to the email address on your own Resend account. That's fine for testing (see step 4). To email real users you need a domain, verified under Resend → Domains.
+Create an API key in [Google AI Studio](https://aistudio.google.com/apikey). The free tier needs no card. The default model is `gemini-flash-lite-latest`, an alias Google keeps pointed at its current small model. (Named versions get retired: `gemini-2.5-flash` already stopped working for new keys.) Set `GEMINI_MODEL` to use another one.
 
 ### 2. Check the AI works (no database or deploy needed)
 
-Put the Gemini key where only you can see it. Either `export GEMINI_API_KEY=...` in your terminal, or put the line `GEMINI_API_KEY=...` in `supabase/functions/weekly-report/.env` (git ignores it). Then:
+Put the key where only you can see it. Either `export GEMINI_API_KEY=...` in your terminal, or put the line `GEMINI_API_KEY=...` in `supabase/functions/weekly-report/.env` (git ignores it). Then:
 
 ```bash
-deno run --allow-net --allow-env --allow-read --allow-write supabase/functions/weekly-report/live_check.ts --runs=3 --html=sample-email.html
+deno run --allow-net --allow-env --allow-read --allow-write supabase/functions/weekly-report/live_check.ts --runs=3 --json=sample-report.json
 ```
 
-It confirms the model name exists, then sends four sample weeks (a strong week, a rough week with no screen-time records, a risky week, a thin week) through the same code the Edge Function uses, three times each. For every run it says whether **the AI's own words were used** or the template stepped in, and why. `sample-email.html` is the first AI-written email, to open in a browser.
+It confirms the model name exists, then sends four sample weeks (a strong week, a rough week with no screen-time records, a risky week, a thin week) through the same code the Edge Function uses, three times each. For every run it says whether **the AI's own words were used** or the template stepped in, and why. `sample-report.json` is the first report, in the form the apps receive it.
 
 ### 3. Update the database
 
@@ -68,7 +76,7 @@ select vault.create_secret('A_LONG_RANDOM_VALUE', 'push_webhook_secret');
 From the repository root. `--no-verify-jwt` is needed because the database calls the function with `x-push-secret`, not a user's login. The function checks that secret itself.
 
 ```bash
-npx supabase secrets set --project-ref obegznrsxlbpmtbmqkll GEMINI_API_KEY=THE_GEMINI_KEY RESEND_API_KEY=THE_RESEND_KEY PUSH_WEBHOOK_SECRET=THE_SAME_VALUE_AS_THE_VAULT_SECRET
+npx supabase secrets set --project-ref obegznrsxlbpmtbmqkll GEMINI_API_KEY=THE_GEMINI_KEY PUSH_WEBHOOK_SECRET=THE_SAME_VALUE_AS_THE_VAULT_SECRET
 ```
 
 ```bash
@@ -77,17 +85,14 @@ npx supabase functions deploy weekly-report --project-ref obegznrsxlbpmtbmqkll -
 
 | Secret | Needed | What it does |
 | --- | --- | --- |
-| `GEMINI_API_KEY` | Yes for AI | Without it, every email is written by the template. |
-| `RESEND_API_KEY` | Yes to send | |
-| `PUSH_WEBHOOK_SECRET` | Yes | Must match the Vault secret. Also signs unsubscribe links. |
+| `GEMINI_API_KEY` | Yes for AI | Without it, every report is written by the template. |
+| `PUSH_WEBHOOK_SECRET` | Yes | Must match the Vault secret. |
 | `GEMINI_MODEL` | No | Defaults to `gemini-flash-lite-latest`. |
-| `WEEKLY_REPORT_FROM` | No | Defaults to `TimeOut <onboarding@resend.dev>`. Use your own domain once it's verified. |
-| `WEEKLY_REPORT_DRY_RUN` | No | Real sending stays **off** until this is `false`. |
-| `WEEKLY_REPORT_REDIRECT_TO` | No | Sends every email to this address instead, marked `[test for …]`. Use it to test before you have a domain. |
+| `WEEKLY_REPORT_DRY_RUN` | No | Reports stay hidden until this is `false`. |
 
 ### 5. Try it on one person, any day of the week
 
-Find a user id in Supabase (Authentication → Users), then ask for a report. A single-person run is a dry run unless you say otherwise, and it ignores the Monday schedule.
+Find a user id in Supabase (Authentication > Users), then ask for a report. A single-person run is hidden (a dry run) unless you say otherwise, and it ignores the Monday schedule.
 
 ```bash
 curl -X POST https://obegznrsxlbpmtbmqkll.supabase.co/functions/v1/weekly-report -H "x-push-secret: THE_SECRET" -H "content-type: application/json" -d '{"userId":"THE_USER_ID"}'
@@ -96,17 +101,17 @@ curl -X POST https://obegznrsxlbpmtbmqkll.supabase.co/functions/v1/weekly-report
 Read what it wrote:
 
 ```sql
-select status, source, note, subject, body_text, decision, stats
+select status, source, note, report, decision, stats
 from weekly_reports order by created_at desc limit 5;
 ```
 
-When it looks right, send one for real to yourself. Set `WEEKLY_REPORT_REDIRECT_TO` to your own email first so nothing goes to the real user, then add `"dryRun":false` to the request above. To test a different week, add `"weekStart":"2026-11-02"` (a Monday).
+When it looks right, publish one to your own account to see it in the app: add `"dryRun":false` to the request above, using your own user id. It then shows up under Menu > Weekly report. To test a different week, add `"weekStart":"2026-11-02"` (a Monday).
 
 ### 6. Turn it on
 
-`supabase secrets set WEEKLY_REPORT_DRY_RUN=false` (and unset `WEEKLY_REPORT_REDIRECT_TO`). The cron job is already scheduled by the SQL file. It does nothing outside Monday 8am to 8pm local time.
+`npx supabase secrets set --project-ref obegznrsxlbpmtbmqkll WEEKLY_REPORT_DRY_RUN=false`. The cron job is already scheduled by the SQL file. It does nothing outside Monday 8am to 8pm local time.
 
-Dry-run rows count as handled for that week, so a user won't get an email for a week you only dry-ran. To release one: `delete from weekly_reports where user_id = '…' and week_start = '…';`
+Dry-run rows count as handled for that week, so a user won't get a report for a week you only dry-ran. To release one: `delete from weekly_reports where user_id = '…' and week_start = '…';`
 
 ## Tests
 
@@ -114,13 +119,13 @@ Dry-run rows count as handled for that week, so a user won't get an email for a 
 deno test supabase/functions/weekly-report/
 ```
 
-Covers the stats arithmetic, the checks on the AI's answer, the retry and fallback, the template, the email HTML, and the Gemini request. They need no network and no keys. They can't tell you whether the real Gemini behaves, which is what `live_check.ts` (step 2) is for.
+Covers the stats arithmetic, the checks on the AI's answer, the retry and fallback, the report builder, and the Gemini request. They need no network and no keys. They can't tell you whether the real Gemini behaves, which is what `live_check.ts` (step 2) is for.
 
 ## Known limits
 
-- **Screen-time usage is empty today.** `shared_ledger` holds no usage for any account yet, so emails are challenge-only until the iPhone app syncs it. The first synced week switches the usage sections on by itself.
-- **Timezones aren't synced.** `user_settings.timezone` exists but every account holds the default (`America/Denver`). Until the apps write the phone's timezone there, everyone gets their email at 8am Denver time.
-- **No unsubscribe toggle in Settings yet.** Unsubscribing is by the email link only (stored in `weekly_report_optouts`). It isn't kept in `app_preferences` because the apps only save the keys they know and could wipe it. A Settings switch should call a function that removes the row.
-- **The unsubscribe link takes effect on click.** Some mail security scanners open links, which can unsubscribe someone by mistake. Supabase serves Edge Function replies as plain text, so a confirmation page isn't possible without a separate page on the website.
+- **Screen-time usage is empty today.** `shared_ledger` holds no usage for any account yet, so reports are challenge-only until the iPhone app syncs it. The first synced week switches the usage sections on by itself.
+- **Timezones.** The website saves the browser's timezone, but the iPhone app doesn't yet, so a user who only uses the iPhone app keeps the default (`America/Denver`) and gets their report at 8am Denver time.
+- **People only see it when they open the app.** There is no email or push notification. A push saying "Your weekly report is ready" could reuse the existing push system once that is live.
 - **Gemini's free tier is rate limited.** People are processed one at a time, 20 per hourly run. A rate-limited call just uses the template for that person.
 - **Limits are estimated.** The server rebuilds each day's limit the way the app does (60, plus yesterday's results, minus penalties, plus emergency unlocks), so a day near its limit could differ slightly from what the app showed.
+- **The iPhone screen was compiled but not run.** The simulator can't install the app because of its Screen Time extension, so check Menu > Weekly report on a real iPhone.
