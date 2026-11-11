@@ -1,5 +1,6 @@
 -- TimeOut weekly report: who is due an email this week, the raw numbers for it, and a log of what was sent.
--- Run after apply-all-november-2026.sql and supabase-push.sql (it reuses the Vault secret and pg_cron/pg_net from that file).
+-- Run after apply-all-november-2026.sql. It doesn't need supabase-push.sql, but it shares that file's Vault secret
+-- (push_webhook_secret), so create the secret once if you haven't. The ping below does nothing until it exists.
 -- Safe to rerun. Setup steps: supabase/functions/weekly-report/README.md
 --
 -- How it fits together: pg_cron pings the weekly-report Edge Function every hour, but only when somebody is
@@ -9,6 +10,10 @@
 --
 -- The tables have row-level security with no policies, so clients can't reach them. Only the Edge Function
 -- (service role) calls the functions below.
+
+-- The hourly ping needs both. A project that never ran supabase-push.sql doesn't have them yet.
+create extension if not exists pg_net;
+create extension if not exists pg_cron;
 
 -- MARK: Tables
 

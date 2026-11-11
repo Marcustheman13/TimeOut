@@ -3,8 +3,7 @@
 //   claim -> stats -> AI decides how to frame the week -> checks -> email (Resend) -> record
 // Setup and testing steps: supabase/functions/weekly-report/README.md
 
-import { callModel } from "./ai.ts";
-import { type Decision, fallbackDecision, validateDecision } from "./decision.ts";
+import { DEFAULT_MODEL, writeDecision } from "./ai.ts";
 import { renderEmail } from "./email.ts";
 import { computeStats, type WeekStats, type WorkUser } from "./stats.ts";
 
@@ -74,18 +73,9 @@ interface Options {
   force: boolean;
 }
 
-async function writeWords(stats: WeekStats): Promise<{ decision: Decision; source: "ai" | "fallback"; note: string | null }> {
+function writeWords(stats: WeekStats) {
   const apiKey = Deno.env.get("GEMINI_API_KEY");
-  if (!apiKey) return { decision: fallbackDecision(stats), source: "fallback", note: "GEMINI_API_KEY isn't set" };
-  try {
-    const raw = await callModel(stats, { apiKey, model: Deno.env.get("GEMINI_MODEL") ?? "gemini-2.5-flash" });
-    const checked = validateDecision(raw, stats);
-    if (checked.ok) return { decision: checked.decision, source: "ai", note: null };
-    // The AI's answer failed a check, so the template writes this one instead. The reason is kept in the log.
-    return { decision: fallbackDecision(stats), source: "fallback", note: `AI answer rejected: ${checked.reason}` };
-  } catch (error) {
-    return { decision: fallbackDecision(stats), source: "fallback", note: `AI call failed: ${String(error).slice(0, 200)}` };
-  }
+  return writeDecision(stats, apiKey ? { apiKey, model: Deno.env.get("GEMINI_MODEL") ?? DEFAULT_MODEL } : null);
 }
 
 async function sendEmail(user: WorkUser, subject: string, html: string, text: string, unsubscribe: string): Promise<string> {
