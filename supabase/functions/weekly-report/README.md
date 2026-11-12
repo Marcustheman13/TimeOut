@@ -41,8 +41,8 @@ pg_cron (hourly) ─► timeout_ping_weekly_report()      only calls out if some
 
 **Where people see it, and how they're told.**
 
-- **Home:** a "Weekly report" card sits under the tier strip all week, showing the latest headline. When the next report is published, the card switches to it (and the older one moves to "Other weeks" on the report page).
-- **Menu > Weekly report:** the full report, with a "New" tag and an unread dot on the menu until it is opened.
+- **Home:** a "Weekly report" card with a "New" tag sits under the tier strip while the latest report is unopened. Opening it takes the card away, and the next report brings it back.
+- **Menu > Weekly report:** always there. It holds the latest report and past weeks, so people can come back to it any time. The menu shows a "New" tag and an unread dot until the latest one is opened.
 - **A "Your weekly report is ready" alert, once per new report.** On the website and in the iPhone app it is a banner while the app is open (the apps check for a new report every few minutes). On the iPhone, a normal notification is also sent when iOS wakes the app in the background, which is how a person who never opens TimeOut still hears about it. Turning the report off in Settings stops the alert.
 
 **What the apps can read.** Only `timeout_my_weekly_reports` (the signed-in person's own published reports) and `timeout_mark_weekly_report_read`. The table itself has row-level security with no policies, so nobody can read it directly.

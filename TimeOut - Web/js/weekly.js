@@ -56,14 +56,14 @@
     if (TO.app && TO.app.tab === 'home' && document.getElementById('view')) TO.app.renderView();
   };
 
-  /** The Home card: the latest report, there all week until the next one replaces it. */
+  /** The Home card for a report nobody has opened yet. Opening it (Menu > Weekly report) takes the card away; a new report brings it back. */
   weekly.strip = () => {
     const newest = weekly.list[0];
-    if (!newest) return '';
+    if (!newest || newest.read) return '';
     const r = newest.report;
     return `<button class="weekly-strip" data-act="settings" data-section="weekly">
       <span class="lr-icon">${icon('chart', 17)}</span>
-      <span class="ws-main"><span class="ws-top"><b>Weekly report</b><span class="faint">${esc(r.range || '')}</span>${newest.read ? '' : '<span class="tag green">New</span>'}</span><span class="ws-head">${esc(r.headline)}</span></span>
+      <span class="ws-main"><span class="ws-top"><b>Weekly report</b><span class="faint">${esc(r.range || '')}</span><span class="tag green">New</span></span><span class="ws-head">${esc(r.headline)}</span></span>
       <span class="faint">${icon('chevR', 16)}</span></button>`;
   };
 

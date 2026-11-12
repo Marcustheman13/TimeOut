@@ -288,10 +288,11 @@ struct AppLockBanner: View {
     }
 }
 
-/// The latest weekly report, on Home all week until the next one replaces it.
+/// The latest weekly report, on Home only until it is opened. Opening it (Menu > Weekly report) takes the card away,
+/// and a new report brings it back.
 struct WeeklyReportStrip: View {
     var body: some View {
-        if let newest = WeeklyReports.shared.list.first {
+        if let newest = WeeklyReports.shared.list.first, !newest.read {
             Button { SettingsModel.open("weekly") } label: {
                 HStack(spacing: 12) {
                     LrIcon(icon: .chart)
@@ -299,7 +300,7 @@ struct WeeklyReportStrip: View {
                         HStack(spacing: 8) {
                             Text("Weekly report").eyebrow()
                             Text(newest.range).font(.barlow(12.5)).foregroundStyle(Theme.muted)
-                            if !newest.read { Tag("New", .green) }
+                            Tag("New", .green)
                         }
                         Text(newest.headline).font(.barlow(15, 700)).foregroundStyle(Theme.text).lineLimit(1)
                     }
