@@ -894,6 +894,10 @@ a.btn, a.dn, a.sn { text-decoration: none; color: inherit; }
 .weekly-strip .ws-head { font-size: 15px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .weekly-page .eyebrow { margin-top: 8px; }
 
+/* A list row that is a link (the privacy policy) looks like the other rows */
+a.list-row, a.list-row:visited { color: var(--text); text-decoration: none; }
+a.list-row:hover { background: var(--raised); }
+
 </style>
 <style>
 /* TimeOut in the browser, from phone to desktop widths. Loaded after app.css by index.html.
@@ -7591,6 +7595,9 @@ window.TIMEOUT_SUPABASE = {
       ${row('record', 'My record', 'Wins and losses', 'chart')}
       ${row('minutes', 'Minutes won or lost', 'Your leaderboard number', 'hourglass')}
       ${row('challenges', 'My active challenges', 'Picks you currently have open', 'target')}
+    </div>
+    <div class="list">
+      <a class="list-row" href="privacy.html" target="_blank" rel="noopener"><span class="lr-icon">${icon('shield', 17)}</span><span class="lr-main"><div class="lr-title">Privacy policy</div><div class="lr-sub">How TimeOut handles your data</div></span><span class="faint">${icon('chevR', 16)}</span></a>
     </div>`;
   }
 
@@ -7623,7 +7630,7 @@ window.TIMEOUT_SUPABASE = {
           ${ui.field({ id: 'acct-new', label: 'New password', type: 'password', err: acctErr.newPassword, hint: 'At least 8 characters' })}
           <button class="btn ghost" data-act="acct-pw">Update password</button>
         </div>
-        <div class="stack-s"><a class="btn ghost" href="privacy.html" target="_blank" rel="noopener">${icon('shield', 18)} Privacy policy</a><button class="btn ghost" data-act="logout">${icon('logout', 18)} Log out</button><button class="btn quiet" style="color:var(--loss)" data-act="acct-delete">Delete account</button></div>`;
+        <div class="stack-s"><button class="btn ghost" data-act="logout">${icon('logout', 18)} Log out</button><button class="btn quiet" style="color:var(--loss)" data-act="acct-delete">Delete account</button></div>`;
     }
     return `<div class="photo-pick"><label class="ph" for="acct-photo" style="cursor:pointer"><img src="${esc(a.photo)}" alt="Profile photo"><span class="cam">${icon('camera', 15)}</span></label><div><b>Profile photo</b><div class="small muted">Tap the photo to change it.</div></div><input type="file" id="acct-photo" accept="image/*" class="sr" data-change="acct-photo"></div>
       <div class="card stack">
@@ -7638,7 +7645,6 @@ window.TIMEOUT_SUPABASE = {
         <button class="btn ghost" data-act="acct-pw">Update password</button>
       </div>
       <div class="stack-s">
-        <a class="btn ghost" href="privacy.html" target="_blank" rel="noopener">${icon('shield', 18)} Privacy policy</a>
         <button class="btn ghost" data-act="logout">${icon('logout', 18)} Log out</button>
         <button class="btn quiet" style="color:var(--loss)" data-act="acct-delete">Delete account</button>
         <div class="tiny faint" style="text-align:center">Demo accounts are stored only in this browser.</div>

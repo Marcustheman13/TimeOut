@@ -492,6 +492,7 @@ struct NotificationsSection: View {
 
 struct PrivacySection: View {
     private var store: Store { .shared }
+    @Environment(\.openURL) private var openURL
     var body: some View {
         let p = store.data?.settings.privacy ?? PrivacySettings()
         Text("Friends only see what you turn on here. Anything off shows as \"Private\" to them.").font(.barlow(13)).foregroundStyle(Theme.text2)
@@ -499,6 +500,10 @@ struct PrivacySection: View {
             row(.chart, "My record", "Wins and losses", p.record) { v in store.updateSettings { $0.privacy.record = v } }
             row(.hourglass, "Minutes won or lost", "Your leaderboard number", p.minutes) { v in store.updateSettings { $0.privacy.minutes = v } }
             row(.target, "My active challenges", "Picks you currently have open", p.challenges) { v in store.updateSettings { $0.privacy.challenges = v } }
+        }
+        ListBox {
+            ListRow("Privacy policy", sub: AttributedString("How TimeOut handles your data")) { LrIcon(icon: .shield) } trailing: { Icon(.chevR, 16).foregroundStyle(Theme.muted) }
+                .onTapGesture { openURL(API.privacyURL) }
         }
     }
 
@@ -511,7 +516,6 @@ struct PrivacySection: View {
 struct AccountSection: View {
     private var store: Store { .shared }
     private var ui: UIState { .shared }
-    @Environment(\.openURL) private var openURL
     @State private var username = ""
     @State private var email = ""
     @State private var current = ""
@@ -565,7 +569,6 @@ struct AccountSection: View {
             }
             .card()
             VStack(spacing: 8) {
-                Button { openURL(API.privacyURL) } label: { BtnLabel("Privacy policy", icon: .shield) }.buttonStyle(.btn(.ghost, full: true))
                 Button { Auth.logout() } label: { BtnLabel("Log out", icon: .logout) }.buttonStyle(.btn(.ghost, full: true))
                 Button { deleteAccount() } label: { Text(deleting ? "Deleting account…" : "Delete account").foregroundStyle(Theme.loss) }
                     .buttonStyle(.btn(.quiet, full: true)).disabled(deleting)
