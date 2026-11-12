@@ -9,7 +9,9 @@ final class API {
 
     static let baseURL = "https://obegznrsxlbpmtbmqkll.supabase.co"
     static let publishableKey = "sb_publishable_Ye3rhYIle7db-4O9DL_IHw_xz88b-sB"
-    /// Where the confirmation email sends people back to. It must be in Supabase's Redirect URLs (the live site is).
+    /// Where confirmation and password emails send people. Always the live site, never localhost,
+    /// so a link opened from Gmail reaches the deployed app. It must be Supabase's Site URL and
+    /// listed under Authentication → URL Configuration → Redirect URLs.
     static let returnURL = "https://marcustheman13.github.io/TimeOut/"
     /// The web app, used for invite links so anyone can open them.
     static let webURL = "https://marcustheman13.github.io/TimeOut/"

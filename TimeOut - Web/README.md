@@ -77,10 +77,13 @@ The web demo uses Supabase Auth for email/password accounts, saves user preferen
 1. The main schema and challenge RPCs have been applied. Run [`../server/db/supabase-settings-migration.sql`](../server/db/supabase-settings-migration.sql) in **SQL Editor** to add the JSON settings field used for locked apps and other app preferences.
 2. Run [`db/tier-system-migration.sql`](db/tier-system-migration.sql) in **SQL Editor** to persist locked-app settings, daily tier bonuses, point-value boosts, and combo protection usage. It is safe to rerun after an earlier version.
 3. Confirm **Email provider** is enabled under **Authentication → Providers**. Email confirmation is enabled, so new users must confirm their email before logging in.
-   After **Create account**, the app shows a *Verify your email* page. It logs the new user in by itself as soon as the email is confirmed, and the link in the email also logs them straight in. For the link to come back to the app, add these under **Authentication → URL Configuration → Redirect URLs** (plus your real site's address once it's hosted):
-   - `https://marcustheman13.github.io/TimeOut/**` (the live site)
-   - `http://localhost:3000/**`
-   - `http://localhost:8765/**` (only if you preview with the static server)
+   After **Create account**, the app shows a *Verify your email* page. It logs the new user in by itself as soon as the email is confirmed, and the link in the email also logs them straight in. Signing up on `localhost` still sends that link to the live site, so opening it from Gmail does not try to load `localhost:3000`.
+
+   In **Authentication → URL Configuration**:
+   - Set **Site URL** to `https://marcustheman13.github.io/TimeOut/` (not `http://localhost:3000`). Supabase falls back to the Site URL when a redirect is missing, and that address is what the email uses.
+   - Under **Redirect URLs**, keep:
+     - `https://marcustheman13.github.io/TimeOut/**` (required; this is where confirmation links go)
+     - `http://localhost:3000/**` and `http://localhost:8765/**` only if you still want those pages to be allowed redirects for other auth flows
 4. Serve this app over HTTP (`cd server && npm start`, then open `http://localhost:3000`). Supabase sign-in does not work from the serverless `file://` mode.
 
 The frontend's publishable key is in `js/supabase-config.js`; publishable keys are intended to be public. The main schema enables row-level security, and the RPCs verify the signed-in owner before changing challenges or wallet balances. Never put a Supabase secret/service-role key in this project or in browser code. The legacy local demo remains available only when Supabase is not configured.

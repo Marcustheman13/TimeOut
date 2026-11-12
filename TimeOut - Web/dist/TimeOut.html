@@ -666,6 +666,8 @@ label.list-row { cursor: pointer; }
   box-shadow: 0 14px 34px rgba(0, 0, 0, 0.5);
   animation: drop 0.3s cubic-bezier(0.2, 0.9, 0.3, 1);
   cursor: pointer;
+  touch-action: none;
+  user-select: none;
 }
 .toast .tt { font-weight: 800; font-size: 14.5px; }
 .toast .tm { font-size: 13px; color: var(--text-2); margin-top: 1px; }
@@ -4406,9 +4408,16 @@ window.TIMEOUT_SUPABASE = {
     return api.configured;
   };
 
-  /** Where the confirmation email sends people back to: the app or browser page they signed up on.
-   *  Supabase only allows it if it matches a Redirect URL in Authentication > URL Configuration. */
-  const returnUrl = () => `${location.origin}${location.pathname}`;
+  /** Live site. Confirmation and password emails always return here when someone signs up
+   *  on a local dev server, so the link in Gmail opens the deployed app instead of localhost. */
+  const LIVE_SITE = 'https://marcustheman13.github.io/TimeOut/';
+  const returnUrl = () => {
+    const host = location.hostname;
+    const local = host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0' || location.protocol === 'file:';
+    if (local) return LIVE_SITE;
+    return `${location.origin}${location.pathname}`;
+  };
+  api.confirmationReturnUrl = returnUrl;
 
   api.resendConfirmation = async (email) => {
     await authRequest(`resend?redirect_to=${encodeURIComponent(returnUrl())}`, { type: 'signup', email: String(email || '').trim() });
@@ -4782,7 +4791,7 @@ window.TIMEOUT_SUPABASE = {
 
   /** Emails a password-reset link. Opening it signs the person in here, where Account can set a new password. */
   api.sendPasswordReset = async (email) => {
-    const res = await fetch(`${config.url}/auth/v1/recover?redirect_to=${encodeURIComponent(`${location.origin}${location.pathname}`)}`, {
+    const res = await fetch(`${config.url}/auth/v1/recover?redirect_to=${encodeURIComponent(returnUrl())}`, {
       method: 'POST', headers: authHeaders(false), body: JSON.stringify({ email: String(email).trim() }),
     });
     await parseResponse(res);
@@ -5172,7 +5181,42 @@ window.TIMEOUT_SUPABASE = {
     el.setAttribute('role', 'status');
     el.innerHTML = `${icon(ic, 20)}<div class="grow"><div class="tt">${esc(title)}</div>${msg ? `<div class="tm">${esc(msg)}</div>` : ''}</div>`;
     const kill = () => { el.classList.add('out'); setTimeout(() => el.remove(), 260); };
-    el.addEventListener('click', kill);
+    el.addEventListener('click', () => { if (!el.dataset.swiped) kill(); });
+    // Swipe up dismisses the banner. A small movement still counts as a tap.
+    let startY = 0;
+    let dy = 0;
+    let tracking = false;
+    el.addEventListener('pointerdown', (e) => {
+      tracking = true;
+      startY = e.clientY;
+      dy = 0;
+      delete el.dataset.swiped;
+      el.style.transition = 'none';
+      try { el.setPointerCapture(e.pointerId); } catch (err) { /* already released */ }
+    });
+    el.addEventListener('pointermove', (e) => {
+      if (!tracking) return;
+      dy = Math.min(0, e.clientY - startY);
+      el.style.transform = `translateY(${dy}px)`;
+      el.style.opacity = String(Math.max(0.15, 1 + dy / 90));
+    });
+    const release = () => {
+      if (!tracking) return;
+      tracking = false;
+      if (dy < -36) {
+        el.dataset.swiped = '1';
+        el.style.transition = 'transform 0.2s ease, opacity 0.2s ease';
+        el.style.transform = 'translateY(-120%)';
+        el.style.opacity = '0';
+        setTimeout(() => el.remove(), 200);
+        return;
+      }
+      el.style.transition = 'transform 0.2s ease, opacity 0.2s ease';
+      el.style.transform = '';
+      el.style.opacity = '';
+    };
+    el.addEventListener('pointerup', release);
+    el.addEventListener('pointercancel', release);
     host.appendChild(el);
     while (host.children.length > 3) host.firstChild.remove();
     setTimeout(kill, ms);
@@ -7390,7 +7434,6 @@ window.TIMEOUT_SUPABASE = {
         ${item('account')}
         <button class="dn" data-act="how">${icon('help', 20)}App walkthrough</button>
         <a class="dn" href="support.html" target="_blank" rel="noopener">${icon('info', 20)}Help & support</a>
-        <a class="dn" href="privacy.html" target="_blank" rel="noopener">${icon('shield', 20)}Privacy policy</a>
         <button class="dn" data-act="logout">${icon('logout', 20)}Log out</button>
       </nav></aside>`;
     ui.layer().appendChild(wrap);
@@ -7536,7 +7579,7 @@ window.TIMEOUT_SUPABASE = {
           ${ui.field({ id: 'acct-new', label: 'New password', type: 'password', err: acctErr.newPassword, hint: 'At least 8 characters' })}
           <button class="btn ghost" data-act="acct-pw">Update password</button>
         </div>
-        <div class="stack-s"><button class="btn ghost" data-act="logout">${icon('logout', 18)} Log out</button><button class="btn quiet" style="color:var(--loss)" data-act="acct-delete">Delete account</button></div>`;
+        <div class="stack-s"><a class="btn ghost" href="privacy.html" target="_blank" rel="noopener">${icon('shield', 18)} Privacy policy</a><button class="btn ghost" data-act="logout">${icon('logout', 18)} Log out</button><button class="btn quiet" style="color:var(--loss)" data-act="acct-delete">Delete account</button></div>`;
     }
     return `<div class="photo-pick"><label class="ph" for="acct-photo" style="cursor:pointer"><img src="${esc(a.photo)}" alt="Profile photo"><span class="cam">${icon('camera', 15)}</span></label><div><b>Profile photo</b><div class="small muted">Tap the photo to change it.</div></div><input type="file" id="acct-photo" accept="image/*" class="sr" data-change="acct-photo"></div>
       <div class="card stack">
@@ -7551,6 +7594,7 @@ window.TIMEOUT_SUPABASE = {
         <button class="btn ghost" data-act="acct-pw">Update password</button>
       </div>
       <div class="stack-s">
+        <a class="btn ghost" href="privacy.html" target="_blank" rel="noopener">${icon('shield', 18)} Privacy policy</a>
         <button class="btn ghost" data-act="logout">${icon('logout', 18)} Log out</button>
         <button class="btn quiet" style="color:var(--loss)" data-act="acct-delete">Delete account</button>
         <div class="tiny faint" style="text-align:center">Demo accounts are stored only in this browser.</div>
@@ -8588,7 +8632,6 @@ window.TIMEOUT_SUPABASE = {
         ${MENU.map(([k, t, ic]) => item(k, t, ic)).join('')}
         <button class="sn" data-act="how" title="App walkthrough">${icon('help', 19)}<span class="sn-l">App walkthrough</span></button>
         <a class="sn" href="support.html" target="_blank" rel="noopener" title="Help & support">${icon('info', 19)}<span class="sn-l">Help & support</span></a>
-        <a class="sn" href="privacy.html" target="_blank" rel="noopener" title="Privacy policy">${icon('shield', 19)}<span class="sn-l">Privacy policy</span></a>
       </nav>
       <div class="side-foot">
         <button class="side-user" data-act="settings" data-section="account" title="@${esc(TO.account.username)}">${ui.avatar(TO.account.photo)}<span class="sn-l"><b class="ellipsis" style="display:block">@${esc(TO.account.username)}</b><span style="display:block;margin-top:3px">${ui.tierBadge(wl.tier.id, true)}</span></span></button>

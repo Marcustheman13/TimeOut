@@ -35,7 +35,6 @@
         ${item('account')}
         <button class="dn" data-act="how">${icon('help', 20)}App walkthrough</button>
         <a class="dn" href="support.html" target="_blank" rel="noopener">${icon('info', 20)}Help & support</a>
-        <a class="dn" href="privacy.html" target="_blank" rel="noopener">${icon('shield', 20)}Privacy policy</a>
         <button class="dn" data-act="logout">${icon('logout', 20)}Log out</button>
       </nav></aside>`;
     ui.layer().appendChild(wrap);
@@ -181,7 +180,7 @@
           ${ui.field({ id: 'acct-new', label: 'New password', type: 'password', err: acctErr.newPassword, hint: 'At least 8 characters' })}
           <button class="btn ghost" data-act="acct-pw">Update password</button>
         </div>
-        <div class="stack-s"><button class="btn ghost" data-act="logout">${icon('logout', 18)} Log out</button><button class="btn quiet" style="color:var(--loss)" data-act="acct-delete">Delete account</button></div>`;
+        <div class="stack-s"><a class="btn ghost" href="privacy.html" target="_blank" rel="noopener">${icon('shield', 18)} Privacy policy</a><button class="btn ghost" data-act="logout">${icon('logout', 18)} Log out</button><button class="btn quiet" style="color:var(--loss)" data-act="acct-delete">Delete account</button></div>`;
     }
     return `<div class="photo-pick"><label class="ph" for="acct-photo" style="cursor:pointer"><img src="${esc(a.photo)}" alt="Profile photo"><span class="cam">${icon('camera', 15)}</span></label><div><b>Profile photo</b><div class="small muted">Tap the photo to change it.</div></div><input type="file" id="acct-photo" accept="image/*" class="sr" data-change="acct-photo"></div>
       <div class="card stack">
@@ -196,6 +195,7 @@
         <button class="btn ghost" data-act="acct-pw">Update password</button>
       </div>
       <div class="stack-s">
+        <a class="btn ghost" href="privacy.html" target="_blank" rel="noopener">${icon('shield', 18)} Privacy policy</a>
         <button class="btn ghost" data-act="logout">${icon('logout', 18)} Log out</button>
         <button class="btn quiet" style="color:var(--loss)" data-act="acct-delete">Delete account</button>
         <div class="tiny faint" style="text-align:center">Demo accounts are stored only in this browser.</div>

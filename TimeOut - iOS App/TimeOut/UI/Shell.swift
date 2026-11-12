@@ -435,8 +435,7 @@ struct ToastHost: View {
     var body: some View {
         VStack(spacing: 8) {
             ForEach(ui.toasts) { t in
-                ToastView(toast: t)
-                    .onTapGesture { ui.dismissToast(t.id) }
+                ToastView(toast: t) { ui.dismissToast(t.id) }
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
             Spacer(minLength: 0)
@@ -449,6 +448,9 @@ struct ToastHost: View {
 
 struct ToastView: View {
     var toast: Toast
+    var dismiss: () -> Void
+    @State private var drag: CGFloat = 0
+
     var body: some View {
         let (icon, color): (IconName, Color) = {
             switch toast.kind {
@@ -470,7 +472,19 @@ struct ToastView: View {
         .background(Theme.raised, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(toast.kind == .info ? Theme.stroke : color.opacity(0.5), lineWidth: 1))
         .shadow(color: .black.opacity(0.5), radius: 17, y: 14)
+        .offset(y: drag)
+        .gesture(
+            DragGesture(minimumDistance: 8)
+                .onChanged { value in drag = min(0, value.translation.height) }
+                .onEnded { value in
+                    if value.translation.height < -36 { dismiss() }
+                    else { withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { drag = 0 } }
+                }
+        )
+        .onTapGesture { dismiss() }
         .accessibilityElement(children: .combine)
+        .accessibilityHint("Swipe up to dismiss")
+        .accessibilityAction { dismiss() }
     }
 }
 

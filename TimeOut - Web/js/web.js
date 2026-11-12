@@ -67,7 +67,6 @@
         ${MENU.map(([k, t, ic]) => item(k, t, ic)).join('')}
         <button class="sn" data-act="how" title="App walkthrough">${icon('help', 19)}<span class="sn-l">App walkthrough</span></button>
         <a class="sn" href="support.html" target="_blank" rel="noopener" title="Help & support">${icon('info', 19)}<span class="sn-l">Help & support</span></a>
-        <a class="sn" href="privacy.html" target="_blank" rel="noopener" title="Privacy policy">${icon('shield', 19)}<span class="sn-l">Privacy policy</span></a>
       </nav>
       <div class="side-foot">
         <button class="side-user" data-act="settings" data-section="account" title="@${esc(TO.account.username)}">${ui.avatar(TO.account.photo)}<span class="sn-l"><b class="ellipsis" style="display:block">@${esc(TO.account.username)}</b><span style="display:block;margin-top:3px">${ui.tierBadge(wl.tier.id, true)}</span></span></button>
