@@ -11,19 +11,35 @@
   const unread = () => weekly.list.filter((r) => !r.read).length;
   weekly.unread = unread;
 
+  let lastAt = 0;
+  const announcedKey = () => `timeout.weekly.announced.${(TO.account && TO.account.server && TO.account.server.id) || ''}`;
+
+  /** A banner the first time a new report is seen, once per week, and only if the person hasn't turned the report off. */
+  function announceNew() {
+    const newest = weekly.list[0];
+    if (!newest || newest.read || !TO.data || TO.data.settings.notify.weekly === false) return;
+    if (TO.store.get(announcedKey(), '') === newest.week) return;
+    TO.store.set(announcedKey(), newest.week);
+    ui.toast({ kind: 'info', title: 'Your weekly report is ready', msg: newest.report.headline, ms: 9000, onClick: () => TO.actions.settings({ dataset: { section: 'weekly' } }) });
+  }
+
   const shouldLoad = () => !!(TO.account && TO.account.server && TO.api && TO.api.weeklyReports);
 
   /** Fetches the latest reports and updates the menu dots. Quiet when the server has none or can't be reached. */
-  weekly.refresh = async () => {
+  weekly.refresh = async (force = true) => {
     if (!shouldLoad()) return;
+    if (!force && Date.now() - lastAt < 4 * 60 * 1000) return;
     const rows = await TO.api.weeklyReports();
     if (!rows || !TO.data) return;
     // A week opened a moment ago may not be marked read on the server yet, so keep what this device already knows.
     const seen = new Set(weekly.list.filter((r) => r.read).map((r) => r.week));
     weekly.list = rows.filter((r) => r && r.report && r.report.headline).map((r) => ({ week: String(r.weekStart), read: !!r.read || seen.has(String(r.weekStart)), report: r.report }));
     weekly.loaded = true;
+    lastAt = Date.now();
     weekly.sel = Math.min(weekly.sel, Math.max(0, weekly.list.length - 1));
     if (TO.app && TO.app.renderChrome) TO.app.renderChrome();
+    if (TO.app && TO.app.tab === 'home' && document.getElementById('view')) TO.app.renderView();
+    announceNew();
     if (document.querySelector('[data-page="settings"] .weekly-page')) {
       ui.refreshPage('settings');
       weekly.markShown();
@@ -37,6 +53,18 @@
     shown.read = true;
     TO.api.markWeeklyReportRead(shown.week);
     if (TO.app && TO.app.renderChrome) TO.app.renderChrome();
+    if (TO.app && TO.app.tab === 'home' && document.getElementById('view')) TO.app.renderView();
+  };
+
+  /** The Home card: the latest report, there all week until the next one replaces it. */
+  weekly.strip = () => {
+    const newest = weekly.list[0];
+    if (!newest) return '';
+    const r = newest.report;
+    return `<button class="weekly-strip" data-act="settings" data-section="weekly">
+      <span class="lr-icon">${icon('chart', 17)}</span>
+      <span class="ws-main"><span class="ws-top"><b>Weekly report</b><span class="faint">${esc(r.range || '')}</span>${newest.read ? '' : '<span class="tag green">New</span>'}</span><span class="ws-head">${esc(r.headline)}</span></span>
+      <span class="faint">${icon('chevR', 16)}</span></button>`;
   };
 
   const toneOf = (status) => (status === 'under' ? 'green' : status === 'over' ? 'red' : 'faint');

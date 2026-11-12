@@ -262,6 +262,7 @@
       ${walletCard(wl)}
       ${lock}
       ${statusStrip(wl)}
+      ${TO.weekly.strip()}
       ${openChallengesStrip()}
       <div class="stack feed" style="gap:12px">
         ${filterBar(games)}

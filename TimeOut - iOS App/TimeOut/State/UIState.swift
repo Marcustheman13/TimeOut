@@ -183,6 +183,8 @@ final class UIState {
 
     /// Switches tabs (closing pages and the drawer) and scrolls to the top.
     func go(_ tab: String) {
+        // The weekly report notification opens the report page, which isn't a tab.
+        if tab == "weekly" { SettingsModel.open("weekly"); return }
         closeAllPages()
         drawerOpen = false
         self.tab = tab
