@@ -493,9 +493,10 @@
     const userId = tokenUserId();
     if (!userId) throw new TO.AppError('bad_token', 'Your session is invalid. Log in again.');
     const body = { id: userId };
-    if (patch.username != null) body.username = patch.username;
+    // The name other people see (display_name) is always the username, so it changes with it.
+    if (patch.username != null) { body.username = patch.username; body.display_name = patch.username; }
     if (patch.photoUrl != null) body.avatar_url = patch.photoUrl;
-    if (Object.keys(body).length > 1) await rest(`profiles?id=eq.${encodeURIComponent(userId)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ username: body.username, avatar_url: body.avatar_url }) });
+    if (Object.keys(body).length > 1) await rest(`profiles?id=eq.${encodeURIComponent(userId)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ username: body.username, display_name: body.display_name, avatar_url: body.avatar_url }) });
     if (patch.email || patch.password) {
       const res = await fetch(`${config.url}/auth/v1/user`, { method: 'PUT', headers: authHeaders(true), body: JSON.stringify({ ...(patch.email ? { email: patch.email } : {}), ...(patch.password ? { password: patch.password } : {}) }) });
       await parseResponse(res);

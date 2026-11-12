@@ -581,7 +581,8 @@ final class API {
         try await ensureFreshSession()
         guard let userId = tokenUserId else { throw AppError(code: "bad_token", message: "Your session is invalid. Log in again.") }
         var body: [String: Any] = [:]
-        if let u = patch.username { body["username"] = u }
+        // The name other people see (display_name) is always the username, so it changes with it.
+        if let u = patch.username { body["username"] = u; body["display_name"] = u }
         if let p = patch.photoUrl { body["avatar_url"] = p }
         if !body.isEmpty {
             _ = try await rest("profiles?id=eq.\(Self.enc(userId))", method: "PATCH", body: body, extra: ["Prefer": "return=minimal"])
