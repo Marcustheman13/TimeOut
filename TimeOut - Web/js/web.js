@@ -27,6 +27,8 @@
     ['account', 'Account', 'user'],
   ];
 
+  const isAdmin = () => !!TO.admin?.isAdmin();
+
   app.shellHtml = () => `<div class="app web-shell" id="shell">
       <aside class="side" id="side" aria-label="Main"></aside>
       <div class="side-scrim" data-act="side-toggle"></div>
@@ -65,6 +67,7 @@
         ${tabs}
         <div class="side-label eyebrow">Screen time & settings</div>
         ${MENU.map(([k, t, ic]) => item(k, t, ic)).join('')}
+        ${isAdmin() ? `<button class="sn ${TO.admin.active ? 'on' : ''}" data-act="admin-open" title="Admin"><span class="ic">${icon('shield', 19)}</span><span class="sn-l">Admin</span></button>` : ''}
         <button class="sn" data-act="how" title="App walkthrough">${icon('help', 19)}<span class="sn-l">App walkthrough</span></button>
         <a class="sn" href="support.html" target="_blank" rel="noopener" title="Help & support">${icon('info', 19)}<span class="sn-l">Help & support</span></a>
       </nav>

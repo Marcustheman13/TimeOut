@@ -220,9 +220,32 @@
     const user = await parseResponse(res);
     const profileRows = await rest(`profiles?select=username,display_name,avatar_url,created_at&id=eq.${encodeURIComponent(user.id)}&limit=1`);
     const profile = profileRows[0] || {};
+    const isAdmin = await rest('rpc/timeout_admin_is_admin', { method: 'POST', body: '{}' }).catch(() => null);
     return { id: user.id, username: profile.username || user.user_metadata?.username || user.email?.split('@')[0] || 'player', email: user.email,
-      photoUrl: profile.avatar_url || user.user_metadata?.avatar_url || null, createdAt: profile.created_at || user.created_at, isDemo: false };
+      photoUrl: profile.avatar_url || user.user_metadata?.avatar_url || null, createdAt: profile.created_at || user.created_at, isDemo: false, isAdmin: typeof isAdmin === 'boolean' ? isAdmin : null };
   };
+  // Admin operations use database RPCs that independently verify the signed-in user's
+  // provisioned identity. The browser allowlist controls navigation only.
+  async function adminRpc(name, body = {}) {
+    const controller = new AbortController();
+    let timer;
+    const timeout = new Promise((resolve, reject) => {
+      timer = setTimeout(() => {
+        controller.abort();
+        const error = new Error('Admin request timed out.'); error.name = 'TimeoutError'; reject(error);
+      }, 15000);
+    });
+    try {
+      return await Promise.race([rest(`rpc/${name}`, { method: 'POST', body: JSON.stringify(body), signal: controller.signal }), timeout]);
+    } finally { clearTimeout(timer); }
+  }
+  api.adminUsers = async () => adminRpc('timeout_admin_list_users');
+  api.adminFirstWeekBets = async () => adminRpc('timeout_admin_okr_first_week_bets');
+  api.adminActiveUsers7d = async () => adminRpc('timeout_admin_okr_active_users_7d');
+  api.adminUsersInTeam = async () => adminRpc('timeout_admin_okr_users_in_team');
+  api.adminAvgFriends = async () => adminRpc('timeout_admin_okr_avg_friends');
+  api.adminUpdateUser = async (user) => adminRpc('timeout_admin_update_user', { p_user: user.id, p_username: user.username, p_display_name: user.displayName, p_avatar_url: user.avatarUrl || null });
+  api.adminDeleteUser = async (id) => adminRpc('timeout_admin_delete_user', { p_user: id });
   api.loadState = async () => {
     const id = tokenUserId();
     if (!id) return null;

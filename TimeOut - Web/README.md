@@ -86,6 +86,12 @@ The web demo uses Supabase Auth for email/password accounts, saves user preferen
      - `http://localhost:3000/**` and `http://localhost:8765/**` only if you still want those pages to be allowed redirects for other auth flows
 4. Serve this app over HTTP (`cd server && npm start`, then open `http://localhost:3000`). Supabase sign-in does not work from the serverless `file://` mode.
 
+## Website admin page
+
+The website sidebar shows **Admin** to the `@easton.putnam`, `@time_out_account`, `@wrfairholm`, and `@obr0` accounts. To enable the page and its user-management actions, run [`../server/db/supabase-admin.sql`](../server/db/supabase-admin.sql) in Supabase SQL Editor after the main Supabase schema has been applied. The migration provisions the matching accounts that already exist; if any of those accounts are created later, rerun the migration to provision them. Authorization is checked by the database functions, and admin accounts cannot be deleted from the page. User email and password are not editable there; admins can edit usernames, display names, and avatar URLs.
+
+The dashboard's four OKR metrics are backed by admin-only database RPCs in `supabase-admin.sql`. Rerun that SQL file after adding metric queries to install or update the functions.
+
 The frontend's publishable key is in `js/supabase-config.js`; publishable keys are intended to be public. The main schema enables row-level security, and the RPCs verify the signed-in owner before changing challenges or wallet balances. Never put a Supabase secret/service-role key in this project or in browser code. The legacy local demo remains available only when Supabase is not configured.
 
 Challenge placement currently validates point value in the app and persists the resulting slip in the user's state. This is a screen-time challenging demo; it does not move money or resolve regulated pledges.
