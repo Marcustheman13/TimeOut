@@ -77,7 +77,9 @@ final class AppModel {
             AuthModel.shared.startOnboarding()
             return
         }
-        ui.tab = Notifier.shared.takeLaunchTab() ?? "home"
+        let launch = Notifier.shared.takeLaunchTab()
+        ui.tab = launch == "weekly" ? "home" : (launch ?? "home")
+        if launch == "weekly" { SettingsModel.open("weekly") }
         live.refresh(force: true)
         live.refreshUpcoming()
         Task {
@@ -214,6 +216,7 @@ final class AppModel {
         _ = await live.loadOldChallengeGames(TO.now())
         notifyResolved(store.resolve(TO.now()))
         await syncSocial()
+        await WeeklyReports.shared.refresh(force: true) // a new report arrives as a notification even if the app was closed
         ScreenTime.shared.sync()
         try? await API.shared.flushState()
     }

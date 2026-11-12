@@ -885,6 +885,15 @@ a.btn, a.dn, a.sn { text-decoration: none; color: inherit; }
 .wr-day { display: grid; grid-template-columns: 1fr auto auto 56px; gap: 12px; padding: 8px 0; border-top: 1px solid var(--stroke); align-items: baseline; }
 .wr-day > :nth-child(n+2) { text-align: right; }
 
+/* Weekly report card on Home */
+.weekly-strip { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px 14px; background: var(--surface); border: 1px solid var(--stroke); border-radius: 14px; text-align: left; color: var(--text); cursor: pointer; transition: border-color 0.15s; }
+.weekly-strip:hover { border-color: #3a4558; }
+.weekly-strip .ws-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.weekly-strip .ws-top { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
+.weekly-strip .ws-top b { font-size: 12.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-2); }
+.weekly-strip .ws-head { font-size: 15px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.weekly-page .eyebrow { margin-top: 8px; }
+
 </style>
 <style>
 /* TimeOut in the browser, from phone to desktop widths. Loaded after app.css by index.html.
@@ -1018,7 +1027,7 @@ button.wt-stat:hover { border-color: #3a4558; }
 .web .view > * { max-width: var(--content-max); margin-inline: auto; }
 .web .view .stack { gap: 20px; }
 /* Phone cards sit 16px in from the screen edge; here the content column provides the gutter instead. */
-.web .view :is(.card, .wallet, .status-strip, .app-lock, .promo) { margin-inline: 0; }
+.web .view :is(.card, .wallet, .status-strip, .weekly-strip, .app-lock, .promo) { margin-inline: 0; }
 .web .view .card[style*="margin:0 16px"] { margin-inline: 0 !important; }
 .web .view :is(.pad, .section-title, .hscroll, .league-head) { padding-inline: 0; }
 .web .view :is(.status-strip, .app-lock) { width: 100%; }
@@ -5176,7 +5185,7 @@ window.TIMEOUT_SUPABASE = {
     });
 
   // ---------- Toasts ----------
-  ui.toast = ({ title, msg = '', kind = 'info', ms = 4200 }) => {
+  ui.toast = ({ title, msg = '', kind = 'info', ms = 4200, onClick }) => {
     const host = document.getElementById('toasts');
     if (!host) return;
     const ic = { win: 'check', loss: 'x', warn: 'alert', info: 'info' }[kind] || 'info';
@@ -5185,7 +5194,9 @@ window.TIMEOUT_SUPABASE = {
     el.setAttribute('role', 'status');
     el.innerHTML = `${icon(ic, 20)}<div class="grow"><div class="tt">${esc(title)}</div>${msg ? `<div class="tm">${esc(msg)}</div>` : ''}</div>`;
     const kill = () => { el.classList.add('out'); setTimeout(() => el.remove(), 260); };
-    el.addEventListener('click', () => { if (!el.dataset.swiped) kill(); });
+    // A tap dismisses it, and runs its action if it has one. A swipe only dismisses.
+    el.addEventListener('click', () => { if (!el.dataset.swiped) { kill(); if (onClick) onClick(); } });
+    if (onClick) el.style.cursor = 'pointer';
     // Swipe up dismisses the banner. A small movement still counts as a tap.
     let startY = 0;
     let dy = 0;
@@ -6137,6 +6148,7 @@ window.TIMEOUT_SUPABASE = {
       ${walletCard(wl)}
       ${lock}
       ${statusStrip(wl)}
+      ${TO.weekly.strip()}
       ${openChallengesStrip()}
       <div class="stack feed" style="gap:12px">
         ${filterBar(games)}
@@ -7326,19 +7338,35 @@ window.TIMEOUT_SUPABASE = {
   const unread = () => weekly.list.filter((r) => !r.read).length;
   weekly.unread = unread;
 
+  let lastAt = 0;
+  const announcedKey = () => `timeout.weekly.announced.${(TO.account && TO.account.server && TO.account.server.id) || ''}`;
+
+  /** A banner the first time a new report is seen, once per week, and only if the person hasn't turned the report off. */
+  function announceNew() {
+    const newest = weekly.list[0];
+    if (!newest || newest.read || !TO.data || TO.data.settings.notify.weekly === false) return;
+    if (TO.store.get(announcedKey(), '') === newest.week) return;
+    TO.store.set(announcedKey(), newest.week);
+    ui.toast({ kind: 'info', title: 'Your weekly report is ready', msg: newest.report.headline, ms: 9000, onClick: () => TO.actions.settings({ dataset: { section: 'weekly' } }) });
+  }
+
   const shouldLoad = () => !!(TO.account && TO.account.server && TO.api && TO.api.weeklyReports);
 
   /** Fetches the latest reports and updates the menu dots. Quiet when the server has none or can't be reached. */
-  weekly.refresh = async () => {
+  weekly.refresh = async (force = true) => {
     if (!shouldLoad()) return;
+    if (!force && Date.now() - lastAt < 4 * 60 * 1000) return;
     const rows = await TO.api.weeklyReports();
     if (!rows || !TO.data) return;
     // A week opened a moment ago may not be marked read on the server yet, so keep what this device already knows.
     const seen = new Set(weekly.list.filter((r) => r.read).map((r) => r.week));
     weekly.list = rows.filter((r) => r && r.report && r.report.headline).map((r) => ({ week: String(r.weekStart), read: !!r.read || seen.has(String(r.weekStart)), report: r.report }));
     weekly.loaded = true;
+    lastAt = Date.now();
     weekly.sel = Math.min(weekly.sel, Math.max(0, weekly.list.length - 1));
     if (TO.app && TO.app.renderChrome) TO.app.renderChrome();
+    if (TO.app && TO.app.tab === 'home' && document.getElementById('view')) TO.app.renderView();
+    announceNew();
     if (document.querySelector('[data-page="settings"] .weekly-page')) {
       ui.refreshPage('settings');
       weekly.markShown();
@@ -7352,6 +7380,18 @@ window.TIMEOUT_SUPABASE = {
     shown.read = true;
     TO.api.markWeeklyReportRead(shown.week);
     if (TO.app && TO.app.renderChrome) TO.app.renderChrome();
+    if (TO.app && TO.app.tab === 'home' && document.getElementById('view')) TO.app.renderView();
+  };
+
+  /** The Home card: the latest report, there all week until the next one replaces it. */
+  weekly.strip = () => {
+    const newest = weekly.list[0];
+    if (!newest) return '';
+    const r = newest.report;
+    return `<button class="weekly-strip" data-act="settings" data-section="weekly">
+      <span class="lr-icon">${icon('chart', 17)}</span>
+      <span class="ws-main"><span class="ws-top"><b>Weekly report</b><span class="faint">${esc(r.range || '')}</span>${newest.read ? '' : '<span class="tag green">New</span>'}</span><span class="ws-head">${esc(r.headline)}</span></span>
+      <span class="faint">${icon('chevR', 16)}</span></button>`;
   };
 
   const toneOf = (status) => (status === 'under' ? 'green' : status === 'over' ? 'red' : 'faint');
@@ -8560,6 +8600,7 @@ window.TIMEOUT_SUPABASE = {
     }
     setInterval(() => app.tick(false), 1000);
     setInterval(() => syncRemoteState(), REMOTE_SYNC_MS);
+    setInterval(() => TO.weekly.refresh(false), 60 * 1000); // checks for a new report at most every few minutes
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
   else start();

@@ -171,7 +171,7 @@
     });
 
   // ---------- Toasts ----------
-  ui.toast = ({ title, msg = '', kind = 'info', ms = 4200 }) => {
+  ui.toast = ({ title, msg = '', kind = 'info', ms = 4200, onClick }) => {
     const host = document.getElementById('toasts');
     if (!host) return;
     const ic = { win: 'check', loss: 'x', warn: 'alert', info: 'info' }[kind] || 'info';
@@ -180,7 +180,9 @@
     el.setAttribute('role', 'status');
     el.innerHTML = `${icon(ic, 20)}<div class="grow"><div class="tt">${esc(title)}</div>${msg ? `<div class="tm">${esc(msg)}</div>` : ''}</div>`;
     const kill = () => { el.classList.add('out'); setTimeout(() => el.remove(), 260); };
-    el.addEventListener('click', () => { if (!el.dataset.swiped) kill(); });
+    // A tap dismisses it, and runs its action if it has one. A swipe only dismisses.
+    el.addEventListener('click', () => { if (!el.dataset.swiped) { kill(); if (onClick) onClick(); } });
+    if (onClick) el.style.cursor = 'pointer';
     // Swipe up dismisses the banner. A small movement still counts as a tap.
     let startY = 0;
     let dy = 0;

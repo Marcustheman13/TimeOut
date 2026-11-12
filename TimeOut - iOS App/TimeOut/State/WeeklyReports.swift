@@ -54,6 +54,17 @@ final class WeeklyReports {
         let seen = Set(list.filter(\.read).map(\.week))
         list = fresh.map { var r = $0; if seen.contains(r.week) { r.read = true }; return r }
         loaded = true
+        announceIfNew()
+    }
+
+    /// Tells the person once when a new report arrives: a banner if the app is open, a notification if it isn't.
+    /// Not if they turned the weekly report off in Settings.
+    private func announceIfNew() {
+        guard let newest = list.first, !newest.read, Store.shared.data?.settings.notify.weekly != false else { return }
+        let key = "timeout.weekly.announced.\(Store.shared.account?.id ?? "")"
+        guard UserDefaults.standard.string(forKey: key) != newest.week else { return }
+        UserDefaults.standard.set(newest.week, forKey: key)
+        Notifier.shared.announce(.info, "Your weekly report is ready", newest.headline, id: "weekly-\(newest.week)", tab: "weekly")
     }
 
     /// Opening a report counts as reading it.

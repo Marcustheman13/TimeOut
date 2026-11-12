@@ -92,6 +92,7 @@ struct HomeView: View {
                     WalletCard(wl: wl)
                     if wl.appsLocked && ScreenTime.shared.isEnforcing { AppLockBanner(wl: wl) }
                     StatusStrip(wl: wl)
+                    WeeklyReportStrip()
                     OpenChallengesStrip()
                     Section {
                         VStack(spacing: 12) {
@@ -284,6 +285,34 @@ struct AppLockBanner: View {
         }
         .buttonStyle(.press)
         .gutter()
+    }
+}
+
+/// The latest weekly report, on Home all week until the next one replaces it.
+struct WeeklyReportStrip: View {
+    var body: some View {
+        if let newest = WeeklyReports.shared.list.first {
+            Button { SettingsModel.open("weekly") } label: {
+                HStack(spacing: 12) {
+                    LrIcon(icon: .chart)
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: 8) {
+                            Text("Weekly report").eyebrow()
+                            Text(newest.range).font(.barlow(12.5)).foregroundStyle(Theme.muted)
+                            if !newest.read { Tag("New", .green) }
+                        }
+                        Text(newest.headline).font(.barlow(15, 700)).foregroundStyle(Theme.text).lineLimit(1)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    Icon(.chevR, 16).foregroundStyle(Theme.muted)
+                }
+                .padding(.vertical, 10).padding(.horizontal, 12)
+                .background(Theme.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Theme.stroke, lineWidth: 1))
+            }
+            .buttonStyle(.press)
+            .gutter()
+        }
     }
 }
 
