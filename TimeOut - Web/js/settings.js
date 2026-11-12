@@ -148,6 +148,9 @@
       ${row('record', 'My record', 'Wins and losses', 'chart')}
       ${row('minutes', 'Minutes won or lost', 'Your leaderboard number', 'hourglass')}
       ${row('challenges', 'My active challenges', 'Picks you currently have open', 'target')}
+    </div>
+    <div class="list">
+      <a class="list-row" href="privacy.html" target="_blank" rel="noopener"><span class="lr-icon">${icon('shield', 17)}</span><span class="lr-main"><div class="lr-title">Privacy policy</div><div class="lr-sub">How TimeOut handles your data</div></span><span class="faint">${icon('chevR', 16)}</span></a>
     </div>`;
   }
 
@@ -180,7 +183,7 @@
           ${ui.field({ id: 'acct-new', label: 'New password', type: 'password', err: acctErr.newPassword, hint: 'At least 8 characters' })}
           <button class="btn ghost" data-act="acct-pw">Update password</button>
         </div>
-        <div class="stack-s"><a class="btn ghost" href="privacy.html" target="_blank" rel="noopener">${icon('shield', 18)} Privacy policy</a><button class="btn ghost" data-act="logout">${icon('logout', 18)} Log out</button><button class="btn quiet" style="color:var(--loss)" data-act="acct-delete">Delete account</button></div>`;
+        <div class="stack-s"><button class="btn ghost" data-act="logout">${icon('logout', 18)} Log out</button><button class="btn quiet" style="color:var(--loss)" data-act="acct-delete">Delete account</button></div>`;
     }
     return `<div class="photo-pick"><label class="ph" for="acct-photo" style="cursor:pointer"><img src="${esc(a.photo)}" alt="Profile photo"><span class="cam">${icon('camera', 15)}</span></label><div><b>Profile photo</b><div class="small muted">Tap the photo to change it.</div></div><input type="file" id="acct-photo" accept="image/*" class="sr" data-change="acct-photo"></div>
       <div class="card stack">
@@ -195,7 +198,6 @@
         <button class="btn ghost" data-act="acct-pw">Update password</button>
       </div>
       <div class="stack-s">
-        <a class="btn ghost" href="privacy.html" target="_blank" rel="noopener">${icon('shield', 18)} Privacy policy</a>
         <button class="btn ghost" data-act="logout">${icon('logout', 18)} Log out</button>
         <button class="btn quiet" style="color:var(--loss)" data-act="acct-delete">Delete account</button>
         <div class="tiny faint" style="text-align:center">Demo accounts are stored only in this browser.</div>
