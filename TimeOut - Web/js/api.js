@@ -146,9 +146,16 @@
     return api.configured;
   };
 
-  /** Where the confirmation email sends people back to: the app or browser page they signed up on.
-   *  Supabase only allows it if it matches a Redirect URL in Authentication > URL Configuration. */
-  const returnUrl = () => `${location.origin}${location.pathname}`;
+  /** Live site. Confirmation and password emails always return here when someone signs up
+   *  on a local dev server, so the link in Gmail opens the deployed app instead of localhost. */
+  const LIVE_SITE = 'https://marcustheman13.github.io/TimeOut/';
+  const returnUrl = () => {
+    const host = location.hostname;
+    const local = host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0' || location.protocol === 'file:';
+    if (local) return LIVE_SITE;
+    return `${location.origin}${location.pathname}`;
+  };
+  api.confirmationReturnUrl = returnUrl;
 
   api.resendConfirmation = async (email) => {
     await authRequest(`resend?redirect_to=${encodeURIComponent(returnUrl())}`, { type: 'signup', email: String(email || '').trim() });
@@ -522,7 +529,7 @@
 
   /** Emails a password-reset link. Opening it signs the person in here, where Account can set a new password. */
   api.sendPasswordReset = async (email) => {
-    const res = await fetch(`${config.url}/auth/v1/recover?redirect_to=${encodeURIComponent(`${location.origin}${location.pathname}`)}`, {
+    const res = await fetch(`${config.url}/auth/v1/recover?redirect_to=${encodeURIComponent(returnUrl())}`, {
       method: 'POST', headers: authHeaders(false), body: JSON.stringify({ email: String(email).trim() }),
     });
     await parseResponse(res);

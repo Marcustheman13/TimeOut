@@ -76,7 +76,6 @@ struct DrawerView: View {
                             item("account", nil)
                             row(.help, "App walkthrough", nil) { HowItWorks.open() }
                             row(.info, "Help & support", nil) { openURL(API.supportURL) }
-                            row(.shield, "Privacy policy", nil) { openURL(API.privacyURL) }
                             row(.logout, "Log out", nil) { Auth.logout() }
                         }
                         .padding(.top, 8).padding(.horizontal, 8).padding(.bottom, 20)
@@ -512,6 +511,7 @@ struct PrivacySection: View {
 struct AccountSection: View {
     private var store: Store { .shared }
     private var ui: UIState { .shared }
+    @Environment(\.openURL) private var openURL
     @State private var username = ""
     @State private var email = ""
     @State private var current = ""
@@ -565,6 +565,7 @@ struct AccountSection: View {
             }
             .card()
             VStack(spacing: 8) {
+                Button { openURL(API.privacyURL) } label: { BtnLabel("Privacy policy", icon: .shield) }.buttonStyle(.btn(.ghost, full: true))
                 Button { Auth.logout() } label: { BtnLabel("Log out", icon: .logout) }.buttonStyle(.btn(.ghost, full: true))
                 Button { deleteAccount() } label: { Text(deleting ? "Deleting account…" : "Delete account").foregroundStyle(Theme.loss) }
                     .buttonStyle(.btn(.quiet, full: true)).disabled(deleting)

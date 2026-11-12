@@ -180,7 +180,42 @@
     el.setAttribute('role', 'status');
     el.innerHTML = `${icon(ic, 20)}<div class="grow"><div class="tt">${esc(title)}</div>${msg ? `<div class="tm">${esc(msg)}</div>` : ''}</div>`;
     const kill = () => { el.classList.add('out'); setTimeout(() => el.remove(), 260); };
-    el.addEventListener('click', kill);
+    el.addEventListener('click', () => { if (!el.dataset.swiped) kill(); });
+    // Swipe up dismisses the banner. A small movement still counts as a tap.
+    let startY = 0;
+    let dy = 0;
+    let tracking = false;
+    el.addEventListener('pointerdown', (e) => {
+      tracking = true;
+      startY = e.clientY;
+      dy = 0;
+      delete el.dataset.swiped;
+      el.style.transition = 'none';
+      try { el.setPointerCapture(e.pointerId); } catch (err) { /* already released */ }
+    });
+    el.addEventListener('pointermove', (e) => {
+      if (!tracking) return;
+      dy = Math.min(0, e.clientY - startY);
+      el.style.transform = `translateY(${dy}px)`;
+      el.style.opacity = String(Math.max(0.15, 1 + dy / 90));
+    });
+    const release = () => {
+      if (!tracking) return;
+      tracking = false;
+      if (dy < -36) {
+        el.dataset.swiped = '1';
+        el.style.transition = 'transform 0.2s ease, opacity 0.2s ease';
+        el.style.transform = 'translateY(-120%)';
+        el.style.opacity = '0';
+        setTimeout(() => el.remove(), 200);
+        return;
+      }
+      el.style.transition = 'transform 0.2s ease, opacity 0.2s ease';
+      el.style.transform = '';
+      el.style.opacity = '';
+    };
+    el.addEventListener('pointerup', release);
+    el.addEventListener('pointercancel', release);
     host.appendChild(el);
     while (host.children.length > 3) host.firstChild.remove();
     setTimeout(kill, ms);

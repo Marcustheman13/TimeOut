@@ -653,6 +653,8 @@ label.list-row { cursor: pointer; }
   box-shadow: 0 14px 34px rgba(0, 0, 0, 0.5);
   animation: drop 0.3s cubic-bezier(0.2, 0.9, 0.3, 1);
   cursor: pointer;
+  touch-action: none;
+  user-select: none;
 }
 .toast .tt { font-weight: 800; font-size: 14.5px; }
 .toast .tm { font-size: 13px; color: var(--text-2); margin-top: 1px; }
