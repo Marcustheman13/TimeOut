@@ -39,6 +39,12 @@ pg_cron (hourly) ─► timeout_ping_weekly_report()      only calls out if some
 
 **Data it uses.** Challenges come from `challenges` and `challenge_picks`. Screen-time usage comes from `user_settings.shared_ledger`, which the iPhone app writes. If that is empty, the report covers challenges only and leaves out anything about screen time.
 
+**Where people see it, and how they're told.**
+
+- **Home:** a "Weekly report" card with a "New" tag sits under the tier strip while the latest report is unopened. Opening it takes the card away, and the next report brings it back.
+- **Menu > Weekly report:** always there. It holds the latest report and past weeks, so people can come back to it any time. The menu shows a "New" tag and an unread dot until the latest one is opened.
+- **A "Your weekly report is ready" alert, once per new report.** On the website and in the iPhone app it is a banner while the app is open (the apps check for a new report every few minutes). On the iPhone, a normal notification is also sent when iOS wakes the app in the background, which is how a person who never opens TimeOut still hears about it. Turning the report off in Settings stops the alert.
+
 **What the apps can read.** Only `timeout_my_weekly_reports` (the signed-in person's own published reports) and `timeout_mark_weekly_report_read`. The table itself has row-level security with no policies, so nobody can read it directly.
 
 ## Setup
@@ -125,7 +131,7 @@ Covers the stats arithmetic, the checks on the AI's answer, the retry and fallba
 
 - **Screen-time usage is empty today.** `shared_ledger` holds no usage for any account yet, so reports are challenge-only until the iPhone app syncs it. The first synced week switches the usage sections on by itself.
 - **Timezones.** The website saves the browser's timezone, but the iPhone app doesn't yet, so a user who only uses the iPhone app keeps the default (`America/Denver`) and gets their report at 8am Denver time.
-- **People only see it when they open the app.** There is no email or push notification. A push saying "Your weekly report is ready" could reuse the existing push system once that is live.
+- **The alert is not a real push notification.** The iPhone only learns about a new report when the app is open or when iOS wakes it in the background, which can take an hour or more and isn't guaranteed. A server push ("Your weekly report is ready" the moment it is published) could reuse the existing push system once that is live. The website can only alert while it is open.
 - **Gemini's free tier is rate limited.** People are processed one at a time, 20 per hourly run. A rate-limited call just uses the template for that person.
 - **Limits are estimated.** The server rebuilds each day's limit the way the app does (60, plus yesterday's results, minus penalties, plus emergency unlocks), so a day near its limit could differ slightly from what the app showed.
 - **The iPhone screen was compiled but not run.** The simulator can't install the app because of its Screen Time extension, so check Menu > Weekly report on a real iPhone.

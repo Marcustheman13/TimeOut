@@ -354,6 +354,7 @@
     }
     setInterval(() => app.tick(false), 1000);
     setInterval(() => syncRemoteState(), REMOTE_SYNC_MS);
+    setInterval(() => TO.weekly.refresh(false), 60 * 1000); // checks for a new report at most every few minutes
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
   else start();

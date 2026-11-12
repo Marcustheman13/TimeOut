@@ -129,7 +129,7 @@ button.wt-stat:hover { border-color: #3a4558; }
 .web .view > * { max-width: var(--content-max); margin-inline: auto; }
 .web .view .stack { gap: 20px; }
 /* Phone cards sit 16px in from the screen edge; here the content column provides the gutter instead. */
-.web .view :is(.card, .wallet, .status-strip, .app-lock, .promo) { margin-inline: 0; }
+.web .view :is(.card, .wallet, .status-strip, .weekly-strip, .app-lock, .promo) { margin-inline: 0; }
 .web .view .card[style*="margin:0 16px"] { margin-inline: 0 !important; }
 .web .view :is(.pad, .section-title, .hscroll, .league-head) { padding-inline: 0; }
 .web .view :is(.status-strip, .app-lock) { width: 100%; }

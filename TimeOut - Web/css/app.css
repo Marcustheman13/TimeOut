@@ -871,3 +871,16 @@ a.btn, a.dn, a.sn { text-decoration: none; color: inherit; }
 .wr-days { display: grid; gap: 0; font-size: 14px; }
 .wr-day { display: grid; grid-template-columns: 1fr auto auto 56px; gap: 12px; padding: 8px 0; border-top: 1px solid var(--stroke); align-items: baseline; }
 .wr-day > :nth-child(n+2) { text-align: right; }
+
+/* Weekly report card on Home */
+.weekly-strip { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px 14px; background: var(--surface); border: 1px solid var(--stroke); border-radius: 14px; text-align: left; color: var(--text); cursor: pointer; transition: border-color 0.15s; }
+.weekly-strip:hover { border-color: #3a4558; }
+.weekly-strip .ws-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.weekly-strip .ws-top { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
+.weekly-strip .ws-top b { font-size: 12.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-2); }
+.weekly-strip .ws-head { font-size: 15px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.weekly-page .eyebrow { margin-top: 8px; }
+
+/* A list row that is a link (the privacy policy) looks like the other rows */
+a.list-row, a.list-row:visited { color: var(--text); text-decoration: none; }
+a.list-row:hover { background: var(--raised); }

@@ -885,6 +885,19 @@ a.btn, a.dn, a.sn { text-decoration: none; color: inherit; }
 .wr-day { display: grid; grid-template-columns: 1fr auto auto 56px; gap: 12px; padding: 8px 0; border-top: 1px solid var(--stroke); align-items: baseline; }
 .wr-day > :nth-child(n+2) { text-align: right; }
 
+/* Weekly report card on Home */
+.weekly-strip { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px 14px; background: var(--surface); border: 1px solid var(--stroke); border-radius: 14px; text-align: left; color: var(--text); cursor: pointer; transition: border-color 0.15s; }
+.weekly-strip:hover { border-color: #3a4558; }
+.weekly-strip .ws-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.weekly-strip .ws-top { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
+.weekly-strip .ws-top b { font-size: 12.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-2); }
+.weekly-strip .ws-head { font-size: 15px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.weekly-page .eyebrow { margin-top: 8px; }
+
+/* A list row that is a link (the privacy policy) looks like the other rows */
+a.list-row, a.list-row:visited { color: var(--text); text-decoration: none; }
+a.list-row:hover { background: var(--raised); }
+
 </style>
 <style>
 /* TimeOut in the browser, from phone to desktop widths. Loaded after app.css by index.html.
@@ -1018,7 +1031,7 @@ button.wt-stat:hover { border-color: #3a4558; }
 .web .view > * { max-width: var(--content-max); margin-inline: auto; }
 .web .view .stack { gap: 20px; }
 /* Phone cards sit 16px in from the screen edge; here the content column provides the gutter instead. */
-.web .view :is(.card, .wallet, .status-strip, .app-lock, .promo) { margin-inline: 0; }
+.web .view :is(.card, .wallet, .status-strip, .weekly-strip, .app-lock, .promo) { margin-inline: 0; }
 .web .view .card[style*="margin:0 16px"] { margin-inline: 0 !important; }
 .web .view :is(.pad, .section-title, .hscroll, .league-head) { padding-inline: 0; }
 .web .view :is(.status-strip, .app-lock) { width: 100%; }
@@ -4841,9 +4854,10 @@ window.TIMEOUT_SUPABASE = {
     const userId = tokenUserId();
     if (!userId) throw new TO.AppError('bad_token', 'Your session is invalid. Log in again.');
     const body = { id: userId };
-    if (patch.username != null) body.username = patch.username;
+    // The name other people see (display_name) is always the username, so it changes with it.
+    if (patch.username != null) { body.username = patch.username; body.display_name = patch.username; }
     if (patch.photoUrl != null) body.avatar_url = patch.photoUrl;
-    if (Object.keys(body).length > 1) await rest(`profiles?id=eq.${encodeURIComponent(userId)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ username: body.username, avatar_url: body.avatar_url }) });
+    if (Object.keys(body).length > 1) await rest(`profiles?id=eq.${encodeURIComponent(userId)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ username: body.username, display_name: body.display_name, avatar_url: body.avatar_url }) });
     if (patch.email || patch.password) {
       const res = await fetch(`${config.url}/auth/v1/user`, { method: 'PUT', headers: authHeaders(true), body: JSON.stringify({ ...(patch.email ? { email: patch.email } : {}), ...(patch.password ? { password: patch.password } : {}) }) });
       await parseResponse(res);
@@ -5258,7 +5272,7 @@ window.TIMEOUT_SUPABASE = {
     });
 
   // ---------- Toasts ----------
-  ui.toast = ({ title, msg = '', kind = 'info', ms = 4200 }) => {
+  ui.toast = ({ title, msg = '', kind = 'info', ms = 4200, onClick }) => {
     const host = document.getElementById('toasts');
     if (!host) return;
     const ic = { win: 'check', loss: 'x', warn: 'alert', info: 'info' }[kind] || 'info';
@@ -5267,7 +5281,9 @@ window.TIMEOUT_SUPABASE = {
     el.setAttribute('role', 'status');
     el.innerHTML = `${icon(ic, 20)}<div class="grow"><div class="tt">${esc(title)}</div>${msg ? `<div class="tm">${esc(msg)}</div>` : ''}</div>`;
     const kill = () => { el.classList.add('out'); setTimeout(() => el.remove(), 260); };
-    el.addEventListener('click', () => { if (!el.dataset.swiped) kill(); });
+    // A tap dismisses it, and runs its action if it has one. A swipe only dismisses.
+    el.addEventListener('click', () => { if (!el.dataset.swiped) { kill(); if (onClick) onClick(); } });
+    if (onClick) el.style.cursor = 'pointer';
     // Swipe up dismisses the banner. A small movement still counts as a tap.
     let startY = 0;
     let dy = 0;
@@ -6219,6 +6235,7 @@ window.TIMEOUT_SUPABASE = {
       ${walletCard(wl)}
       ${lock}
       ${statusStrip(wl)}
+      ${TO.weekly.strip()}
       ${openChallengesStrip()}
       <div class="stack feed" style="gap:12px">
         ${filterBar(games)}
@@ -7408,19 +7425,35 @@ window.TIMEOUT_SUPABASE = {
   const unread = () => weekly.list.filter((r) => !r.read).length;
   weekly.unread = unread;
 
+  let lastAt = 0;
+  const announcedKey = () => `timeout.weekly.announced.${(TO.account && TO.account.server && TO.account.server.id) || ''}`;
+
+  /** A banner the first time a new report is seen, once per week, and only if the person hasn't turned the report off. */
+  function announceNew() {
+    const newest = weekly.list[0];
+    if (!newest || newest.read || !TO.data || TO.data.settings.notify.weekly === false) return;
+    if (TO.store.get(announcedKey(), '') === newest.week) return;
+    TO.store.set(announcedKey(), newest.week);
+    ui.toast({ kind: 'info', title: 'Your weekly report is ready', msg: newest.report.headline, ms: 9000, onClick: () => TO.actions.settings({ dataset: { section: 'weekly' } }) });
+  }
+
   const shouldLoad = () => !!(TO.account && TO.account.server && TO.api && TO.api.weeklyReports);
 
   /** Fetches the latest reports and updates the menu dots. Quiet when the server has none or can't be reached. */
-  weekly.refresh = async () => {
+  weekly.refresh = async (force = true) => {
     if (!shouldLoad()) return;
+    if (!force && Date.now() - lastAt < 4 * 60 * 1000) return;
     const rows = await TO.api.weeklyReports();
     if (!rows || !TO.data) return;
     // A week opened a moment ago may not be marked read on the server yet, so keep what this device already knows.
     const seen = new Set(weekly.list.filter((r) => r.read).map((r) => r.week));
     weekly.list = rows.filter((r) => r && r.report && r.report.headline).map((r) => ({ week: String(r.weekStart), read: !!r.read || seen.has(String(r.weekStart)), report: r.report }));
     weekly.loaded = true;
+    lastAt = Date.now();
     weekly.sel = Math.min(weekly.sel, Math.max(0, weekly.list.length - 1));
     if (TO.app && TO.app.renderChrome) TO.app.renderChrome();
+    if (TO.app && TO.app.tab === 'home' && document.getElementById('view')) TO.app.renderView();
+    announceNew();
     if (document.querySelector('[data-page="settings"] .weekly-page')) {
       ui.refreshPage('settings');
       weekly.markShown();
@@ -7434,6 +7467,18 @@ window.TIMEOUT_SUPABASE = {
     shown.read = true;
     TO.api.markWeeklyReportRead(shown.week);
     if (TO.app && TO.app.renderChrome) TO.app.renderChrome();
+    if (TO.app && TO.app.tab === 'home' && document.getElementById('view')) TO.app.renderView();
+  };
+
+  /** The Home card for a report nobody has opened yet. Opening it (Menu > Weekly report) takes the card away; a new report brings it back. */
+  weekly.strip = () => {
+    const newest = weekly.list[0];
+    if (!newest || newest.read) return '';
+    const r = newest.report;
+    return `<button class="weekly-strip" data-act="settings" data-section="weekly">
+      <span class="lr-icon">${icon('chart', 17)}</span>
+      <span class="ws-main"><span class="ws-top"><b>Weekly report</b><span class="faint">${esc(r.range || '')}</span><span class="tag green">New</span></span><span class="ws-head">${esc(r.headline)}</span></span>
+      <span class="faint">${icon('chevR', 16)}</span></button>`;
   };
 
   const toneOf = (status) => (status === 'under' ? 'green' : status === 'over' ? 'red' : 'faint');
@@ -7633,6 +7678,9 @@ window.TIMEOUT_SUPABASE = {
       ${row('record', 'My record', 'Wins and losses', 'chart')}
       ${row('minutes', 'Minutes won or lost', 'Your leaderboard number', 'hourglass')}
       ${row('challenges', 'My active challenges', 'Picks you currently have open', 'target')}
+    </div>
+    <div class="list">
+      <a class="list-row" href="privacy.html" target="_blank" rel="noopener"><span class="lr-icon">${icon('shield', 17)}</span><span class="lr-main"><div class="lr-title">Privacy policy</div><div class="lr-sub">How TimeOut handles your data</div></span><span class="faint">${icon('chevR', 16)}</span></a>
     </div>`;
   }
 
@@ -7665,7 +7713,7 @@ window.TIMEOUT_SUPABASE = {
           ${ui.field({ id: 'acct-new', label: 'New password', type: 'password', err: acctErr.newPassword, hint: 'At least 8 characters' })}
           <button class="btn ghost" data-act="acct-pw">Update password</button>
         </div>
-        <div class="stack-s"><a class="btn ghost" href="privacy.html" target="_blank" rel="noopener">${icon('shield', 18)} Privacy policy</a><button class="btn ghost" data-act="logout">${icon('logout', 18)} Log out</button><button class="btn quiet" style="color:var(--loss)" data-act="acct-delete">Delete account</button></div>`;
+        <div class="stack-s"><button class="btn ghost" data-act="logout">${icon('logout', 18)} Log out</button><button class="btn quiet" style="color:var(--loss)" data-act="acct-delete">Delete account</button></div>`;
     }
     return `<div class="photo-pick"><label class="ph" for="acct-photo" style="cursor:pointer"><img src="${esc(a.photo)}" alt="Profile photo"><span class="cam">${icon('camera', 15)}</span></label><div><b>Profile photo</b><div class="small muted">Tap the photo to change it.</div></div><input type="file" id="acct-photo" accept="image/*" class="sr" data-change="acct-photo"></div>
       <div class="card stack">
@@ -7680,7 +7728,6 @@ window.TIMEOUT_SUPABASE = {
         <button class="btn ghost" data-act="acct-pw">Update password</button>
       </div>
       <div class="stack-s">
-        <a class="btn ghost" href="privacy.html" target="_blank" rel="noopener">${icon('shield', 18)} Privacy policy</a>
         <button class="btn ghost" data-act="logout">${icon('logout', 18)} Log out</button>
         <button class="btn quiet" style="color:var(--loss)" data-act="acct-delete">Delete account</button>
         <div class="tiny faint" style="text-align:center">Demo accounts are stored only in this browser.</div>
@@ -8642,6 +8689,7 @@ window.TIMEOUT_SUPABASE = {
     }
     setInterval(() => app.tick(false), 1000);
     setInterval(() => syncRemoteState(), REMOTE_SYNC_MS);
+    setInterval(() => TO.weekly.refresh(false), 60 * 1000); // checks for a new report at most every few minutes
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
   else start();
