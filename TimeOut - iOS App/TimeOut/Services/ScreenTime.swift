@@ -76,6 +76,8 @@ final class ScreenTime {
     private(set) var isShieldActive = false
     private(set) var overrideUntil: Date?
     private(set) var lastError: String?
+    /// True once Apple's Screen Time prompt has been shown this launch, so onboarding can move on whatever the answer.
+    private(set) var hasAsked = false
     /// Minutes used on blocked apps today, from the last checkpoint.
     private(set) var usedToday = 0
     private(set) var selection: FamilyActivitySelection
@@ -148,11 +150,12 @@ final class ScreenTime {
     }
 
     func requestAuthorization() async {
+        defer { hasAsked = true }
         do {
             try await AuthorizationCenter.shared.requestAuthorization(for: .individual)
             lastError = nil
         } catch {
-            lastError = "Screen Time access wasn't granted, so TimeOut can't block apps yet. Tap Allow Screen Time to try again."
+            lastError = "Screen Time access wasn't granted, so TimeOut can't block apps. You can turn it on later in Settings."
         }
         refreshStatus()
         sync()

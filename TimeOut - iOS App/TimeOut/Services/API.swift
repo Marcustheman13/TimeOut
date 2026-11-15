@@ -756,13 +756,14 @@ final class API {
 
     // MARK: Teams
 
-    struct RemoteTeam { var id: String; var name: String; var start: String; var end: String; var owner: String?; var members: [String] }
+    struct RemoteTeam { var id: String; var name: String; var start: String; var end: String; var owner: String?; var members: [String]; var invited: [String] = [] }
     enum TeamFetch { case team(RemoteTeam), gone, unreachable }
 
     private static func team(_ json: JSON) -> RemoteTeam? {
         guard let id = json["id"].text else { return nil }
         return RemoteTeam(id: id, name: json["name"].string ?? "", start: json["start"].string ?? "", end: json["end"].string ?? "",
-                          owner: json["owner"].text, members: json["members"].array.compactMap(\.string))
+                          owner: json["owner"].text, members: json["members"].array.compactMap(\.string),
+                          invited: json["invited"].array.compactMap(\.string))
     }
 
     private var canUseTeams: Bool { configured && token != nil }
@@ -770,7 +771,9 @@ final class API {
     /// Save one new team. A repeat with the same link returns the roster and does not add people again.
     func publishTeam(_ team: Squad) async -> RemoteTeam? {
         guard let key = team.shareKey, canUseTeams else { return nil }
-        let body: [String: Any] = ["p_id": team.id, "p_name": team.name, "p_start": team.start, "p_end": team.end, "p_key": key, "p_members": team.members]
+        let body: [String: Any] = ["p_id": team.id, "p_name": team.name, "p_start": team.start, "p_end": team.end, "p_key": key,
+                                   // Everyone but the creator is invited, not added: they join only if they accept.
+                                   "p_members": team.invited ?? []]
         return (try? await rest("rpc/timeout_save_team", method: "POST", body: body, timeout: 4)).flatMap(Self.team)
     }
 
@@ -812,5 +815,20 @@ final class API {
     func myTeams() async -> [RemoteTeam]? {
         guard canUseTeams, let rows = try? await rest("rpc/timeout_my_teams", method: "POST", body: [String: Any](), timeout: 4), rows.isArray else { return nil }
         return rows.array.compactMap(Self.team)
+    }
+
+    /// Team invites waiting for this profile. Nil means "don't change the local list".
+    func myTeamInvites() async -> [TeamInvite]? {
+        guard canUseTeams, let rows = try? await rest("rpc/timeout_my_team_invites", method: "POST", body: [String: Any](), timeout: 4), rows.isArray else { return nil }
+        return rows.array.compactMap { r in
+            guard let id = r["id"].text, let name = r["name"].string else { return nil }
+            return TeamInvite(id: id, name: name, start: String((r["start"].string ?? "").prefix(10)), end: String((r["end"].string ?? "").prefix(10)),
+                              owner: r["owner"].text ?? "", from: r["from"].text ?? "", key: r["key"].text)
+        }
+    }
+
+    func declineTeamInvite(_ id: String) async throws {
+        guard canUseTeams else { return }
+        _ = try await rest("rpc/timeout_decline_team_invite", method: "POST", body: ["p_id": id], timeout: 6)
     }
 }

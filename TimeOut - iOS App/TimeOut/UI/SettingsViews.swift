@@ -282,7 +282,7 @@ struct ScreenTimeSection: View {
         switch st.status {
         case .approved: return st.hasSelection ? "\(st.selectionSummary) · \(store.lockPoints(store.data ?? store.freshData(TO.now()))) lock points" : "Choose the apps Screen Time blocks"
         case .denied: return "Screen Time access is off"
-        case .notDetermined: return "Allow Screen Time to block apps for real"
+        case .notDetermined: return "Set up Screen Time to block apps for real"
         }
     }
 
@@ -682,7 +682,7 @@ struct ScreenTimeSetupCard: View {
         let step = st.setupStep
         VStack(alignment: .leading, spacing: 14) {
             VStack(spacing: 0) {
-                stepRow(1, "Allow Screen Time", "You approve it with Face ID or your passcode.", done: st.status == .approved, active: step == .allow)
+                stepRow(1, "Screen Time access", "Next, iOS asks whether TimeOut can use Screen Time. It only covers the apps you choose to lock on this iPhone.", done: st.status == .approved, active: step == .allow)
                 HRule()
                 stepRow(2, "Choose the apps to block", st.hasSelection ? st.selectionSummary : "Apple keeps the list private: TimeOut only sees how many you picked.", done: st.hasSelection, active: step == .pick)
                 HRule()
@@ -692,7 +692,7 @@ struct ScreenTimeSetupCard: View {
             .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Theme.stroke, lineWidth: 1))
 
             if st.status == .denied {
-                Note(.warn, icon: .alert, "Screen Time access is off. Tap Allow Screen Time to try again, or turn it on for TimeOut in iPhone Settings › Screen Time.")
+                Note(.warn, icon: .alert, "Screen Time access is off, so TimeOut can't lock apps. Everything else in TimeOut still works. To use app limits, turn access on in Settings › Screen Time › Apps with Screen Time Access.")
             }
             if let err = st.lastError {
                 FormError(err)
@@ -718,14 +718,20 @@ struct ScreenTimeSetupCard: View {
     @ViewBuilder private func primaryButton(_ step: ScreenTime.SetupStep) -> some View {
         switch step {
         case .allow:
-            Button("Allow Screen Time") {
-                Task {
-                    await st.requestAuthorization()
-                    // Go straight to the next step, so setup stays one flow.
-                    if st.status == .approved && !st.hasSelection { openPicker() }
+            if st.status == .denied {
+                // The person said no: respect it and point to Settings instead of asking again.
+                Button { openSettings() } label: { BtnLabel("Open Settings", icon: .sliders) }.buttonStyle(.btn(.primary, full: true))
+            } else {
+                // The message above explains the request; Continue always goes straight to Apple's prompt.
+                Button("Continue") {
+                    Task {
+                        await st.requestAuthorization()
+                        // Go straight to the next step, so setup stays one flow.
+                        if st.status == .approved && !st.hasSelection { openPicker() }
+                    }
                 }
+                .buttonStyle(.btn(.primary, full: true))
             }
-            .buttonStyle(.btn(.primary, full: true))
         case .pick:
             Button { openPicker() } label: { BtnLabel("Choose apps to block", icon: .lock) }.buttonStyle(.btn(.primary, full: true))
         case .turnOn:
@@ -737,6 +743,10 @@ struct ScreenTimeSetupCard: View {
         case .done:
             Button { openPicker() } label: { BtnLabel("Change apps", icon: .lock) }.buttonStyle(.btn(.ghost, full: true))
         }
+    }
+
+    private func openSettings() {
+        if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
     }
 
     private func openPicker() {
