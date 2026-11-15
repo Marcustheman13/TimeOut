@@ -536,8 +536,14 @@ struct OnboardScreen: View {
                     Button(model.sports.isEmpty ? "Pick at least one" : "Next") { model.step += 1 }
                         .buttonStyle(.btn(.primary, full: true)).disabled(model.sports.isEmpty)
                 default:
-                    Button("Start a challenge") { model.finishOnboarding(skip: false) }.buttonStyle(.btn(.primary, full: true))
-                    Button("Skip for now") { model.finishOnboarding(skip: true) }.buttonStyle(.btn(.quiet, .sm, full: true))
+                    // No way around the Screen Time message: its Continue button always leads to Apple's prompt.
+                    // Once the person has answered (yes or no), they can finish.
+                    if ScreenTime.shared.status != .notDetermined || ScreenTime.shared.hasAsked {
+                        Button("Start a challenge") { model.finishOnboarding(skip: false) }.buttonStyle(.btn(.primary, full: true))
+                        if ScreenTime.shared.status == .approved && !ScreenTime.shared.hasSelection {
+                            Button("Choose apps later") { model.finishOnboarding(skip: true) }.buttonStyle(.btn(.quiet, .sm, full: true))
+                        }
+                    }
                 }
             }
             .padding(.horizontal, 22).padding(.bottom, 30)

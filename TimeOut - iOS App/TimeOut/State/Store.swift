@@ -1193,6 +1193,7 @@ final class Store {
         if !remote.end.isEmpty { local.end = String(remote.end.prefix(10)) }
         if let owner = remote.owner, !owner.isEmpty { local.owner = owner }
         if !remote.members.isEmpty { local.members = remote.members }
+        local.invited = remote.invited
         local.remote = true
     }
 
@@ -1230,10 +1231,52 @@ final class Store {
             mutateData(acc.id) { d in
                 if let i = d.teams.firstIndex(where: { $0.id == team.id }) {
                     d.teams[i].name = team.name; d.teams[i].start = team.start; d.teams[i].end = team.end
-                    d.teams[i].owner = team.owner; d.teams[i].members = team.members
+                    d.teams[i].owner = team.owner; d.teams[i].members = team.members; d.teams[i].invited = team.invited
                 } else { d.teams.append(team) }
             }
         }
+    }
+
+    /// On this device only (accounts without a server): put the invite in each invited account's list.
+    private func deliverInvites(_ team: Squad, to usernames: [String]) {
+        guard let me = account?.username else { return }
+        for u in usernames {
+            guard let acc = findAccountByUsername(u) else { continue }
+            mutateData(acc.id) { d in
+                guard !d.teams.contains(where: { $0.id == team.id }), !d.teamInvites.contains(where: { $0.id == team.id }) else { return }
+                d.teamInvites.append(TeamInvite(id: team.id, name: team.name, start: team.start, end: team.end, owner: team.owner, from: me, key: team.shareKey))
+            }
+        }
+    }
+
+    /// Joins a team you were invited to, the same way opening its link would.
+    @discardableResult
+    func acceptTeamInvite(_ invite: TeamInvite) throws -> Squad {
+        let team = try joinTeam(.init(id: invite.id, name: invite.name, start: invite.start, end: invite.end,
+                                      owner: invite.owner.isEmpty ? nil : invite.owner, shareKey: invite.key, members: []))
+        dropInvite(invite.id)
+        return team
+    }
+
+    /// Says no to a team invite. You never appear on the roster.
+    func declineTeamInvite(_ invite: TeamInvite) async throws {
+        if usesServerSocial { try await API.shared.declineTeamInvite(invite.id) }
+        dropInvite(invite.id)
+        guard let me = account?.username else { return }
+        for u in [invite.owner, invite.from] where !u.isEmpty {
+            guard let acc = findAccountByUsername(u) else { continue }
+            mutateData(acc.id) { d in
+                guard let i = d.teams.firstIndex(where: { $0.id == invite.id }) else { return }
+                d.teams[i].invited?.removeAll { Self.sameUser($0, me) }
+            }
+        }
+    }
+
+    private func dropInvite(_ id: String) {
+        guard var d = data, d.teamInvites.contains(where: { $0.id == id }) else { return }
+        d.teamInvites.removeAll { $0.id == id }
+        data = d
+        save()
     }
 
     @discardableResult
@@ -1254,11 +1297,11 @@ final class Store {
             seen.insert(u.lowercased())
             invited.append(u)
         }
-        let team = Squad(id: TO.uid("team"), name: name, start: start, end: end, members: [me] + invited, owner: me, createdAt: TO.now(),
-                         shareKey: Self.newShareKey(), remote: false, rev: 1)
+        let team = Squad(id: TO.uid("team"), name: name, start: start, end: end, members: [me], owner: me, createdAt: TO.now(),
+                         shareKey: Self.newShareKey(), remote: false, rev: 1, invited: invited)
         d.teams.append(team)
         data = d
-        syncTeamCopies(team)
+        deliverInvites(team, to: invited)
         save()
         publishTeam(team)
         return team
@@ -1288,8 +1331,8 @@ final class Store {
         var added: [String] = []
         for raw in members {
             let u = raw.trimmingCharacters(in: .whitespaces)
-            if u.isEmpty || t.members.contains(where: { Self.sameUser($0, u) }) { continue }
-            t.members.append(u)
+            if u.isEmpty || t.members.contains(where: { Self.sameUser($0, u) }) || (t.invited ?? []).contains(where: { Self.sameUser($0, u) }) { continue }
+            t.invited = (t.invited ?? []) + [u]
             added.append(u)
         }
         guard !added.isEmpty else { return }
@@ -1297,6 +1340,7 @@ final class Store {
         let team = t
         updateTeam(id) { $0 = team }
         syncTeamCopies(team)
+        deliverInvites(team, to: added)
         save()
         if team.shareKey != nil { for u in added { Task { _ = await API.shared.addTeamMember(team, username: u) } } }
     }
@@ -1323,6 +1367,8 @@ final class Store {
         add(snap.owner)
         snap.members.forEach { add($0.trimmingCharacters(in: .whitespaces)) }
         add(me)
+        team.invited?.removeAll { Self.sameUser($0, me) }
+        d.teamInvites.removeAll { $0.id == id }
         let rev = touch(&team)
         if let i = d.teams.firstIndex(where: { $0.id == id }) { d.teams[i] = team } else { d.teams.append(team) }
         data = d
@@ -1379,13 +1425,18 @@ final class Store {
                     }
                 } else {
                     d2.teams.append(Squad(id: r.id, name: r.name, start: String(r.start.prefix(10)), end: String(r.end.prefix(10)),
-                                          members: r.members.isEmpty ? [me] : r.members, owner: r.owner ?? me, createdAt: TO.now(), remote: true, rev: 1))
+                                          members: r.members.isEmpty ? [me] : r.members, owner: r.owner ?? me, createdAt: TO.now(), remote: true, rev: 1, invited: r.invited))
                     changed = true
                 }
             }
             let kept = d2.teams.filter { $0.shareKey != nil || $0.remote != true || seen.contains($0.id) }
             if kept.count != d2.teams.count { d2.teams = kept; changed = true }
             data = d2
+        }
+        if let invites = await API.shared.myTeamInvites(), var d3 = data {
+            let mine = Set(d3.teams.map(\.id))
+            let list = invites.filter { !mine.contains($0.id) }
+            if list != d3.teamInvites { d3.teamInvites = list; data = d3; changed = true }
         }
         if changed { saveQuiet() }
         // Real results for everyone on each roster, for the team's dates.

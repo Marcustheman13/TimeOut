@@ -251,7 +251,7 @@ struct ScreenTimeSetupBanner: View {
 
     private func detail(_ step: ScreenTime.SetupStep) -> String {
         switch step {
-        case .allow: return "TimeOut can't block anything yet. Allow Screen Time, pick your apps, and your limits become real. It takes about 30 seconds."
+        case .allow: return "TimeOut can't block anything yet. Turn on Screen Time access, pick your apps, and your limits become real. It takes about 30 seconds."
         case .pick: return "One step left. Pick the apps TimeOut locks when today's phone time runs out."
         default: return "Your apps won't lock when your phone time runs out, and your tier stays at Rookie."
         }

@@ -342,6 +342,20 @@ struct Squad: Codable, Hashable, Identifiable {
     var shareKey: String?
     var remote: Bool?
     var rev: Int?
+    /// People invited who haven't answered yet. They aren't on the roster until they accept.
+    var invited: [String]? = nil
+}
+
+/// A team someone invited you to. You're only added once you accept.
+struct TeamInvite: Codable, Hashable, Identifiable {
+    var id: String
+    var name: String
+    var start: String
+    var end: String
+    var owner: String
+    var from: String
+    /// The team link key, so accepting works the same as opening the team link.
+    var key: String?
 }
 
 /// What a user's devices share (`user_settings.shared_ledger`). Same shape as the web app's.
@@ -405,6 +419,7 @@ struct UserData: Codable {
     var requestsIn: [FriendRequest] = []
     var requestsOut: [FriendRequest] = []
     var teams: [Squad] = []
+    var teamInvites: [TeamInvite] = []
     var feedFilter: String?
     /// The Home "Live games only" switch. It works with whichever sport is picked.
     var feedLive = false
@@ -417,7 +432,7 @@ struct UserData: Codable {
 
     init(wallet: WalletData) { self.wallet = wallet }
 
-    enum CodingKeys: String, CodingKey { case sharedDevices, v, wallet, challenges, lastPledge, settings, onboarded, friends, requestsIn, requestsOut, teams, feedFilter, feedLive, socialProfiles, teamResults, socialSynced }
+    enum CodingKeys: String, CodingKey { case sharedDevices, v, wallet, challenges, lastPledge, settings, onboarded, friends, requestsIn, requestsOut, teams, teamInvites, feedFilter, feedLive, socialProfiles, teamResults, socialSynced }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -432,6 +447,7 @@ struct UserData: Codable {
         requestsIn = (try? c.decode([FriendRequest].self, forKey: .requestsIn)) ?? []
         requestsOut = (try? c.decode([FriendRequest].self, forKey: .requestsOut)) ?? []
         teams = (try? c.decode([Squad].self, forKey: .teams)) ?? []
+        teamInvites = (try? c.decode([TeamInvite].self, forKey: .teamInvites)) ?? []
         feedFilter = try? c.decodeIfPresent(String.self, forKey: .feedFilter)
         feedLive = (try? c.decode(Bool.self, forKey: .feedLive)) ?? false
         socialProfiles = (try? c.decode([String: SocialProfile].self, forKey: .socialProfiles)) ?? [:]

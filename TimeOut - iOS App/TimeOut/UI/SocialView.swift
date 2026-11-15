@@ -169,6 +169,7 @@ struct SocialView: View {
     var body: some View {
         let _ = app.tick
         let reqCount = store.data?.requestsIn.count ?? 0
+        let inviteCount = store.data?.teamInvites.count ?? 0
         return ScrollViewReader { proxy in
             ScrollView {
                 VStack(spacing: 0) {
@@ -186,7 +187,10 @@ struct SocialView: View {
                             SegButton(on: model.tab == "teams", action: {
                                 model.tab = "teams"
                                 Task { await store.refreshTeams() }
-                            }) { Text("Teams") }
+                            }) {
+                                Text("Teams")
+                                if inviteCount > 0 { CountPill(n: inviteCount, bg: Theme.live, fg: .white).scaleEffect(0.9) }
+                            }
                         }
                         .gutter()
                         switch model.tab {
@@ -473,6 +477,7 @@ struct TeamsList: View {
                 Button { UIState.shared.openSheet(.teamNew) } label: { BtnLabel("Create a team", icon: .plus, iconSize: 16) }.buttonStyle(.btn(.primary, .sm))
                 Button { UIState.shared.openSheet(.teamHow) } label: { BtnLabel("How teams work", icon: .info, iconSize: 16) }.buttonStyle(.btn(.ghost, .sm))
             }
+            TeamInvitesList()
             if list.isEmpty {
                 EmptyState(icon: .trophy, iconSize: 36, title: "No teams yet", text: "Start one with a few friends and pick a start and end date.")
             }
@@ -515,6 +520,63 @@ struct TeamsList: View {
             }
         }
         .gutter()
+    }
+}
+
+/// Teams you've been invited to. Nothing changes until you choose: Join puts you on the roster, Decline doesn't.
+struct TeamInvitesList: View {
+    private var store: Store { .shared }
+    private var ui: UIState { .shared }
+    @State private var busy: String?
+
+    var body: some View {
+        let invites = store.data?.teamInvites ?? []
+        if !invites.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Team invites").eyebrow().padding(.top, 4)
+                ForEach(invites) { inv in
+                    VStack(alignment: .leading, spacing: 10) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(inv.name).font(.barlow(16, 700))
+                            Text("@\(inv.from.isEmpty ? inv.owner : inv.from) invited you · \(Fmt.date(TO.dayStart(inv.start))) – \(Fmt.date(TO.dayStart(inv.end)))")
+                                .font(.barlow(13)).foregroundStyle(Theme.text2)
+                        }
+                        Text("Joining shows your challenge results for these dates in the team standings. It doesn't change your app limits.")
+                            .font(.barlow(12)).foregroundStyle(Theme.muted).fixedSize(horizontal: false, vertical: true)
+                        HStack(spacing: 8) {
+                            Button("Decline") { decline(inv) }.buttonStyle(.btn(.ghost, .sm, full: true))
+                            Button("Join team") { accept(inv) }.buttonStyle(.btn(.primary, .sm, full: true))
+                        }
+                        .disabled(busy == inv.id)
+                    }
+                    .foregroundStyle(Theme.text)
+                    .card()
+                }
+            }
+        }
+    }
+
+    private func accept(_ inv: TeamInvite) {
+        do {
+            let t = try store.acceptTeamInvite(inv)
+            ui.toast(.win, "You joined \(t.name)")
+            Task { await store.refreshTeams() }
+        } catch let e as AppError {
+            ui.toast(.loss, "Couldn't join \(inv.name)", e.message)
+        } catch {}
+    }
+
+    private func decline(_ inv: TeamInvite) {
+        busy = inv.id
+        Task {
+            defer { busy = nil }
+            do {
+                try await store.declineTeamInvite(inv)
+                ui.toast(.info, "Invite declined", "You weren't added to \(inv.name).")
+            } catch {
+                ui.toast(.loss, "Couldn't decline that invite", AppError.friendly(error))
+            }
+        }
     }
 }
 
@@ -625,7 +687,8 @@ struct TeamSheet: View {
             if let t {
                 let status = Store.teamStatus(t)
                 let rows = store.teamStandings(t)
-                let invitable = (store.data?.friends ?? []).filter { f in !t.members.contains { Store.sameUser($0, f) } }
+                let pending = t.invited ?? []
+                let invitable = (store.data?.friends ?? []).filter { f in !t.members.contains { Store.sameUser($0, f) } && !pending.contains { Store.sameUser($0, f) } }
                 let owner = Store.sameUser(t.owner, store.account?.username) ? "You own this team" : "Owned by @\(t.owner)"
                 HStack {
                     HStack(spacing: 6) { Icon(.calendar, 14); Text("\(Fmt.date(TO.dayStart(t.start))) – \(Fmt.date(TO.dayStart(t.end)))") }
@@ -650,6 +713,10 @@ struct TeamSheet: View {
                     }
                 }
                 Text("Standings count screen-time challenges placed between the start and end dates. Friend challenges don't count.").font(.barlow(11.5)).foregroundStyle(Theme.muted)
+                if !pending.isEmpty {
+                    Text("Invited, waiting to accept: \(pending.map { "@\($0)" }.joined(separator: ", "))")
+                        .font(.barlow(12.5)).foregroundStyle(Theme.text2).fixedSize(horizontal: false, vertical: true)
+                }
                 if !invitable.isEmpty {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Invite more friends").font(.barlow(13, 700)).foregroundStyle(Theme.text2)
@@ -658,7 +725,7 @@ struct TeamSheet: View {
                                 if let p = SocialModel.shared.personFor(u) {
                                     PickFriend(photo: p.photo, name: u, on: false, plus: true) {
                                         store.inviteToTeam(t.id, [u])
-                                        ui.toast(.win, "Invited @\(u)")
+                                        ui.toast(.win, "Invite sent to @\(u)", "They join the team only if they accept.")
                                     }
                                 }
                             }
@@ -754,7 +821,7 @@ struct TeamHowSheet: View {
                 .font(.barlow(14.5)).foregroundStyle(Theme.text2)
             HowCard(n: 1, title: "Pick a name and the dates", text: "Create a team for a week or a season. You can start it on your own and invite people later.")
             HowCard(n: 2, title: "Minutes decide the standings", text: "Between the start and end dates, screen-time challenges count. Whoever earns the most minutes leads.")
-            HowCard(n: 3, title: "Invite friends onto the roster", text: "Open the team and add a friend, or copy the team link. When they open it, you become friends and they join the roster.")
+            HowCard(n: 3, title: "Invite friends", text: "Open the team and invite a friend, or share the team link. They see the invite in Social › Teams and choose Join or Decline. Nobody is added without saying yes.")
             HowCard(n: 4, title: "Leave whenever you want", text: "Leaving takes you off the standings. The team stays for everyone else.")
             Text("The team is saved on this device. When you're signed in, the roster is saved with your TimeOut account too, one member at a time, so it's still here the next time you open the app.")
                 .font(.barlow(11.5)).foregroundStyle(Theme.muted)
@@ -821,8 +888,8 @@ struct NewTeamSheet: View {
         do {
             let t = try store.createTeam(name: name, start: TO.dayKey(TO.ms(start)), end: TO.dayKey(TO.ms(end)), members: members)
             ui.closeSheet(.teamNew)
-            let invited = t.members.count - 1
-            ui.toast(.win, "\(t.name) created", invited > 0 ? "\(invited) friend\(invited == 1 ? "" : "s") invited." : "You can invite friends from the team.")
+            let invited = t.invited?.count ?? 0
+            ui.toast(.win, "\(t.name) created", invited > 0 ? "Invites sent to \(invited) friend\(invited == 1 ? "" : "s"). They join if they accept." : "You can invite friends from the team.")
             SocialModel.shared.tab = "teams"
         } catch let e as AppError {
             errors = e.fields
