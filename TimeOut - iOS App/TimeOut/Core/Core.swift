@@ -48,6 +48,12 @@ enum TO {
         return dayKey(ms(shifted))
     }
 
+    /// Whole days from one day key to another (negative when `to` comes first).
+    static func daysBetween(_ from: String, _ to: String) -> Int {
+        let (y1, m1, d1) = parts(from), (y2, m2, d2) = parts(to)
+        return calendar.dateComponents([.day], from: localDate(y1, m1, d1, hour: 12), to: localDate(y2, m2, d2, hour: 12)).day ?? 0
+    }
+
     static func nextMidnight(_ ts: Ms = now()) -> Ms {
         let start = calendar.startOfDay(for: date(ts))
         return ms(calendar.date(byAdding: .day, value: 1, to: start) ?? start)

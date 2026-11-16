@@ -475,6 +475,10 @@ final class Store {
         guard let id = sessionId, let acc = accountsById[id] else { account = nil; data = nil; return false }
         var d = migrate(loadData(id) ?? freshData(TO.now()))
         _ = rollover(&d, TO.now())
+        // A streak can't be longer than the account is old: it counts whole days since the account was made.
+        if acc.createdAt > 0 {
+            d.wallet.streakDays = min(d.wallet.streakDays, max(0, TO.daysBetween(TO.dayKey(acc.createdAt), d.wallet.dayKey)))
+        }
         grantTierBonus(&d)
         account = acc
         data = d
@@ -633,12 +637,18 @@ final class Store {
         if d.wallet.dayKey == target { return false }
         if d.wallet.dayKey > target { d.wallet.dayKey = target; return false } // the local date moved backward
         var guardCount = 0
+        // Days Screen Time was watching on this phone, marked by the app and by the monitor extension.
+        let watchedDays = Set(ScreenTimeShared.defaults.stringArray(forKey: ScreenTimeShared.enforcedDaysKey) ?? [])
         while d.wallet.dayKey < target && guardCount < 400 {
             guardCount += 1
             let day = d.wallet.dayKey
             closeTodos(&d, day, now)
-            let clean = d.settings.enforce && (d.wallet.usageByDay[day] ?? 0) <= limitFor(day, d) && !((d.wallet.overridesByDay[day] ?? 0) > 0)
-            d.wallet.streakDays = clean ? d.wallet.streakDays + 1 : 0
+            let used = d.wallet.usageByDay[day]
+            let broke = !d.settings.enforce || (used ?? 0) > limitFor(day, d) || (d.wallet.overridesByDay[day] ?? 0) > 0
+            // A day only counts when Screen Time was watching it. Without that nothing is known about
+            // the day, so the streak holds instead of growing.
+            if broke { d.wallet.streakDays = 0 }
+            else if used != nil || watchedDays.contains(day) { d.wallet.streakDays += 1 }
             d.wallet.dayKey = TO.addDays(day, 1)
         }
         d.wallet.balance = Rules.daily

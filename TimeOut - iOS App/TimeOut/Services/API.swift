@@ -33,6 +33,11 @@ final class API {
     @ObservationIgnored private var supportsTierPerkColumns: Bool?
     @ObservationIgnored private var placing = Set<String>()
     @ObservationIgnored private var settling = Set<String>()
+    /// Server IDs of challenges already saved from this device. A save queued before the first one
+    /// finished carries an older copy without the server ID; this keeps it from placing it again.
+    @ObservationIgnored private var placed: [String: String] = [:]
+    @ObservationIgnored private var supportsClientRef = true
+    @ObservationIgnored private var flushTail: Task<Void, Error>?
     @ObservationIgnored private var alertTimes: [String: Date] = [:]
     @ObservationIgnored private var syncedStreak: Int?
     @ObservationIgnored private var inviteCode: String?
@@ -432,7 +437,18 @@ final class API {
 
     private struct RejectedChallenge: Error { var challengeId: String; var reason: String }
 
+    /// One save at a time: two running together could both send the same new challenge.
     func flushState() async throws {
+        let previous = flushTail
+        let run = Task { [weak self] in
+            _ = await previous?.result
+            try await self?.flushOnce()
+        }
+        flushTail = run
+        try await run.value
+    }
+
+    private func flushOnce() async throws {
         saveTask?.cancel(); saveTask = nil
         guard let data = pendingState, token != nil else { return }
         pendingState = nil
@@ -474,6 +490,8 @@ final class API {
             for challenge in data.challenges {
                 guard Store.syncsToServer(challenge) else { continue }
                 var supabaseId = challenge.supabaseId
+                    ?? placed[challenge.id]
+                    ?? Store.shared.data?.challenges.first(where: { $0.id == challenge.id })?.supabaseId
                 if supabaseId == nil && !placing.contains(challenge.id) {
                     placing.insert(challenge.id)
                     defer { placing.remove(challenge.id) }
@@ -526,6 +544,8 @@ final class API {
         args["p_use_boost"] = challenge.boosted
         args["p_use_insurance"] = challenge.insured
         args["p_multiplier"] = challenge.multiplier
+        // The same ID always gets back the challenge already saved, never a second one.
+        if supportsClientRef { args["p_client_ref"] = challenge.id }
         let perk = challenge.boosted || challenge.insured
         func reject(_ error: AppError) -> Error {
             if Self.isOutOfMinutes(error.raw) {
@@ -536,7 +556,14 @@ final class API {
         var saved: JSON
         do {
             if perk && supportsTierPerkColumns == false { throw RejectedChallenge(challengeId: challenge.id, reason: "perkMigration") }
-            saved = try await rest("rpc/timeout_place_challenge_with_perks", method: "POST", body: args)
+            do {
+                saved = try await rest("rpc/timeout_place_challenge_with_perks", method: "POST", body: args)
+            } catch let e as AppError where args["p_client_ref"] != nil && Self.rpcMissing(e.raw, "timeout_place_challenge_with_perks") {
+                // A database without server/db/supabase-challenge-dedupe.sql doesn't take p_client_ref yet.
+                supportsClientRef = false
+                args["p_client_ref"] = nil
+                saved = try await rest("rpc/timeout_place_challenge_with_perks", method: "POST", body: args)
+            }
         } catch let e as AppError {
             if Self.rpcMissing(e.raw, "timeout_place_challenge_with_perks") {
                 if perk { throw RejectedChallenge(challengeId: challenge.id, reason: "perkMigration") }
@@ -552,6 +579,7 @@ final class API {
             }
         }
         guard let challengeId = saved.string ?? saved["id"].string else { throw AppError(code: "supabase_error", message: AppError.unavailable, debug: "No challenge ID came back.") }
+        placed[challenge.id] = challengeId
         update(challenge.id) { $0.supabaseId = challengeId; $0.supabaseSynced = false }
         return challengeId
     }

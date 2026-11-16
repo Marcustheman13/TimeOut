@@ -292,7 +292,7 @@
     for (const key of ['usageByDay', 'overridesByDay', 'penaltyByDay']) {
       if (shared[key]) { d.phoneRecords[key] = shared[key]; w[key] = { ...shared[key] }; }
     }
-    if (serverStreak != null) w.streakDays = serverStreak;
+    if (serverStreak != null) { w.streakDays = serverStreak; capStreak(); }
     if (shared.devices) {
       d.sharedDevices = { ...shared.devices };
       delete d.sharedDevices[deviceId()];
@@ -571,10 +571,15 @@
     while (w.dayKey < target && guard++ < 400) {
       const day = w.dayKey;
       closeTodos(day, now);
-      const clean = TO.data.settings.enforce && (w.usageByDay[day] || 0) <= limitFor(day) && !(w.overridesByDay[day] > 0);
-      w.streakDays = clean ? w.streakDays + 1 : 0;
+      const used = w.usageByDay[day];
+      const broke = !TO.data.settings.enforce || (used || 0) > limitFor(day) || w.overridesByDay[day] > 0;
+      // A day only counts once the phone has reported screen time for it. Without that nothing is
+      // known about the day, so the streak holds instead of growing.
+      if (broke) w.streakDays = 0;
+      else if (used != null) w.streakDays += 1;
       w.dayKey = TO.addDays(day, 1);
     }
+    capStreak();
     w.balance = RULES.daily;
     w.lockedOut = false;
     w.bonusDay = null; w.bonusGranted = 0;
@@ -582,6 +587,14 @@
     prune();
     TO.emit('newday', { day: w.dayKey });
     return true;
+  }
+
+  /** A streak can't be longer than the account is old: it counts whole days since the account was made. */
+  function capStreak() {
+    const w = W(), created = Number(TO.account?.createdAt);
+    if (!w || !Number.isFinite(created) || created <= 0) return;
+    const maxDays = Math.max(0, Math.round((TO.dayStart(w.dayKey) - TO.dayStart(TO.dayKey(created))) / TO.DAY));
+    if (w.streakDays > maxDays) w.streakDays = maxDays;
   }
 
   function prune() {
