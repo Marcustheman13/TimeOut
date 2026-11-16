@@ -65,7 +65,7 @@
   /** Share links open the app by default on an iPhone. Flip `autoOpen` to true once TimeOut is on the App Store:
    *  without the app installed, Safari shows an error for the timeout:// address. Put the store page in `appStoreUrl`
    *  (https://apps.apple.com/app/id...) and people without the app get an Install button instead. */
-  TO.appLink = TO.appLink || { autoOpen: false, appStoreUrl: '' };
+  TO.appLink = TO.appLink || { autoOpen: false, appStoreUrl: 'https://apps.apple.com/us/app/timeout-screen-time/id6827753548' };
   const AUTO_TRIED = 'timeout.appOpenTried';
   function tryOpenApp(p) {
     if (!p || !onIPhone() || !TO.appLink.autoOpen) return;
