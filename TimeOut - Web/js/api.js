@@ -20,6 +20,11 @@
   let lastTierPerkMigrationAlertAt = 0;
   const placing = new Set();
   const settling = new Set();
+  // Server IDs of challenges this tab already saved. A save queued before the first one finished
+  // carries an older copy without the server ID; this keeps it from placing the challenge again.
+  const placed = new Map();
+  let supportsClientRef = true;
+  let flushChain = Promise.resolve();
 
   // The server's own wording. Never shown to users; the app reads it to recognize specific problems.
   const rawText = (error) => String(error?.debug || error?.message || '');
@@ -359,7 +364,13 @@
     out.devices = { ...(server.devices || {}), ...(mine.devices || {}) };
     return out;
   }
-  api.flushState = async () => {
+  // One save at a time: two running together could both send the same new challenge.
+  api.flushState = () => {
+    const run = flushChain.then(flushOnce, flushOnce);
+    flushChain = run.catch(() => {});
+    return run;
+  };
+  async function flushOnce() {
     clearTimeout(saveTimer); saveTimer = null;
     if (!pendingState || !token()) return;
     const data = pendingState;
@@ -395,6 +406,10 @@
       }
       for (const challenge of data.challenges || []) {
         if (!TO.state.syncsToServer(challenge)) continue;
+        if (!challenge.supabaseId) {
+          const known = placed.get(challenge.id) || TO.data?.challenges?.find((b) => b.id === challenge.id)?.supabaseId;
+          if (known) challenge.supabaseId = known;
+        }
         if (!challenge.supabaseId && !placing.has(challenge.id)) {
           placing.add(challenge.id);
           try {
@@ -407,6 +422,8 @@
               p_use_boost: !!challenge.boosted, p_use_insurance: !!challenge.insured,
               p_multiplier: Number(challenge.multiplier || 1),
               p_picks: challenge.picks.map((pick) => ({ espn_event_id: String(pick.gameId), league: pick.league || 'unknown', matchup: pick.matchup || '', market: pick.market || 'winner', side: pick.side || '', line: pick.line, accepted_value: Number(pick.price) })),
+              // The same ID always gets back the challenge already saved, never a second one.
+              ...(supportsClientRef ? { p_client_ref: String(challenge.id) } : {}),
             };
             const legacyChallengeArgs = {
               p_pledge_minutes: challengeArgs.p_pledge_minutes, p_combined_value: challengeArgs.p_combined_value,
@@ -420,7 +437,15 @@
                 migrationError.failedChallengeId = challenge.id;
                 throw migrationError;
               }
-              saved = await rest('rpc/timeout_place_challenge_with_perks', { method: 'POST', body: JSON.stringify(challengeArgs) });
+              try {
+                saved = await rest('rpc/timeout_place_challenge_with_perks', { method: 'POST', body: JSON.stringify(challengeArgs) });
+              } catch (refError) {
+                // A database without server/db/supabase-challenge-dedupe.sql doesn't take p_client_ref yet.
+                if (!('p_client_ref' in challengeArgs) || !isTierPerkRpcUnavailable(refError)) throw refError;
+                supportsClientRef = false;
+                delete challengeArgs.p_client_ref;
+                saved = await rest('rpc/timeout_place_challenge_with_perks', { method: 'POST', body: JSON.stringify(challengeArgs) });
+              }
             } catch (error) {
               if (error.tierPerkMigrationMissing) throw error;
               if (isTierPerkRpcUnavailable(error)) {
@@ -462,6 +487,7 @@
             if (!challengeId) throw new TO.AppError('supabase_error', TO.unavailableMessage, { debug: 'No challenge ID came back.' });
             challenge.supabaseId = challengeId;
             challenge.supabaseSynced = false;
+            placed.set(challenge.id, challengeId);
             const current = TO.data?.challenges?.find((b) => b.id === challenge.id);
             if (current) { current.supabaseId = challengeId; current.supabaseSynced = false; TO.store.set(`timeout.data.${TO.account.id}`, TO.data); }
           } finally { placing.delete(challenge.id); }
@@ -510,7 +536,7 @@
       pendingState = data;
       throw e;
     }
-  };
+  }
   api.updateProfile = async (patch) => {
     await ensureFreshSession();
     const userId = tokenUserId();
