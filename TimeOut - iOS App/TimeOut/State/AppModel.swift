@@ -224,7 +224,12 @@ final class AppModel {
     // MARK: Links
 
     /// timeout://invite?invite=user&team=… or the web app's ?invite= links.
+    /// timeout://verified comes from the website after a confirmation email: check for the confirmed account right away.
     func handle(url: URL) {
+        if url.scheme == "timeout" && url.host == "verified" {
+            Task { await AuthModel.shared.checkVerified(manual: true) }
+            return
+        }
         Invites.capture(url)
         if inShell { Invites.offer() }
     }

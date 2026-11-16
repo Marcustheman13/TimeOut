@@ -338,6 +338,24 @@
   document.addEventListener('visibilitychange', () => { if (!document.hidden) syncRemoteState(true); });
   window.addEventListener('focus', () => syncRemoteState(true));
 
+  // ---------- Back to the app after a confirmation email ----------
+  // Confirmation links land on this site. On an iPhone, the person most likely signed up in the app, which is waiting on
+  // its "check your email" screen and logs in on its own once the email is confirmed. timeout://verified just brings it back.
+  const APP_RETURN = 'timeout://verified';
+  const onIPhone = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+  function backToApp(fromApp) {
+    const store = TO.appLink && TO.appLink.appStoreUrl;
+    ui.sheet('verified', {
+      render: () => ({
+        title: 'Email confirmed',
+        body: `<p class="sub" style="margin-top:0">You're all set, <b style="color:var(--text)">@${esc(TO.account.username)}</b>. Go back to the TimeOut app to finish signing in.</p>`,
+        foot: `<a class="btn primary full" href="${APP_RETURN}">Open the TimeOut app</a>${store ? `<a class="btn ghost full" href="${esc(store)}">Get the app from the App Store</a>` : ''}<button class="btn quiet sm" data-act="close-sheet" data-name="verified">Keep using the website</button>`,
+      }),
+    });
+    // Signed up in the app, so it's installed: go straight back. Safari asks "Open in TimeOut?" first.
+    if (fromApp) setTimeout(() => { location.href = APP_RETURN; }, 400);
+  }
+
   async function start() {
     renderNet();
     if (TO.invites) TO.invites.capture();
@@ -346,7 +364,9 @@
     if (await TO.api.init()) await restoreServerSession();
     else St.ensureDemoAccount();
     app.boot();
-    if (redirect && redirect.signedIn && TO.account) {
+    if (redirect && redirect.signedIn && TO.account && redirect.type !== 'recovery' && onIPhone()) {
+      backToApp(redirect.client === 'ios');
+    } else if (redirect && redirect.signedIn && TO.account) {
       ui.toast({ kind: 'win', title: 'Email verified', msg: `You're logged in as @${TO.account.username}.` });
     } else if (redirect && redirect.error && !TO.account) {
       TO.views.auth.show('login');

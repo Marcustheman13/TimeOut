@@ -179,7 +179,10 @@
     saveSession({ access_token: access, refresh_token: hash.get('refresh_token'), expires_in: Number(hash.get('expires_in') || 3600), expires_at: Number(hash.get('expires_at')) || undefined, token_type: hash.get('token_type') || 'bearer' });
     lastSettingsSnapshot = '';
     supportsAppPreferences = true;
-    return { signedIn: true, type: hash.get('type') };
+    // Sign-ups made in the iPhone app carry signup_client: 'ios', so this page can send them back to the app.
+    let client = null;
+    try { client = JSON.parse(atob(access.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).user_metadata?.signup_client || null; } catch (e) { /* not a JWT we can read */ }
+    return { signedIn: true, type: hash.get('type'), client };
   };
   api.sessionKey = TOKEN_KEY;
   api.hasToken = () => !!token();

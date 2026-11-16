@@ -239,7 +239,8 @@ final class API {
             throw AppError(code: "invalid", message: "Use 3–20 letters, numbers, dots or underscores.", fields: ["username": "Use 3–20 letters, numbers, dots or underscores."])
         }
         let mail = email.trimmingCharacters(in: .whitespaces)
-        var meta: [String: Any] = ["username": username, "display_name": username]
+        // signup_client lets the website send the confirmation link back to the app (timeout://verified).
+        var meta: [String: Any] = ["username": username, "display_name": username, "signup_client": "ios"]
         meta["avatar_url"] = photoUrl ?? NSNull()
         let result = try await authRequest("signup?redirect_to=\(Self.enc(Self.returnURL))", ["email": mail, "password": password, "data": meta])
         // Supabase answers a sign-up for an email that's already registered with a user that has no identities.
