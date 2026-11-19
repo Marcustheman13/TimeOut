@@ -8,7 +8,7 @@ Group 9, Section 1: Owen Smith, Easton Putnam, Will Fairholm, Marcus Williams.
 > **▶ Try the app:** <https://marcustheman13.github.io/TimeOut/> (resizes to fit phones, tablets and computers)
 > Live ESPN point value and real accounts, nothing to install. It updates by itself when the web demo changes on `main`.
 >
-> **🔑 Test login** (website and iPhone app): email `marcusdanielwill@gmail.com` · password `test_account_pass` (username `@time_out_account`).
+> **🔑 Test login** (website and iPhone app): email `mdwill02junk@gmail.com` · password `test_account_pass` (username `@time_out_account`).
 
 ---
 

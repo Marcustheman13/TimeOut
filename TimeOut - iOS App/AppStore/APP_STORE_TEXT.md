@@ -119,7 +119,7 @@ Send feedback with a screenshot from TestFlight (take a screenshot, then tap Sha
 
 | Field | Value |
 |---|---|
-| User name | `marcusdanielwill@gmail.com` |
+| User name | `mdwill02junk@gmail.com` |
 | Password | `test_account_pass` |
 
 **Notes for the reviewer:**
