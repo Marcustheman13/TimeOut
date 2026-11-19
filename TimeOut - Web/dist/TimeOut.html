@@ -2551,7 +2551,7 @@ window.TO = window.TO || {};
     for (const key of ['usageByDay', 'overridesByDay', 'penaltyByDay']) {
       if (shared[key]) { d.phoneRecords[key] = shared[key]; w[key] = { ...shared[key] }; }
     }
-    if (serverStreak != null) w.streakDays = serverStreak;
+    if (serverStreak != null) { w.streakDays = serverStreak; capStreak(); }
     if (shared.devices) {
       d.sharedDevices = { ...shared.devices };
       delete d.sharedDevices[deviceId()];
@@ -2830,10 +2830,15 @@ window.TO = window.TO || {};
     while (w.dayKey < target && guard++ < 400) {
       const day = w.dayKey;
       closeTodos(day, now);
-      const clean = TO.data.settings.enforce && (w.usageByDay[day] || 0) <= limitFor(day) && !(w.overridesByDay[day] > 0);
-      w.streakDays = clean ? w.streakDays + 1 : 0;
+      const used = w.usageByDay[day];
+      const broke = !TO.data.settings.enforce || (used || 0) > limitFor(day) || w.overridesByDay[day] > 0;
+      // A day only counts once the phone has reported screen time for it. Without that nothing is
+      // known about the day, so the streak holds instead of growing.
+      if (broke) w.streakDays = 0;
+      else if (used != null) w.streakDays += 1;
       w.dayKey = TO.addDays(day, 1);
     }
+    capStreak();
     w.balance = RULES.daily;
     w.lockedOut = false;
     w.bonusDay = null; w.bonusGranted = 0;
@@ -2841,6 +2846,14 @@ window.TO = window.TO || {};
     prune();
     TO.emit('newday', { day: w.dayKey });
     return true;
+  }
+
+  /** A streak can't be longer than the account is old: it counts whole days since the account was made. */
+  function capStreak() {
+    const w = W(), created = Number(TO.account?.createdAt);
+    if (!w || !Number.isFinite(created) || created <= 0) return;
+    const maxDays = Math.max(0, Math.round((TO.dayStart(w.dayKey) - TO.dayStart(TO.dayKey(created))) / TO.DAY));
+    if (w.streakDays > maxDays) w.streakDays = maxDays;
   }
 
   function prune() {
@@ -4358,6 +4371,11 @@ window.TIMEOUT_SUPABASE = {
   let lastTierPerkMigrationAlertAt = 0;
   const placing = new Set();
   const settling = new Set();
+  // Server IDs of challenges this tab already saved. A save queued before the first one finished
+  // carries an older copy without the server ID; this keeps it from placing the challenge again.
+  const placed = new Map();
+  let supportsClientRef = true;
+  let flushChain = Promise.resolve();
 
   // The server's own wording. Never shown to users; the app reads it to recognize specific problems.
   const rawText = (error) => String(error?.debug || error?.message || '');
@@ -4512,7 +4530,10 @@ window.TIMEOUT_SUPABASE = {
     saveSession({ access_token: access, refresh_token: hash.get('refresh_token'), expires_in: Number(hash.get('expires_in') || 3600), expires_at: Number(hash.get('expires_at')) || undefined, token_type: hash.get('token_type') || 'bearer' });
     lastSettingsSnapshot = '';
     supportsAppPreferences = true;
-    return { signedIn: true, type: hash.get('type') };
+    // Sign-ups made in the iPhone app carry signup_client: 'ios', so this page can send them back to the app.
+    let client = null;
+    try { client = JSON.parse(atob(access.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).user_metadata?.signup_client || null; } catch (e) { /* not a JWT we can read */ }
+    return { signedIn: true, type: hash.get('type'), client };
   };
   api.sessionKey = TOKEN_KEY;
   api.hasToken = () => !!token();
@@ -4697,7 +4718,13 @@ window.TIMEOUT_SUPABASE = {
     out.devices = { ...(server.devices || {}), ...(mine.devices || {}) };
     return out;
   }
-  api.flushState = async () => {
+  // One save at a time: two running together could both send the same new challenge.
+  api.flushState = () => {
+    const run = flushChain.then(flushOnce, flushOnce);
+    flushChain = run.catch(() => {});
+    return run;
+  };
+  async function flushOnce() {
     clearTimeout(saveTimer); saveTimer = null;
     if (!pendingState || !token()) return;
     const data = pendingState;
@@ -4733,6 +4760,10 @@ window.TIMEOUT_SUPABASE = {
       }
       for (const challenge of data.challenges || []) {
         if (!TO.state.syncsToServer(challenge)) continue;
+        if (!challenge.supabaseId) {
+          const known = placed.get(challenge.id) || TO.data?.challenges?.find((b) => b.id === challenge.id)?.supabaseId;
+          if (known) challenge.supabaseId = known;
+        }
         if (!challenge.supabaseId && !placing.has(challenge.id)) {
           placing.add(challenge.id);
           try {
@@ -4745,6 +4776,8 @@ window.TIMEOUT_SUPABASE = {
               p_use_boost: !!challenge.boosted, p_use_insurance: !!challenge.insured,
               p_multiplier: Number(challenge.multiplier || 1),
               p_picks: challenge.picks.map((pick) => ({ espn_event_id: String(pick.gameId), league: pick.league || 'unknown', matchup: pick.matchup || '', market: pick.market || 'winner', side: pick.side || '', line: pick.line, accepted_value: Number(pick.price) })),
+              // The same ID always gets back the challenge already saved, never a second one.
+              ...(supportsClientRef ? { p_client_ref: String(challenge.id) } : {}),
             };
             const legacyChallengeArgs = {
               p_pledge_minutes: challengeArgs.p_pledge_minutes, p_combined_value: challengeArgs.p_combined_value,
@@ -4758,7 +4791,15 @@ window.TIMEOUT_SUPABASE = {
                 migrationError.failedChallengeId = challenge.id;
                 throw migrationError;
               }
-              saved = await rest('rpc/timeout_place_challenge_with_perks', { method: 'POST', body: JSON.stringify(challengeArgs) });
+              try {
+                saved = await rest('rpc/timeout_place_challenge_with_perks', { method: 'POST', body: JSON.stringify(challengeArgs) });
+              } catch (refError) {
+                // A database without server/db/supabase-challenge-dedupe.sql doesn't take p_client_ref yet.
+                if (!('p_client_ref' in challengeArgs) || !isTierPerkRpcUnavailable(refError)) throw refError;
+                supportsClientRef = false;
+                delete challengeArgs.p_client_ref;
+                saved = await rest('rpc/timeout_place_challenge_with_perks', { method: 'POST', body: JSON.stringify(challengeArgs) });
+              }
             } catch (error) {
               if (error.tierPerkMigrationMissing) throw error;
               if (isTierPerkRpcUnavailable(error)) {
@@ -4800,6 +4841,7 @@ window.TIMEOUT_SUPABASE = {
             if (!challengeId) throw new TO.AppError('supabase_error', TO.unavailableMessage, { debug: 'No challenge ID came back.' });
             challenge.supabaseId = challengeId;
             challenge.supabaseSynced = false;
+            placed.set(challenge.id, challengeId);
             const current = TO.data?.challenges?.find((b) => b.id === challenge.id);
             if (current) { current.supabaseId = challengeId; current.supabaseSynced = false; TO.store.set(`timeout.data.${TO.account.id}`, TO.data); }
           } finally { placing.delete(challenge.id); }
@@ -4848,7 +4890,7 @@ window.TIMEOUT_SUPABASE = {
       pendingState = data;
       throw e;
     }
-  };
+  }
   api.updateProfile = async (patch) => {
     await ensureFreshSession();
     const userId = tokenUserId();
@@ -6900,7 +6942,7 @@ window.TIMEOUT_SUPABASE = {
   /** Share links open the app by default on an iPhone. Flip `autoOpen` to true once TimeOut is on the App Store:
    *  without the app installed, Safari shows an error for the timeout:// address. Put the store page in `appStoreUrl`
    *  (https://apps.apple.com/app/id...) and people without the app get an Install button instead. */
-  TO.appLink = TO.appLink || { autoOpen: false, appStoreUrl: '' };
+  TO.appLink = TO.appLink || { autoOpen: false, appStoreUrl: 'https://apps.apple.com/us/app/timeout-screen-time/id6827753548' };
   const AUTO_TRIED = 'timeout.appOpenTried';
   function tryOpenApp(p) {
     if (!p || !onIPhone() || !TO.appLink.autoOpen) return;
@@ -8673,6 +8715,24 @@ window.TIMEOUT_SUPABASE = {
   document.addEventListener('visibilitychange', () => { if (!document.hidden) syncRemoteState(true); });
   window.addEventListener('focus', () => syncRemoteState(true));
 
+  // ---------- Back to the app after a confirmation email ----------
+  // Confirmation links land on this site. On an iPhone, the person most likely signed up in the app, which is waiting on
+  // its "check your email" screen and logs in on its own once the email is confirmed. timeout://verified just brings it back.
+  const APP_RETURN = 'timeout://verified';
+  const onIPhone = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+  function backToApp(fromApp) {
+    const store = TO.appLink && TO.appLink.appStoreUrl;
+    ui.sheet('verified', {
+      render: () => ({
+        title: 'Email confirmed',
+        body: `<p class="sub" style="margin-top:0">You're all set, <b style="color:var(--text)">@${esc(TO.account.username)}</b>. Go back to the TimeOut app to finish signing in.</p>`,
+        foot: `<a class="btn primary full" href="${APP_RETURN}">Open the TimeOut app</a>${store ? `<a class="btn ghost full" href="${esc(store)}">Get the app from the App Store</a>` : ''}<button class="btn quiet sm" data-act="close-sheet" data-name="verified">Keep using the website</button>`,
+      }),
+    });
+    // Signed up in the app, so it's installed: go straight back. Safari asks "Open in TimeOut?" first.
+    if (fromApp) setTimeout(() => { location.href = APP_RETURN; }, 400);
+  }
+
   async function start() {
     renderNet();
     if (TO.invites) TO.invites.capture();
@@ -8681,7 +8741,9 @@ window.TIMEOUT_SUPABASE = {
     if (await TO.api.init()) await restoreServerSession();
     else St.ensureDemoAccount();
     app.boot();
-    if (redirect && redirect.signedIn && TO.account) {
+    if (redirect && redirect.signedIn && TO.account && redirect.type !== 'recovery' && onIPhone()) {
+      backToApp(redirect.client === 'ios');
+    } else if (redirect && redirect.signedIn && TO.account) {
       ui.toast({ kind: 'win', title: 'Email verified', msg: `You're logged in as @${TO.account.username}.` });
     } else if (redirect && redirect.error && !TO.account) {
       TO.views.auth.show('login');
@@ -8914,7 +8976,7 @@ window.TIMEOUT_SUPABASE = {
   const ADMIN_PAGE_USER_KEY = 'timeout.web.admin.user';
   const ADMIN_USERNAMES = new Set(['easton.putnam', 'time_out_account', 'wrfairholm', 'obr0']);
   const wasOpen = (() => { try { return sessionStorage.getItem(ADMIN_PAGE_KEY) === '1'; } catch (e) { return false; } })();
-  const state = { active: wasOpen, users: [], loading: false, error: '', metricErrors: {}, metrics: {}, query: '', editing: null, saving: false, refreshedAt: 0 };
+  const state = { active: wasOpen, users: [], loading: false, deleting: null, error: '', metricErrors: {}, metrics: {}, query: '', editing: null, saving: false, refreshedAt: 0 };
   const { esc, icon } = TO;
   const ui = TO.ui;
   const app = TO.app;
@@ -8957,7 +9019,7 @@ window.TIMEOUT_SUPABASE = {
       return `<article class="admin-user card"><div class="admin-user-main"><div class="admin-avatar">${icon('user', 18)}</div><div class="admin-user-info">
         <b>@${esc(u.username || 'unknown')}</b><span>${esc(u.email || 'No email')}</span><small>${esc(u.display_name || '')}</small>
       </div></div><div class="admin-user-meta"><span>Joined <b>${esc(created)}</b></span><span>Last login <b>${esc(lastSeen)}</b></span></div>
-      <div class="admin-user-actions"><button class="btn ghost sm" data-act="admin-edit" data-id="${esc(u.id)}">Edit</button><button class="btn danger sm" data-act="admin-delete" data-id="${esc(u.id)}" data-name="${esc(u.username || u.email || 'this user')}">Delete</button></div></article>`;
+      <div class="admin-user-actions"><button class="btn ghost sm" data-act="admin-edit" data-id="${esc(u.id)}" ${state.deleting ? 'disabled' : ''}>Edit</button><button class="btn danger sm" data-act="admin-delete" data-id="${esc(u.id)}" data-name="${esc(u.username || u.email || 'this user')}" ${state.deleting ? 'disabled' : ''}>${state.deleting === u.id ? 'Deleting…' : 'Delete'}</button></div></article>`;
     }).join('');
 
     return `<div class="admin-view" data-tab="admin">
@@ -9073,15 +9135,30 @@ window.TIMEOUT_SUPABASE = {
     finally { state.saving = false; app.renderView(); }
   };
   TO.actions['admin-delete'] = async (el) => {
+    if (state.deleting) return;
     const name = el.dataset.name;
     const ok = await ui.confirm({ title: `Delete ${esc(name)}?`, body: 'This permanently deletes their account and associated TimeOut data. This can’t be undone.', confirm: 'Delete user', danger: true });
     if (!ok) return;
+    const id = el.dataset.id;
+    state.deleting = id;
+    state.error = '';
+    app.renderView();
     try {
-      await TO.api.adminDeleteUser(el.dataset.id);
-      state.users = state.users.filter((u) => u.id !== el.dataset.id);
+      await TO.api.adminDeleteUser(id);
+      const users = await TO.api.adminUsers();
+      state.users = users;
+      if (users.some((u) => String(u.id) === String(id))) {
+        state.error = `The delete request completed, but ${name} is still in the account list. Refresh and try again; if it continues, the database delete function needs to be updated.`;
+        return;
+      }
       ui.toast({ kind: 'win', title: 'User deleted', msg: `${name} and their account data were removed.` });
+    } catch (error) {
+      state.error = TO.friendlyMessage(error);
+      try { state.users = await TO.api.adminUsers(); } catch (_) { /* Keep the last known list and the original delete error. */ }
+    } finally {
+      state.deleting = null;
       app.renderView();
-    } catch (error) { state.error = TO.friendlyMessage(error); app.renderView(); }
+    }
   };
   document.addEventListener('input', (event) => {
     if (event.target.id !== 'admin-user-search') return;

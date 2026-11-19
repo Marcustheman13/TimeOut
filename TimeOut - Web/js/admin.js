@@ -6,7 +6,7 @@
   const ADMIN_PAGE_USER_KEY = 'timeout.web.admin.user';
   const ADMIN_USERNAMES = new Set(['easton.putnam', 'time_out_account', 'wrfairholm', 'obr0']);
   const wasOpen = (() => { try { return sessionStorage.getItem(ADMIN_PAGE_KEY) === '1'; } catch (e) { return false; } })();
-  const state = { active: wasOpen, users: [], loading: false, error: '', metricErrors: {}, metrics: {}, query: '', editing: null, saving: false, refreshedAt: 0 };
+  const state = { active: wasOpen, users: [], loading: false, deleting: null, error: '', metricErrors: {}, metrics: {}, query: '', editing: null, saving: false, refreshedAt: 0 };
   const { esc, icon } = TO;
   const ui = TO.ui;
   const app = TO.app;
@@ -49,7 +49,7 @@
       return `<article class="admin-user card"><div class="admin-user-main"><div class="admin-avatar">${icon('user', 18)}</div><div class="admin-user-info">
         <b>@${esc(u.username || 'unknown')}</b><span>${esc(u.email || 'No email')}</span><small>${esc(u.display_name || '')}</small>
       </div></div><div class="admin-user-meta"><span>Joined <b>${esc(created)}</b></span><span>Last login <b>${esc(lastSeen)}</b></span></div>
-      <div class="admin-user-actions"><button class="btn ghost sm" data-act="admin-edit" data-id="${esc(u.id)}">Edit</button><button class="btn danger sm" data-act="admin-delete" data-id="${esc(u.id)}" data-name="${esc(u.username || u.email || 'this user')}">Delete</button></div></article>`;
+      <div class="admin-user-actions"><button class="btn ghost sm" data-act="admin-edit" data-id="${esc(u.id)}" ${state.deleting ? 'disabled' : ''}>Edit</button><button class="btn danger sm" data-act="admin-delete" data-id="${esc(u.id)}" data-name="${esc(u.username || u.email || 'this user')}" ${state.deleting ? 'disabled' : ''}>${state.deleting === u.id ? 'Deleting…' : 'Delete'}</button></div></article>`;
     }).join('');
 
     return `<div class="admin-view" data-tab="admin">
@@ -165,15 +165,30 @@
     finally { state.saving = false; app.renderView(); }
   };
   TO.actions['admin-delete'] = async (el) => {
+    if (state.deleting) return;
     const name = el.dataset.name;
     const ok = await ui.confirm({ title: `Delete ${esc(name)}?`, body: 'This permanently deletes their account and associated TimeOut data. This can’t be undone.', confirm: 'Delete user', danger: true });
     if (!ok) return;
+    const id = el.dataset.id;
+    state.deleting = id;
+    state.error = '';
+    app.renderView();
     try {
-      await TO.api.adminDeleteUser(el.dataset.id);
-      state.users = state.users.filter((u) => u.id !== el.dataset.id);
+      await TO.api.adminDeleteUser(id);
+      const users = await TO.api.adminUsers();
+      state.users = users;
+      if (users.some((u) => String(u.id) === String(id))) {
+        state.error = `The delete request completed, but ${name} is still in the account list. Refresh and try again; if it continues, the database delete function needs to be updated.`;
+        return;
+      }
       ui.toast({ kind: 'win', title: 'User deleted', msg: `${name} and their account data were removed.` });
+    } catch (error) {
+      state.error = TO.friendlyMessage(error);
+      try { state.users = await TO.api.adminUsers(); } catch (_) { /* Keep the last known list and the original delete error. */ }
+    } finally {
+      state.deleting = null;
       app.renderView();
-    } catch (error) { state.error = TO.friendlyMessage(error); app.renderView(); }
+    }
   };
   document.addEventListener('input', (event) => {
     if (event.target.id !== 'admin-user-search') return;
