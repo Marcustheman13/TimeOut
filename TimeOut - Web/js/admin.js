@@ -183,7 +183,8 @@
       }
       ui.toast({ kind: 'win', title: 'User deleted', msg: `${name} and their account data were removed.` });
     } catch (error) {
-      state.error = TO.friendlyMessage(error);
+      const detail = error?.debug || error?.message || TO.friendlyMessage(error);
+      state.error = `Delete failed: ${detail}`;
       try { state.users = await TO.api.adminUsers(); } catch (_) { /* Keep the last known list and the original delete error. */ }
     } finally {
       state.deleting = null;
