@@ -120,8 +120,8 @@ begin
 
   select p.username into v_name from public.profiles p where p.id = p_user;
 
-  -- Delete child rows before their parent rows. The table scan covers user-owned tables
-  -- added later as long as they use the app's user_id column convention.
+  -- Delete child rows before their parent rows. Only UUID user_id columns belong to
+  -- Supabase accounts; legacy tables may use integer user IDs.
   if to_regclass('public.challenge_picks') is not null and to_regclass('public.challenges') is not null
      and exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'challenge_picks' and column_name = 'challenge_id') then
     execute 'delete from public.challenge_picks where challenge_id in (select id from public.challenges where user_id = $1)' using p_user;
@@ -138,7 +138,8 @@ begin
     select c.table_name
       from information_schema.columns c
       join information_schema.tables t on t.table_schema = c.table_schema and t.table_name = c.table_name
-     where c.table_schema = 'public' and c.column_name = 'user_id' and t.table_type = 'BASE TABLE'
+     where c.table_schema = 'public' and c.column_name = 'user_id' and c.udt_name = 'uuid'
+       and t.table_type = 'BASE TABLE'
      order by case when c.table_name in ('challenge_picks', 'wallet_transactions') then 0
                    when c.table_name in ('challenges', 'wallets') then 2 else 1 end, c.table_name
   loop
